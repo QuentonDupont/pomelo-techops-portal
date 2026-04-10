@@ -1,0 +1,91 @@
+POMELO FASHION — PROPRIETARY SOFTWARE LICENSE
+INTERNAL USE ONLY
+
+Copyright (c) 2026 Pomelo Fashion. All rights reserved.
+
+---
+
+NOTICE: This software and all associated source code, documentation, configuration
+files, and build artifacts (collectively, the "Software") are the exclusive
+proprietary property of Pomelo Fashion. The Software is NOT open source.
+
+---
+
+GRANT OF LICENSE
+
+Pomelo Fashion grants its current employees a limited, non-exclusive,
+non-transferable, revocable license to use the Software solely for internal
+business purposes on behalf of Pomelo Fashion. This license is conditioned on
+continued employment with Pomelo Fashion and compliance with all applicable
+internal policies.
+
+---
+
+RESTRICTIONS
+
+The following acts are expressly prohibited without prior written authorization
+from an authorized officer of Pomelo Fashion:
+
+1. Redistribution — You may not distribute, sublicense, sell, transfer, publish,
+   or otherwise make the Software available to any person or entity outside of
+   Pomelo Fashion's employed workforce.
+
+2. External use — You may not use the Software for any purpose outside of your
+   authorized duties as a Pomelo Fashion employee. Personal use, freelance use,
+   or use on behalf of any third party is prohibited.
+
+3. Modification and derivative works — You may not create derivative works based
+   on the Software for any purpose other than authorized internal development
+   contributions made within the scope of your employment.
+
+4. Reverse engineering — You may not reverse engineer, decompile, or disassemble
+   the Software except to the extent that applicable law expressly prohibits this
+   restriction.
+
+5. Removal of notices — You may not remove or alter any copyright, trademark,
+   or proprietary notices contained in or on the Software.
+
+---
+
+TERMINATION
+
+This license terminates automatically upon the end of your employment with
+Pomelo Fashion, whether voluntary or involuntary. Upon termination, you must
+immediately cease all use of the Software and destroy or return any copies in
+your possession.
+
+---
+
+THIRD-PARTY DEPENDENCIES
+
+This Software incorporates third-party open-source components. Those components
+are subject to their own license terms, which are documented in the file:
+
+    NOTICES.md
+
+located in the root of this repository. The inclusion of third-party components
+under permissive open-source licenses does not alter the proprietary nature of
+this Software as a whole. Pomelo Fashion's copyright in the original portions of
+this Software remains unaffected.
+
+---
+
+NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. POMELO FASHION
+EXPRESSLY DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+NON-INFRINGEMENT.
+
+---
+
+GOVERNING LAW
+
+This license shall be governed by and construed in accordance with the laws of
+the jurisdiction in which Pomelo Fashion is incorporated, without regard to its
+conflict of law provisions.
+
+---
+
+For licensing inquiries, contact the Legal Department (LEXIS — Principal Legal
+Counsel, IP & Copyright Compliance) through authorized internal channels.

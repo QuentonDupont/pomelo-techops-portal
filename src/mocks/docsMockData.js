@@ -5,7 +5,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-001',
     title: 'VPN Setup Guide',
-    description: 'Step-by-step instructions for setting up Pomelo\'s corporate VPN on Mac, Windows, and mobile devices.',
+    description:
+      "Step-by-step instructions for setting up Pomelo's corporate VPN on Mac, Windows, and mobile devices.",
     category: 'Network & Access',
     format: 'MD',
     icon: '🔒',
@@ -23,7 +24,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-002',
     title: 'New Employee IT Onboarding',
-    description: 'Everything new Pomelo employees need to get set up: accounts, tools, and first-day checklist.',
+    description:
+      'Everything new Pomelo employees need to get set up: accounts, tools, and first-day checklist.',
     category: 'Onboarding',
     format: 'MD',
     icon: '🚀',
@@ -41,7 +43,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-003',
     title: 'Password Reset & MFA Guide',
-    description: 'How to reset your Pomelo password and manage multi-factor authentication settings.',
+    description:
+      'How to reset your Pomelo password and manage multi-factor authentication settings.',
     category: 'Security',
     format: 'PDF',
     icon: '🛡️',
@@ -59,7 +62,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-004',
     title: 'Software Request Process',
-    description: 'How to request new software licenses, approved tools list, and procurement timelines.',
+    description:
+      'How to request new software licenses, approved tools list, and procurement timelines.',
     category: 'Software & Apps',
     format: 'DOCX',
     icon: '💻',
@@ -77,7 +81,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-005',
     title: 'Hardware Replacement Policy',
-    description: 'Eligibility criteria for hardware upgrades, the request process, and equipment loan procedures.',
+    description:
+      'Eligibility criteria for hardware upgrades, the request process, and equipment loan procedures.',
     category: 'Hardware',
     format: 'PDF',
     icon: '🖥️',
@@ -95,7 +100,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-006',
     title: 'Data Backup & Recovery',
-    description: 'Pomelo\'s backup strategy, how to recover lost files, and best practices for data hygiene.',
+    description:
+      "Pomelo's backup strategy, how to recover lost files, and best practices for data hygiene.",
     category: 'Data & Storage',
     format: 'MD',
     icon: '☁️',
@@ -113,7 +119,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-007',
     title: 'IT Security Policy',
-    description: 'Pomelo\'s information security policy covering acceptable use, data classification, and incident response.',
+    description:
+      "Pomelo's information security policy covering acceptable use, data classification, and incident response.",
     category: 'Security',
     format: 'PDF',
     icon: '🔐',
@@ -131,7 +138,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-008',
     title: 'Slack & Communication Tools Guide',
-    description: 'Best practices for Slack usage, channel structure, notification settings, and Pomelo communication norms.',
+    description:
+      'Best practices for Slack usage, channel structure, notification settings, and Pomelo communication norms.',
     category: 'Software & Apps',
     format: 'MD',
     icon: '💬',
@@ -149,7 +157,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-009',
     title: 'IT Onboarding Checklist (Manager)',
-    description: 'Manager-facing checklist to ensure new team members are fully provisioned before their first day.',
+    description:
+      'Manager-facing checklist to ensure new team members are fully provisioned before their first day.',
     category: 'Onboarding',
     format: 'DOCX',
     icon: '📋',
@@ -167,7 +176,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-010',
     title: 'Network & WiFi Configuration',
-    description: 'How to connect to Pomelo office WiFi networks, guest network policies, and troubleshooting connectivity issues.',
+    description:
+      'How to connect to Pomelo office WiFi networks, guest network policies, and troubleshooting connectivity issues.',
     category: 'Network & Access',
     format: 'MD',
     icon: '📡',
@@ -185,7 +195,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-011',
     title: 'Asset & Equipment Tracking Policy',
-    description: 'How Pomelo tracks company-issued hardware, the asset return process, and obligations when leaving the company.',
+    description:
+      'How Pomelo tracks company-issued hardware, the asset return process, and obligations when leaving the company.',
     category: 'Hardware',
     format: 'PDF',
     icon: '🏷️',
@@ -203,7 +214,8 @@ export const MOCK_DOCS = [
   {
     id: 'doc-012',
     title: 'SLA & Support Standards',
-    description: 'Pomelo IT\'s service level agreements, support hours, escalation paths, and response time commitments.',
+    description:
+      "Pomelo IT's service level agreements, support hours, escalation paths, and response time commitments.",
     category: 'Policies',
     format: 'MD',
     icon: '📊',
@@ -232,11 +244,19 @@ export const DOC_CATEGORIES = [
 ];
 
 export const FORMAT_COLORS = {
-  PDF:  { bg: '#FEF2F2', color: '#DC2626', border: '#FCA5A5' },
+  PDF: { bg: '#FEF2F2', color: '#DC2626', border: '#FCA5A5' },
   DOCX: { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' },
-  MD:   { bg: '#F0FDF4', color: '#16A34A', border: '#BBF7D0' },
-  TXT:  { bg: '#F8FAFC', color: '#64748B', border: '#CBD5E1' },
-  CSV:  { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' },
+  DOC: { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' },
+  MD: { bg: '#F0FDF4', color: '#16A34A', border: '#BBF7D0' },
+  TXT: { bg: '#F8FAFC', color: '#64748B', border: '#CBD5E1' },
+  CSV: { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' },
   XLSX: { bg: '#F0FDF4', color: '#059669', border: '#A7F3D0' },
+  XLS: { bg: '#F0FDF4', color: '#059669', border: '#A7F3D0' },
   PPTX: { bg: '#FFF7ED', color: '#EA580C', border: '#FED7AA' },
+  PPT: { bg: '#FFF7ED', color: '#EA580C', border: '#FED7AA' },
+  PNG: { bg: '#FAF5FF', color: '#7C3AED', border: '#DDD6FE' },
+  JPG: { bg: '#FAF5FF', color: '#7C3AED', border: '#DDD6FE' },
+  JPEG: { bg: '#FAF5FF', color: '#7C3AED', border: '#DDD6FE' },
+  GIF: { bg: '#FAF5FF', color: '#7C3AED', border: '#DDD6FE' },
+  WEBP: { bg: '#FAF5FF', color: '#7C3AED', border: '#DDD6FE' },
 };

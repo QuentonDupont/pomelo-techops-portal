@@ -5,20 +5,52 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "server": "node server/index.js",
+    "dev:all": "concurrently -n BFF,VITE -c cyan,yellow \"npm run server\" \"npm run dev\"",
+    "build": "vite build",
+    "lint": "eslint src server --ext .js,.jsx",
+    "lint:fix": "eslint src server --ext .js,.jsx --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx}\" \"server/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx}\" \"server/**/*.js\"",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "src/**/*.{js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "server/**/*.js": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "axios": "^1.14.0",
     "docx": "^9.6.1",
+    "dotenv": "^17.4.1",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
+    "pdfjs-dist": "^5.6.205",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-dropzone": "^15.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.58.2",
     "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.2.1",
+    "cors": "^2.8.6",
+    "eslint": "^10.2.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "express": "^5.2.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
     "vite": "^5.4.10"
   }
 }

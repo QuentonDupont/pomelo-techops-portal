@@ -8,12 +8,16 @@ import DocExporter from './DocExporter.jsx';
 
 const PAGE_SIZE = 20;
 
-const relDate = (iso) => {
+const relDate = iso => {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 };
 
-const fmtSize = (bytes) => {
+const fmtSize = bytes => {
   if (!bytes) return '—';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -24,16 +28,66 @@ const fmtSize = (bytes) => {
 function ConfirmModal({ count, onConfirm, onCancel }) {
   return (
     <>
-      <div onClick={onCancel} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 700 }} />
-      <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: '#fff', borderRadius: '14px', zIndex: 701, width: '420px', maxWidth: '95vw', padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: "'Lato', sans-serif" }}>
+      <div
+        onClick={onCancel}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 700 }}
+      />
+      <div
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: '#fff',
+          borderRadius: '14px',
+          zIndex: 701,
+          width: '420px',
+          maxWidth: '95vw',
+          padding: '28px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          fontFamily: "'Lato', sans-serif",
+        }}
+      >
         <div style={{ fontSize: '24px', marginBottom: '12px' }}>🗑️</div>
-        <div style={{ fontWeight: 900, fontSize: '17px', color: '#1A2B4A', marginBottom: '8px' }}>Archive {count} document{count !== 1 ? 's' : ''}?</div>
+        <div style={{ fontWeight: 900, fontSize: '17px', color: '#1A2B4A', marginBottom: '8px' }}>
+          Archive {count} document{count !== 1 ? 's' : ''}?
+        </div>
         <div style={{ fontSize: '13px', color: '#64748B', marginBottom: '24px', lineHeight: 1.6 }}>
-          This will archive the selected document{count !== 1 ? 's' : ''}. Archived documents are hidden from the library but can be restored.
+          This will archive the selected document{count !== 1 ? 's' : ''}. Archived documents are
+          hidden from the library but can be restored.
         </div>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={{ padding: '9px 18px', background: 'transparent', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontFamily: "'Lato', sans-serif", fontSize: '13px', cursor: 'pointer', color: '#64748B' }}>Cancel</button>
-          <button onClick={onConfirm} style={{ padding: '9px 20px', background: '#DC2626', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Lato', sans-serif", fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Archive</button>
+          <button
+            onClick={onCancel}
+            style={{
+              padding: '9px 18px',
+              background: 'transparent',
+              border: '1.5px solid #E2E8F0',
+              borderRadius: '8px',
+              fontFamily: "'Lato', sans-serif",
+              fontSize: '13px',
+              cursor: 'pointer',
+              color: '#64748B',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '9px 20px',
+              background: '#DC2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontFamily: "'Lato', sans-serif",
+              fontWeight: 700,
+              fontSize: '13px',
+              cursor: 'pointer',
+            }}
+          >
+            Archive
+          </button>
         </div>
       </div>
     </>
@@ -41,46 +95,60 @@ function ConfirmModal({ count, onConfirm, onCancel }) {
 }
 
 // ─── DocAdminPanel ─────────────────────────────────────────────────────────────
-export default function DocAdminPanel({ docs, onRefresh }) {
-  const [search, setSearch]           = useState('');
-  const [catFilter, setCatFilter]     = useState('');
-  const [fmtFilter, setFmtFilter]     = useState('');
+export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
+  const [search, setSearch] = useState('');
+  const [catFilter, setCatFilter] = useState('');
+  const [fmtFilter, setFmtFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [dateFrom, setDateFrom]       = useState('');
-  const [dateTo, setDateTo]           = useState('');
-  const [sortCol, setSortCol]         = useState('updatedAt');
-  const [sortDir, setSortDir]         = useState('desc');
-  const [page, setPage]               = useState(1);
-  const [selected, setSelected]       = useState([]);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sortCol, setSortCol] = useState('updatedAt');
+  const [sortDir, setSortDir] = useState('desc');
+  const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState([]);
   const [confirmCount, setConfirmCount] = useState(0);
-  const [bulkCat, setBulkCat]         = useState('');
-  const [exportDoc, setExportDoc]     = useState(null);
-  const [working, setWorking]         = useState(false);
+  const [bulkCat, setBulkCat] = useState('');
+  const [exportDoc, setExportDoc] = useState(null);
+  const [working, setWorking] = useState(false);
+  const [opError, setOpError] = useState(null);
 
   // ── Filter + sort ────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     let r = [...docs];
-    if (search)       r = r.filter(d => d.title.toLowerCase().includes(search.toLowerCase()) || (d.author || '').toLowerCase().includes(search.toLowerCase()));
-    if (catFilter)    r = r.filter(d => d.category === catFilter);
-    if (fmtFilter)    r = r.filter(d => d.format === fmtFilter);
+    if (search)
+      r = r.filter(
+        d =>
+          d.title.toLowerCase().includes(search.toLowerCase()) ||
+          (d.author || '').toLowerCase().includes(search.toLowerCase())
+      );
+    if (catFilter) r = r.filter(d => d.category === catFilter);
+    if (fmtFilter) r = r.filter(d => d.format === fmtFilter);
     if (statusFilter) r = r.filter(d => d.status === statusFilter);
-    if (dateFrom)     r = r.filter(d => new Date(d.updatedAt) >= new Date(dateFrom));
-    if (dateTo)       r = r.filter(d => new Date(d.updatedAt) <= new Date(dateTo + 'T23:59:59'));
+    if (dateFrom) r = r.filter(d => new Date(d.updatedAt) >= new Date(dateFrom));
+    if (dateTo) r = r.filter(d => new Date(d.updatedAt) <= new Date(dateTo + 'T23:59:59'));
     r.sort((a, b) => {
-      let av = a[sortCol] || '', bv = b[sortCol] || '';
+      let av = a[sortCol] || '',
+        bv = b[sortCol] || '';
       if (typeof av === 'number') return sortDir === 'asc' ? av - bv : bv - av;
-      return sortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+      return sortDir === 'asc'
+        ? String(av).localeCompare(String(bv))
+        : String(bv).localeCompare(String(av));
     });
     return r;
   }, [docs, search, catFilter, fmtFilter, statusFilter, dateFrom, dateTo, sortCol, sortDir]);
 
-  const pages     = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageDocs  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Clamp page when the filtered list shrinks (e.g. after an archive operation)
+  const safePage = Math.min(page, pages);
+  const pageDocs = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   const allPageSelected = pageDocs.length > 0 && pageDocs.every(d => selected.includes(d.id));
 
-  const sort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
+  const sort = col => {
+    if (sortCol === col) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSortCol(col);
+      setSortDir('asc');
+    }
   };
 
   const toggleAll = () => {
@@ -88,12 +156,25 @@ export default function DocAdminPanel({ docs, onRefresh }) {
     else setSelected(s => [...new Set([...s, ...pageDocs.map(d => d.id)])]);
   };
 
-  const resetFilters = () => { setSearch(''); setCatFilter(''); setFmtFilter(''); setStatusFilter(''); setDateFrom(''); setDateTo(''); setPage(1); };
+  const resetFilters = () => {
+    setSearch('');
+    setCatFilter('');
+    setFmtFilter('');
+    setStatusFilter('');
+    setDateFrom('');
+    setDateTo('');
+    setPage(1);
+  };
 
   const doBulkArchive = async () => {
     setWorking(true);
-    await bulkArchive(selected);
+    setOpError(null);
+    const { error } = await bulkArchive(selected);
     setWorking(false);
+    if (error) {
+      setOpError(`Archive failed: ${error}`);
+      return;
+    }
     setSelected([]);
     setConfirmCount(0);
     onRefresh?.();
@@ -102,129 +183,511 @@ export default function DocAdminPanel({ docs, onRefresh }) {
   const doChangeCat = async () => {
     if (!bulkCat) return;
     setWorking(true);
-    await Promise.all(selected.map(id => updateDoc(id, { category: bulkCat })));
+    setOpError(null);
+    const results = await Promise.all(selected.map(id => updateDoc(id, { category: bulkCat })));
     setWorking(false);
+    const failed = results.filter(r => r.error);
+    if (failed.length) {
+      setOpError(`${failed.length} update(s) failed. Please try again.`);
+      return;
+    }
     setSelected([]);
+    setBulkCat('');
     onRefresh?.();
   };
 
-  const doArchiveOne = async (id) => {
+  const doArchiveOne = async id => {
     setWorking(true);
-    await deleteDoc(id);
+    setOpError(null);
+    const { error } = await deleteDoc(id);
     setWorking(false);
+    if (error) {
+      setOpError(`Archive failed: ${error}`);
+      return;
+    }
     onRefresh?.();
   };
 
-  const doRestoreOne = async (id) => {
+  const doRestoreOne = async id => {
     setWorking(true);
-    await updateDoc(id, { status: 'Active' });
+    setOpError(null);
+    const { error } = await updateDoc(id, { status: 'Active' });
     setWorking(false);
+    if (error) {
+      setOpError(`Restore failed: ${error}`);
+      return;
+    }
     onRefresh?.();
   };
 
-  const inputSt = { padding: '7px 10px', borderRadius: '7px', border: '1.5px solid #E2E8F0', fontFamily: "'Lato', sans-serif", fontSize: '12px', background: '#F8F9FB', outline: 'none', color: '#1A2B4A' };
-  const thSt    = { padding: '10px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', position: 'sticky', top: 0, background: '#F8F9FB', borderBottom: '1px solid #E2E8F0' };
-  const tdSt    = { padding: '10px 12px', fontSize: '12px', color: '#1E293B', verticalAlign: 'middle', borderBottom: '1px solid #F1F5F9' };
+  const inputSt = {
+    padding: '7px 10px',
+    borderRadius: '7px',
+    border: '1.5px solid #E2E8F0',
+    fontFamily: "'Lato', sans-serif",
+    fontSize: '12px',
+    background: '#F8F9FB',
+    outline: 'none',
+    color: '#1A2B4A',
+  };
+  const thSt = {
+    padding: '10px 12px',
+    textAlign: 'left',
+    fontSize: '11px',
+    fontWeight: 700,
+    color: '#475569',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
+    userSelect: 'none',
+    position: 'sticky',
+    top: 0,
+    background: '#F8F9FB',
+    borderBottom: '1px solid #E2E8F0',
+  };
+  const tdSt = {
+    padding: '10px 12px',
+    fontSize: '12px',
+    color: '#1E293B',
+    verticalAlign: 'middle',
+    borderBottom: '1px solid #F1F5F9',
+  };
 
-  const sortIcon = (col) => sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+  const sortIcon = col => (sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '');
 
   return (
     <div style={{ fontFamily: "'Lato', sans-serif" }}>
-
       {/* Filters bar */}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
-        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search title or author…" style={{ ...inputSt, minWidth: '200px' }} />
-        <select value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(1); }} style={inputSt}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '8px',
+          flexWrap: 'wrap',
+          marginBottom: '16px',
+          alignItems: 'center',
+        }}
+      >
+        <input
+          value={search}
+          onChange={e => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          placeholder="Search title or author…"
+          style={{ ...inputSt, minWidth: '200px' }}
+        />
+        <select
+          value={catFilter}
+          onChange={e => {
+            setCatFilter(e.target.value);
+            setPage(1);
+          }}
+          style={inputSt}
+        >
           <option value="">All categories</option>
-          {DOC_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+          {DOC_CATEGORIES.map(c => (
+            <option key={c}>{c}</option>
+          ))}
         </select>
-        <select value={fmtFilter} onChange={e => { setFmtFilter(e.target.value); setPage(1); }} style={inputSt}>
+        <select
+          value={fmtFilter}
+          onChange={e => {
+            setFmtFilter(e.target.value);
+            setPage(1);
+          }}
+          style={inputSt}
+        >
           <option value="">All formats</option>
-          {['PDF', 'DOCX', 'MD', 'TXT', 'CSV', 'XLSX', 'PPTX'].map(f => <option key={f}>{f}</option>)}
+          {['PDF', 'DOCX', 'MD', 'TXT', 'CSV', 'XLSX', 'PPTX'].map(f => (
+            <option key={f}>{f}</option>
+          ))}
         </select>
-        <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }} style={inputSt}>
+        <select
+          value={statusFilter}
+          onChange={e => {
+            setStatusFilter(e.target.value);
+            setPage(1);
+          }}
+          style={inputSt}
+        >
           <option value="">All statuses</option>
-          {['Active', 'Archived', 'Draft'].map(s => <option key={s}>{s}</option>)}
+          {['Active', 'Archived', 'Draft'].map(s => (
+            <option key={s}>{s}</option>
+          ))}
         </select>
-        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputSt} title="From date" />
-        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputSt} title="To date" />
-        <button onClick={resetFilters} style={{ background: 'none', border: 'none', color: '#E8632A', fontWeight: 700, fontSize: '12px', cursor: 'pointer', padding: '0 4px' }}>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={e => setDateFrom(e.target.value)}
+          style={inputSt}
+          title="From date"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={e => setDateTo(e.target.value)}
+          style={inputSt}
+          title="To date"
+        />
+        <button
+          onClick={resetFilters}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#E8632A',
+            fontWeight: 700,
+            fontSize: '12px',
+            cursor: 'pointer',
+            padding: '0 4px',
+          }}
+        >
           Reset filters
         </button>
-        <div style={{ marginLeft: 'auto', fontSize: '12px', color: '#94A3B8' }}>{filtered.length} document{filtered.length !== 1 ? 's' : ''}</div>
+        <div style={{ marginLeft: 'auto', fontSize: '12px', color: '#94A3B8' }}>
+          {filtered.length} document{filtered.length !== 1 ? 's' : ''}
+        </div>
       </div>
+
+      {/* Operation error banner */}
+      {opError && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '10px 14px',
+            background: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            borderRadius: '8px',
+            marginBottom: '12px',
+            fontSize: '13px',
+            color: '#DC2626',
+          }}
+        >
+          <span style={{ flex: 1 }}>{opError}</span>
+          <button
+            onClick={() => setOpError(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#DC2626',
+              fontSize: '16px',
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Bulk actions bar */}
       {selected.length > 0 && (
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '10px 14px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1A2B4A' }}>{selected.length} selected</span>
-          <button onClick={() => setConfirmCount(selected.length)} style={{ padding: '6px 12px', background: '#DC2626', color: '#fff', border: 'none', borderRadius: '6px', fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Archive selected</button>
-          <select value={bulkCat} onChange={e => setBulkCat(e.target.value)} style={{ ...inputSt, fontSize: '11px' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'center',
+            padding: '10px 14px',
+            background: '#EFF6FF',
+            border: '1px solid #BFDBFE',
+            borderRadius: '8px',
+            marginBottom: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1A2B4A' }}>
+            {selected.length} selected
+          </span>
+          <button
+            onClick={() => setConfirmCount(selected.length)}
+            style={{
+              padding: '6px 12px',
+              background: '#DC2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontFamily: "'Lato', sans-serif",
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Archive selected
+          </button>
+          <select
+            value={bulkCat}
+            onChange={e => setBulkCat(e.target.value)}
+            style={{ ...inputSt, fontSize: '11px' }}
+          >
             <option value="">Change category…</option>
-            {DOC_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+            {DOC_CATEGORIES.map(c => (
+              <option key={c}>{c}</option>
+            ))}
           </select>
           {bulkCat && (
-            <button onClick={doChangeCat} disabled={working} style={{ padding: '6px 12px', background: '#1A2B4A', color: '#fff', border: 'none', borderRadius: '6px', fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Apply</button>
+            <button
+              onClick={doChangeCat}
+              disabled={working}
+              style={{
+                padding: '6px 12px',
+                background: '#1A2B4A',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontFamily: "'Lato', sans-serif",
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Apply
+            </button>
           )}
-          <button onClick={() => setSelected([])} style={{ padding: '6px 10px', background: 'transparent', border: '1.5px solid #BFDBFE', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', color: '#1A2B4A' }}>Clear selection</button>
+          <button
+            onClick={() => setSelected([])}
+            style={{
+              padding: '6px 10px',
+              background: 'transparent',
+              border: '1.5px solid #BFDBFE',
+              borderRadius: '6px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              color: '#1A2B4A',
+            }}
+          >
+            Clear selection
+          </button>
         </div>
       )}
 
       {/* Table */}
-      <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'auto', maxHeight: '560px' }}>
+      <div
+        style={{
+          border: '1px solid #E2E8F0',
+          borderRadius: '10px',
+          overflow: 'auto',
+          maxHeight: '560px',
+        }}
+      >
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
           <thead>
             <tr>
               <th style={{ ...thSt, width: '36px' }}>
-                <input type="checkbox" checked={allPageSelected} onChange={toggleAll} style={{ cursor: 'pointer' }} />
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  onChange={toggleAll}
+                  style={{ cursor: 'pointer' }}
+                />
               </th>
-              {[['title', 'Title'], ['category', 'Category'], ['format', 'Format'], ['author', 'Author'], ['updatedAt', 'Updated'], ['version', 'Version'], ['visibility', 'Visibility'], ['status', 'Status']].map(([col, label]) => (
-                <th key={col} style={thSt} onClick={() => sort(col)}>{label}{sortIcon(col)}</th>
+              {[
+                ['title', 'Title'],
+                ['category', 'Category'],
+                ['format', 'Format'],
+                ['author', 'Author'],
+                ['updatedAt', 'Updated'],
+                ['version', 'Version'],
+                ['visibility', 'Visibility'],
+                ['status', 'Status'],
+              ].map(([col, label]) => (
+                <th key={col} style={thSt} onClick={() => sort(col)}>
+                  {label}
+                  {sortIcon(col)}
+                </th>
               ))}
               <th style={thSt}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {pageDocs.length === 0 && (
-              <tr><td colSpan={10} style={{ ...tdSt, textAlign: 'center', padding: '40px', color: '#94A3B8' }}>No documents found.</td></tr>
+              <tr>
+                <td
+                  colSpan={10}
+                  style={{ ...tdSt, textAlign: 'center', padding: '40px', color: '#94A3B8' }}
+                >
+                  No documents found.
+                </td>
+              </tr>
             )}
             {pageDocs.map(doc => {
               const fmt = FORMAT_COLORS[doc.format] || FORMAT_COLORS.TXT;
               const isArchived = doc.status === 'Archived';
               return (
-                <tr key={doc.id} style={{ background: selected.includes(doc.id) ? '#F0F7FF' : isArchived ? '#FAFAFA' : '#fff', opacity: isArchived ? 0.7 : 1 }}>
+                <tr
+                  key={doc.id}
+                  style={{
+                    background: selected.includes(doc.id)
+                      ? '#F0F7FF'
+                      : isArchived
+                        ? '#FAFAFA'
+                        : '#fff',
+                    opacity: isArchived ? 0.7 : 1,
+                  }}
+                >
                   <td style={tdSt}>
-                    <input type="checkbox" checked={selected.includes(doc.id)} onChange={() => setSelected(s => s.includes(doc.id) ? s.filter(x => x !== doc.id) : [...s, doc.id])} style={{ cursor: 'pointer' }} />
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(doc.id)}
+                      onChange={() =>
+                        setSelected(s =>
+                          s.includes(doc.id) ? s.filter(x => x !== doc.id) : [...s, doc.id]
+                        )
+                      }
+                      style={{ cursor: 'pointer' }}
+                    />
                   </td>
                   <td style={tdSt}>
-                    <div style={{ fontWeight: 700, color: '#1A2B4A', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.icon} {doc.title}</div>
-                    <div style={{ fontSize: '10px', color: '#94A3B8' }}>{fmtSize(doc.fileSize)}</div>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        color: '#1A2B4A',
+                        maxWidth: '220px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {doc.icon} {doc.title}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#94A3B8' }}>
+                      {fmtSize(doc.fileSize)}
+                    </div>
                   </td>
-                  <td style={tdSt}><span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: '#F1F5F9', color: '#475569' }}>{doc.category}</span></td>
-                  <td style={tdSt}><span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', background: fmt.bg, color: fmt.color, border: `1px solid ${fmt.border}` }}>{doc.format}</span></td>
+                  <td style={tdSt}>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '100px',
+                        background: '#F1F5F9',
+                        color: '#475569',
+                      }}
+                    >
+                      {doc.category}
+                    </span>
+                  </td>
+                  <td style={tdSt}>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: fmt.bg,
+                        color: fmt.color,
+                        border: `1px solid ${fmt.border}`,
+                      }}
+                    >
+                      {doc.format}
+                    </span>
+                  </td>
                   <td style={tdSt}>{doc.author || '—'}</td>
                   <td style={{ ...tdSt, whiteSpace: 'nowrap' }}>{relDate(doc.updatedAt)}</td>
                   <td style={tdSt}>{doc.version || '—'}</td>
-                  <td style={tdSt}>{doc.visibility === 'IT Team Only' ? '🔒 IT only' : '🌐 Public'}</td>
                   <td style={tdSt}>
-                    <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '100px', background: isArchived ? '#F1F5F9' : '#F0FDF4', color: isArchived ? '#64748B' : '#16A34A' }}>
+                    {doc.visibility === 'IT Team Only' ? '🔒 IT only' : '🌐 Public'}
+                  </td>
+                  <td style={tdSt}>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '100px',
+                        background: isArchived ? '#F1F5F9' : '#F0FDF4',
+                        color: isArchived ? '#64748B' : '#16A34A',
+                      }}
+                    >
                       {doc.status}
                     </span>
                   </td>
                   <td style={{ ...tdSt, whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', gap: '4px' }}>
+                      <button
+                        onClick={() => onEdit?.(doc)}
+                        title="Edit"
+                        aria-label={`Edit ${doc.title}`}
+                        style={{
+                          padding: '4px 8px',
+                          background: '#F0F4FF',
+                          border: '1px solid #BFDBFE',
+                          borderRadius: '5px',
+                          cursor: 'pointer',
+                          fontSize: '11px',
+                          color: '#2563EB',
+                        }}
+                      >
+                        ✎
+                      </button>
                       <div style={{ position: 'relative' }}>
-                        <button onClick={() => setExportDoc(d => d?.id === doc.id ? null : doc)} title="Export" style={{ padding: '4px 8px', background: '#F8F9FB', border: '1px solid #E2E8F0', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', color: '#475569' }}>↗</button>
+                        <button
+                          onClick={() => setExportDoc(d => (d?.id === doc.id ? null : doc))}
+                          title="Export"
+                          aria-label={`Export ${doc.title}`}
+                          style={{
+                            padding: '4px 8px',
+                            background: '#F8F9FB',
+                            border: '1px solid #E2E8F0',
+                            borderRadius: '5px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            color: '#475569',
+                          }}
+                        >
+                          ↗
+                        </button>
                         {exportDoc?.id === doc.id && (
-                          <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', right: 0, zIndex: 200 }}>
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: 'calc(100% + 4px)',
+                              right: 0,
+                              zIndex: 200,
+                            }}
+                          >
                             <DocExporter doc={doc} onClose={() => setExportDoc(null)} />
                           </div>
                         )}
                       </div>
                       {isArchived ? (
-                        <button onClick={() => doRestoreOne(doc.id)} disabled={working} title="Restore" style={{ padding: '4px 8px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', color: '#16A34A' }}>↺</button>
+                        <button
+                          onClick={() => doRestoreOne(doc.id)}
+                          disabled={working}
+                          title="Restore"
+                          aria-label={`Restore ${doc.title}`}
+                          style={{
+                            padding: '4px 8px',
+                            background: '#F0FDF4',
+                            border: '1px solid #BBF7D0',
+                            borderRadius: '5px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            color: '#16A34A',
+                          }}
+                        >
+                          ↺
+                        </button>
                       ) : (
-                        <button onClick={() => doArchiveOne(doc.id)} disabled={working} title="Archive" style={{ padding: '4px 8px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', color: '#DC2626' }}>🗑</button>
+                        <button
+                          onClick={() => doArchiveOne(doc.id)}
+                          disabled={working}
+                          title="Archive"
+                          aria-label={`Archive ${doc.title}`}
+                          style={{
+                            padding: '4px 8px',
+                            background: '#FEF2F2',
+                            border: '1px solid #FCA5A5',
+                            borderRadius: '5px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            color: '#DC2626',
+                          }}
+                        >
+                          🗑
+                        </button>
                       )}
                     </div>
                   </td>
@@ -237,21 +700,84 @@ export default function DocAdminPanel({ docs, onRefresh }) {
 
       {/* Pagination */}
       {pages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '16px' }}>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{ padding: '6px 12px', background: page === 1 ? '#F1F5F9' : '#1A2B4A', color: page === 1 ? '#94A3B8' : '#fff', border: 'none', borderRadius: '6px', cursor: page === 1 ? 'default' : 'pointer', fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700 }}>←</button>
-          {Array.from({ length: pages }, (_, i) => i + 1).filter(p => Math.abs(p - page) <= 2 || p === 1 || p === pages).map((p, idx, arr) => (
-            <span key={p}>
-              {idx > 0 && arr[idx - 1] !== p - 1 && <span style={{ color: '#94A3B8', fontSize: '12px', padding: '0 4px' }}>…</span>}
-              <button onClick={() => setPage(p)} style={{ padding: '6px 10px', background: p === page ? '#E8632A' : 'transparent', color: p === page ? '#fff' : '#1A2B4A', border: `1.5px solid ${p === page ? '#E8632A' : '#E2E8F0'}`, borderRadius: '6px', cursor: 'pointer', fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700 }}>{p}</button>
-            </span>
-          ))}
-          <button onClick={() => setPage(p => Math.min(pages, p + 1))} disabled={page === pages} style={{ padding: '6px 12px', background: page === pages ? '#F1F5F9' : '#1A2B4A', color: page === pages ? '#94A3B8' : '#fff', border: 'none', borderRadius: '6px', cursor: page === pages ? 'default' : 'pointer', fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700 }}>→</button>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            marginTop: '16px',
+          }}
+        >
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            style={{
+              padding: '6px 12px',
+              background: page === 1 ? '#F1F5F9' : '#1A2B4A',
+              color: page === 1 ? '#94A3B8' : '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: page === 1 ? 'default' : 'pointer',
+              fontFamily: "'Lato', sans-serif",
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            ←
+          </button>
+          {Array.from({ length: pages }, (_, i) => i + 1)
+            .filter(p => Math.abs(p - page) <= 2 || p === 1 || p === pages)
+            .map((p, idx, arr) => (
+              <span key={p}>
+                {idx > 0 && arr[idx - 1] !== p - 1 && (
+                  <span style={{ color: '#94A3B8', fontSize: '12px', padding: '0 4px' }}>…</span>
+                )}
+                <button
+                  onClick={() => setPage(p)}
+                  style={{
+                    padding: '6px 10px',
+                    background: p === page ? '#E8632A' : 'transparent',
+                    color: p === page ? '#fff' : '#1A2B4A',
+                    border: `1.5px solid ${p === page ? '#E8632A' : '#E2E8F0'}`,
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontFamily: "'Lato', sans-serif",
+                    fontSize: '12px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {p}
+                </button>
+              </span>
+            ))}
+          <button
+            onClick={() => setPage(p => Math.min(pages, p + 1))}
+            disabled={page === pages}
+            style={{
+              padding: '6px 12px',
+              background: page === pages ? '#F1F5F9' : '#1A2B4A',
+              color: page === pages ? '#94A3B8' : '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: page === pages ? 'default' : 'pointer',
+              fontFamily: "'Lato', sans-serif",
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            →
+          </button>
         </div>
       )}
 
       {/* Confirm modal */}
       {confirmCount > 0 && (
-        <ConfirmModal count={confirmCount} onConfirm={doBulkArchive} onCancel={() => setConfirmCount(0)} />
+        <ConfirmModal
+          count={confirmCount}
+          onConfirm={doBulkArchive}
+          onCancel={() => setConfirmCount(0)}
+        />
       )}
     </div>
   );

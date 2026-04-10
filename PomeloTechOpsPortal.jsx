@@ -1,5 +1,47 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Component } from 'react';
 import DocImportExportPage from './src/components/docs/DocImportExportPage.jsx';
+import { createJiraTicket, isJiraConfigured } from './src/api/jiraApi.js';
+
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+// Catches render errors in any child subtree and shows a friendly fallback
+// instead of a blank white screen. Wrap major page sections with this.
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, message: '' };
+  }
+
+  static getDerivedStateFromError(err) {
+    return { hasError: true, message: err?.message || 'An unexpected error occurred.' };
+  }
+
+  componentDidCatch(err, info) {
+    console.error('[ErrorBoundary]', err, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '40px 28px', textAlign: 'center', fontFamily: "'Lato', sans-serif" }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: '#1A2B4A', marginBottom: '8px' }}>
+            Something went wrong
+          </div>
+          <div style={{ fontSize: '13px', color: '#64748B', marginBottom: '20px', maxWidth: '420px', margin: '0 auto 20px' }}>
+            {this.state.message}
+          </div>
+          <button
+            onClick={() => this.setState({ hasError: false, message: '' })}
+            style={{ padding: '9px 20px', background: '#E8632A', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Lato', sans-serif", fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 const MOCK_TICKETS = [
@@ -489,7 +531,9 @@ function PasswordStrengthMeter({ password }) {
 
 // ─── OTP Input ────────────────────────────────────────────────────────────────
 function OtpInput({ value, onChange }) {
-  const refs = Array.from({ length: 6 }, () => useRef(null));
+  // useRef must not be called inside a loop or array method — store all 6
+  // element refs in a single ref object to satisfy the Rules of Hooks.
+  const refs = useRef([]);
   const [focusedIdx, setFocusedIdx] = useState(null);
 
   const handleChange = (idx, raw) => {
@@ -497,14 +541,14 @@ function OtpInput({ value, onChange }) {
     const next = [...value];
     next[idx] = digit;
     onChange(next);
-    if (digit && idx < 5) refs[idx + 1].current?.focus();
+    if (digit && idx < 5) refs.current[idx + 1]?.focus();
   };
 
   const handleKeyDown = (idx, e) => {
     if (e.key === 'Backspace' && !value[idx] && idx > 0) {
       const next = [...value]; next[idx - 1] = '';
       onChange(next);
-      refs[idx - 1].current?.focus();
+      refs.current[idx - 1]?.focus();
     }
   };
 
@@ -514,7 +558,7 @@ function OtpInput({ value, onChange }) {
     const next = Array(6).fill('');
     pasted.split('').forEach((d, i) => { next[i] = d; });
     onChange(next);
-    refs[Math.min(pasted.length, 5)].current?.focus();
+    refs.current[Math.min(pasted.length, 5)]?.focus();
   };
 
   return (
@@ -522,7 +566,7 @@ function OtpInput({ value, onChange }) {
       {value.map((v, i) => (
         <input
           key={i}
-          ref={refs[i]}
+          ref={el => { refs.current[i] = el; }}
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
@@ -531,7 +575,7 @@ function OtpInput({ value, onChange }) {
           onChange={e => handleChange(i, e.target.value)}
           onKeyDown={e => handleKeyDown(i, e)}
           onPaste={handlePaste}
-          onFocus={() => { setFocusedIdx(i); refs[i].current?.select(); }}
+          onFocus={() => { setFocusedIdx(i); refs.current[i]?.select(); }}
           onBlur={() => setFocusedIdx(null)}
           style={{
             width: '48px', height: '56px', textAlign: 'center',
@@ -792,9 +836,6 @@ function LoginPage({ onLogin, onToast }) {
             : <button type="button" onClick={() => setResendCooldown(30)} style={{ background: 'none', border: 'none', color: '#E8632A', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Resend code</button>
           }
         </div>
-        <div style={{ marginTop: '16px', padding: '10px 14px', background: '#F0F9FF', borderRadius: '8px', border: '1px solid #BAE6FD', fontSize: '12px', color: '#0369A1' }}>
-          💡 Dev mode: any 6-digit code will work
-        </div>
       </div>
     );
 
@@ -833,10 +874,14 @@ function LoginPage({ onLogin, onToast }) {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: "'Lato', sans-serif" }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        * { box-sizing: border-box; }
+        @media (max-width: 640px) { .login-left { display: none !important; } .login-right { padding: 32px 24px !important; } }
+      `}</style>
 
-      {/* Left panel */}
-      <div style={{ width: '42%', background: '#1A2B4A', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '44px 52px', position: 'relative', overflow: 'hidden' }}>
+      {/* Left panel — hidden on mobile via .login-left media query */}
+      <div className="login-left" style={{ width: '42%', background: '#1A2B4A', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '44px 52px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 12px)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', bottom: '-80px', right: '-80px', width: '320px', height: '320px', borderRadius: '50%', background: 'rgba(232,99,42,0.08)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', top: '-60px', left: '-60px', width: '240px', height: '240px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
@@ -871,7 +916,7 @@ function LoginPage({ onLogin, onToast }) {
       </div>
 
       {/* Right panel */}
-      <div style={{ flex: 1, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 40px' }}>
+      <div className="login-right" style={{ flex: 1, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 40px' }}>
         <div style={{ width: '100%', maxWidth: '400px' }}>
           {renderRight()}
         </div>
@@ -1100,25 +1145,37 @@ const S = {
 };
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
-function Toast({ message, onDone }) {
+// type: 'success' | 'error' | 'info'
+function Toast({ message, type = 'success', onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 4000);
     return () => clearTimeout(t);
   }, [onDone]);
+
+  const variants = {
+    success: { bg: '#1A2B4A', icon: '✅', title: 'Done!' },
+    error:   { bg: '#DC2626', icon: '❌', title: 'Something went wrong' },
+    info:    { bg: '#0369A1', icon: 'ℹ️',  title: 'Note' },
+  };
+  const v = variants[type] || variants.success;
+
   return (
     <div style={{
       position: 'fixed', bottom: '28px', right: '28px', zIndex: 9999,
-      background: '#1A2B4A', color: '#fff', padding: '14px 22px',
+      background: v.bg, color: '#fff', padding: '14px 22px',
       borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
       display: 'flex', alignItems: 'center', gap: '12px',
       animation: 'slideUp 0.3s ease',
-      maxWidth: '360px',
-    }}>
-      <span style={{ fontSize: '20px' }}>✅</span>
-      <div>
-        <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '2px' }}>Ticket submitted!</div>
-        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.65)' }}>{message}</div>
+      maxWidth: '380px', fontFamily: "'Lato', sans-serif",
+    }}
+      role="status" aria-live="polite"
+    >
+      <span style={{ fontSize: '20px' }}>{v.icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '2px' }}>{v.title}</div>
+        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.72)', wordBreak: 'break-word' }}>{message}</div>
       </div>
+      <button onClick={onDone} aria-label="Dismiss notification" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '0 0 0 4px', flexShrink: 0 }}>×</button>
     </div>
   );
 }
@@ -1345,20 +1402,33 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
   );
 }
 
+// Safely render inline markdown bold (**text**) as React <strong> elements
+// without using dangerouslySetInnerHTML. Splits on the bold pattern and
+// alternates between plain text and bold spans.
+function InlineMd({ text }) {
+  const parts = text.split(/\*\*([^*]+)\*\*/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+      )}
+    </>
+  );
+}
+
 function DocMarkdown({ content }) {
-  const lines = content.split('\n');
+  const lines = (content || '').split('\n');
   return (
     <div style={{ fontSize: '14px', color: '#334155', lineHeight: 1.7 }}>
       {lines.map((line, i) => {
-        if (line.startsWith('# ')) return <h1 key={i} style={{ fontSize: '20px', fontWeight: 900, color: '#1A2B4A', marginBottom: '12px', marginTop: i === 0 ? 0 : '20px' }}>{line.slice(2)}</h1>;
-        if (line.startsWith('## ')) return <h2 key={i} style={{ fontSize: '16px', fontWeight: 700, color: '#1A2B4A', marginBottom: '8px', marginTop: '18px' }}>{line.slice(3)}</h2>;
+        if (line.startsWith('# '))   return <h1 key={i} style={{ fontSize: '20px', fontWeight: 900, color: '#1A2B4A', marginBottom: '12px', marginTop: i === 0 ? 0 : '20px' }}>{line.slice(2)}</h1>;
+        if (line.startsWith('## '))  return <h2 key={i} style={{ fontSize: '16px', fontWeight: 700, color: '#1A2B4A', marginBottom: '8px', marginTop: '18px' }}>{line.slice(3)}</h2>;
         if (line.startsWith('### ')) return <h3 key={i} style={{ fontSize: '14px', fontWeight: 700, color: '#334155', marginBottom: '6px', marginTop: '14px' }}>{line.slice(4)}</h3>;
         if (line.startsWith('- [ ] ')) return <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}><span style={{ color: '#CBD5E1' }}>☐</span><span>{line.slice(6)}</span></div>;
-        if (line.startsWith('- **') || line.startsWith('- ')) return <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}><span style={{ color: '#E8632A', flexShrink: 0 }}>•</span><span dangerouslySetInnerHTML={{ __html: line.slice(2).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>') }} /></div>;
-        if (line.startsWith('| ')) return null;
-        if (line === '') return <div key={i} style={{ height: '8px' }} />;
-        if (line.startsWith('**')) return <p key={i} style={{ marginBottom: '6px' }} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>') }} />;
-        return <p key={i} style={{ marginBottom: '6px' }} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>') }} />;
+        if (line.startsWith('- '))   return <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}><span style={{ color: '#E8632A', flexShrink: 0 }}>•</span><span><InlineMd text={line.slice(2)} /></span></div>;
+        if (line.startsWith('| '))   return null;
+        if (line === '')             return <div key={i} style={{ height: '8px' }} />;
+        return <p key={i} style={{ marginBottom: '6px' }}><InlineMd text={line} /></p>;
       })}
     </div>
   );
@@ -1458,7 +1528,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '13px', color: '#64748B' }}>Assignee</span>
-              {role === 'superadmin' ? (
+              {(role === 'superadmin' || role === 'admin') ? (
                 <div style={{ position: 'relative' }}>
                   <select
                     value={ticket.assignee || ''}
@@ -1492,21 +1562,28 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
             <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Description</div>
             <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>{ticket.description}</div>
           </div>
-          {role === 'superadmin' && (
-            <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '13px', color: '#64748B', flexShrink: 0 }}>Change Status</span>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <select
-                  value={ticket.status}
-                  onChange={e => onStatusChange(ticket.id, e.target.value)}
-                  style={{ ...S.select, padding: '6px 28px 6px 10px', fontSize: '13px' }}
-                >
-                  {['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'].map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94A3B8', fontSize: '11px' }}>▾</span>
+          <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
+            {(role === 'superadmin' || role === 'admin') ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '13px', color: '#64748B', flexShrink: 0 }}>Change Status</span>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <select
+                    value={ticket.status}
+                    onChange={e => onStatusChange(ticket.id, e.target.value)}
+                    style={{ ...S.select, padding: '6px 28px 6px 10px', fontSize: '13px' }}
+                  >
+                    {['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'].map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94A3B8', fontSize: '11px' }}>▾</span>
+                </div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: '#F8FAFC', borderRadius: '7px', border: '1px solid #E2E8F0' }}>
+                <span style={{ fontSize: '14px' }}>🔒</span>
+                <span style={{ fontSize: '12px', color: '#64748B' }}>Status updates are managed by the IT team.</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2135,15 +2212,37 @@ function SubmitPage({ setSection, showToast }) {
     return Object.keys(e).length === 0;
   };
 
-  const submit = () => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
     if (!validate()) return;
-    const year = new Date().getFullYear();
-    const num = String(Math.floor(Math.random() * 9000) + 1000);
-    const id = `TKT-${year}-${num}`;
-    showToast(`Your ticket ${id} has been submitted. We'll respond within SLA hours.`);
-    setForm(EMPTY_FORM);
-    setErrors({});
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    setSubmitting(true);
+
+    if (isJiraConfigured()) {
+      // Live path — create Jira issue
+      const result = await createJiraTicket(form);
+      setSubmitting(false);
+
+      if (result.error) {
+        showToast(`Jira error: ${result.error}`, 'error');
+      } else {
+        showToast(`Ticket ${result.key} created in Jira. Reference: ${result.url}`);
+        setForm(EMPTY_FORM);
+        setErrors({});
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+    } else {
+      // Fallback — no Jira token, generate local reference
+      await new Promise(r => setTimeout(r, 600));
+      setSubmitting(false);
+      const year = new Date().getFullYear();
+      const num  = String(Math.floor(Math.random() * 9000) + 1000);
+      const id   = `TKT-${year}-${num}`;
+      showToast(`Your ticket ${id} has been submitted. We'll respond within SLA hours.`);
+      setForm(EMPTY_FORM);
+      setErrors({});
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const err = (k) => errors[k] ? <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '4px' }}>{errors[k]}</div> : null;
@@ -2249,6 +2348,7 @@ function SubmitPage({ setSection, showToast }) {
                 <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94A3B8' }}>▾</span>
               </div>
               <FieldHint text="Which shop is affected or needs to be updated?" />
+              {err('shop')}
             </div>
             <div>
               <label style={S.label}>Department *</label>
@@ -2342,216 +2442,20 @@ function SubmitPage({ setSection, showToast }) {
 
           {/* Actions */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '4px', borderTop: '1px solid #F1F5F9' }}>
-            <button onClick={() => { setForm(EMPTY_FORM); setErrors({}); if (fileInputRef.current) fileInputRef.current.value = ''; }} style={S.ghostBtn}>Clear Form</button>
-            <button onClick={submit} style={S.orangeBtn}>Submit Ticket</button>
+            <button onClick={() => { setForm(EMPTY_FORM); setErrors({}); if (fileInputRef.current) fileInputRef.current.value = ''; }} disabled={submitting} style={{ ...S.ghostBtn, opacity: submitting ? 0.5 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}>Clear Form</button>
+            <button onClick={submit} disabled={submitting} style={{ ...S.orangeBtn, opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '7px' }}>
+              {submitting ? (
+                <>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.8s linear infinite' }}>
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                  </svg>
+                  Submitting…
+                </>
+              ) : 'Submit Ticket'}
+            </button>
           </div>
 
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Docs Sidebar ─────────────────────────────────────────────────────────────
-function DocsSidebar({ docs, selectedDoc, onSelect }) {
-  const categories = [...new Set(docs.map(d => d.category))];
-
-  return (
-    <div style={{
-      width: '220px', flexShrink: 0,
-      background: '#fff', borderRight: '1px solid #E2E8F0',
-      display: 'flex', flexDirection: 'column',
-      position: 'sticky', top: 0, height: 'calc(100vh - 60px)',
-      overflowY: 'auto',
-    }}>
-      {/* Header */}
-      <div style={{ padding: '16px 16px 10px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>All Documents</span>
-        <span style={{
-          background: '#F1F5F9', color: '#64748B',
-          fontSize: '11px', fontWeight: 700,
-          padding: '2px 7px', borderRadius: '100px',
-        }}>{docs.length}</span>
-      </div>
-
-      {/* Doc list grouped by category */}
-      <div style={{ flex: 1, padding: '8px 0' }}>
-        {categories.map(cat => {
-          const catDocs = docs.filter(d => d.category === cat);
-          return (
-            <div key={cat} style={{ marginBottom: '4px' }}>
-              <div style={{ padding: '6px 16px 4px', fontSize: '10px', fontWeight: 700, color: '#CBD5E1', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                {cat}
-              </div>
-              {catDocs.map(doc => {
-                const isActive = selectedDoc?.id === doc.id;
-                return (
-                  <button
-                    key={doc.id}
-                    onClick={() => onSelect(doc)}
-                    style={{
-                      width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
-                      padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px',
-                      background: isActive ? '#FFF5F0' : 'transparent',
-                      borderRight: `3px solid ${isActive ? '#E8632A' : 'transparent'}`,
-                      transition: 'background 0.1s',
-                      fontFamily: "'Lato', sans-serif",
-                    }}
-                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#F8F9FB'; }}
-                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    <span style={{ fontSize: '14px', flexShrink: 0 }}>{doc.icon}</span>
-                    <span style={{
-                      fontSize: '12px',
-                      fontWeight: isActive ? 700 : 400,
-                      color: isActive ? '#E8632A' : '#334155',
-                      lineHeight: 1.35,
-                    }}>{doc.title}</span>
-                  </button>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function DocsPage({ role, docs, setDocs, suggestions, setSuggestions, currentUser }) {
-  const [search, setSearch] = useState('');
-  const [selectedDoc, setSelectedDoc] = useState(null);
-  const [filterCat, setFilterCat] = useState('All');
-  const [showNewDoc, setShowNewDoc] = useState(false);
-  const [editingSuggestion, setEditingSuggestion] = useState(null);
-  const [fullPageDoc, setFullPageDoc] = useState(null);
-
-  // Full-page article reader — renders over the whole page
-  if (fullPageDoc) {
-    return (
-      <DocFullPage
-        doc={fullPageDoc}
-        allDocs={docs}
-        onClose={() => setFullPageDoc(null)}
-        onSelect={setFullPageDoc}
-      />
-    );
-  }
-
-  const docCategories = ['All', ...Array.from(new Set(docs.map(d => d.category)))];
-  const filtered = docs.filter(d => {
-    const matchCat = filterCat === 'All' || d.category === filterCat;
-    const matchSearch = !search || d.title.toLowerCase().includes(search.toLowerCase()) || d.summary.toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
-  });
-
-  const handleDeleteSuggestion = (id) => setSuggestions(s => s.filter(x => x.id !== id));
-  const handleSaveSuggestion = (updated) => {
-    setSuggestions(s => s.map(x => x.id === updated.id ? updated : x));
-    setEditingSuggestion(null);
-  };
-
-  return (
-    <div style={{ display: 'flex', margin: '0 -28px', minHeight: '100%' }}>
-      <DocsSidebar docs={docs} selectedDoc={selectedDoc} onSelect={setSelectedDoc} />
-      <div style={{ flex: 1, minWidth: 0, padding: '0 28px 32px' }}>
-
-      {/* Section 1: Documentation Library */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', flexWrap: 'wrap', gap: '10px', paddingTop: '32px' }}>
-        <div style={S.pageTitle}>Documentation Library</div>
-        {role === 'superadmin' && (
-          <button onClick={() => setShowNewDoc(true)} style={S.orangeBtn}>+ New Document</button>
-        )}
-      </div>
-      <div style={S.pageSub}>Guides, policies, and how-to articles from the IT team.</div>
-
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search documentation…"
-          style={{ ...S.input, maxWidth: '320px' }}
-        />
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-          {docCategories.map(c => (
-            <button key={c} onClick={() => setFilterCat(c)} style={{
-              padding: '7px 14px', borderRadius: '100px',
-              border: '1.5px solid',
-              borderColor: filterCat === c ? '#E8632A' : '#E2E8F0',
-              background: filterCat === c ? '#FFF5F0' : '#fff',
-              color: filterCat === c ? '#E8632A' : '#64748B',
-              fontFamily: "'Lato', sans-serif",
-              fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-            }}>{c}</button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '14px', marginBottom: '40px' }}>
-        {filtered.map(doc => (
-          <button key={doc.id} onClick={() => setSelectedDoc(doc)} style={{
-            ...S.card, textAlign: 'left', cursor: 'pointer', transition: 'all 0.15s',
-            display: 'flex', flexDirection: 'column', gap: '10px',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#E8632A'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(232,99,42,0.08)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; }}
-          >
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <span style={{ fontSize: '28px', lineHeight: 1 }}>{doc.icon}</span>
-              <div>
-                <div style={{ fontSize: '15px', fontWeight: 700, color: '#1A2B4A', marginBottom: '3px' }}>{doc.title}</div>
-                <span style={{ ...S.badge('#64748B'), fontSize: '10px' }}>{doc.category}</span>
-              </div>
-            </div>
-            <div style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.5 }}>{doc.summary}</div>
-            <div style={{ fontSize: '12px', color: '#E8632A', fontWeight: 700, marginTop: 'auto' }}>Read article →</div>
-          </button>
-        ))}
-      </div>
-
-      {/* Divider */}
-      <div style={{ borderTop: '2px solid #E2E8F0', marginBottom: '28px' }} />
-
-      {/* Section 2: Topic Suggestions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-        <div style={S.pageTitle}>Topic Suggestions</div>
-        <span style={{ fontSize: '13px', color: '#94A3B8' }}>{suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''}</span>
-      </div>
-      <div style={{ ...S.pageSub, marginBottom: '20px' }}>
-        Share ideas, questions, or requests with the TechOps team. Anyone can suggest — super admins will review and create the docs.
-      </div>
-
-      <NewSuggestionForm currentUser={currentUser} onSubmit={(s) => setSuggestions(prev => [s, ...prev])} />
-
-      {suggestions.length === 0 ? (
-        <div style={{ ...S.card, textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
-          <div style={{ fontSize: '28px', marginBottom: '8px' }}>💬</div>
-          <div style={{ fontSize: '14px' }}>No suggestions yet — be the first to post one!</div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {suggestions.map(s => (
-            <SuggestionCard
-              key={s.id}
-              suggestion={s}
-              currentUser={currentUser}
-              role={role}
-              onEdit={setEditingSuggestion}
-              onDelete={handleDeleteSuggestion}
-            />
-          ))}
-        </div>
-      )}
-
-      {selectedDoc && (
-        <DocPanel
-          doc={selectedDoc}
-          onClose={() => setSelectedDoc(null)}
-          onReadFull={(d) => { setSelectedDoc(null); setFullPageDoc(d); }}
-        />
-      )}
-      {showNewDoc && <NewDocModal onSave={doc => { setDocs(d => [...d, doc]); setShowNewDoc(false); }} onClose={() => setShowNewDoc(false)} />}
-      {editingSuggestion && <EditSuggestionModal suggestion={editingSuggestion} onSave={handleSaveSuggestion} onClose={() => setEditingSuggestion(null)} />}
       </div>
     </div>
   );
@@ -3156,23 +3060,25 @@ export default function PomeloTechOpsPortal() {
   ];
 
   const renderPage = () => {
+    let page;
     switch (section) {
-      case 'home': return <HomePage setSection={setSection} role={role} currentUser={currentUser} />;
-      case 'submit': return <SubmitPage setSection={setSection} showToast={(msg) => setToast(msg)} />;
-      case 'docs': return <DocImportExportPage role={role} suggestions={suggestions} setSuggestions={setSuggestions} currentUser={currentUser} />;
-      case 'priority': return <PriorityGuidePage />;
-      case 'sla': return <SLAPage />;
-      case 'mytickets': return <MyTicketsPage role={role} />;
-      case 'admin': return role === 'superadmin' ? <AdminPage /> : <HomePage setSection={setSection} role={role} currentUser={currentUser} />;
-      default: return <HomePage setSection={setSection} role={role} currentUser={currentUser} />;
+      case 'home':      page = <HomePage setSection={setSection} role={role} currentUser={currentUser} />; break;
+      case 'submit':    page = <SubmitPage setSection={setSection} showToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} />; break;
+      case 'docs':      page = <DocImportExportPage role={role} suggestions={suggestions} setSuggestions={setSuggestions} currentUser={currentUser} />; break;
+      case 'priority':  page = <PriorityGuidePage />; break;
+      case 'sla':       page = <SLAPage />; break;
+      case 'mytickets': page = <MyTicketsPage role={role} />; break;
+      case 'admin':     page = role === 'superadmin' ? <AdminPage /> : <HomePage setSection={setSection} role={role} currentUser={currentUser} />; break;
+      default:          page = <HomePage setSection={setSection} role={role} currentUser={currentUser} />;
     }
+    return <ErrorBoundary key={section}>{page}</ErrorBoundary>;
   };
 
   if (!isAuthenticated) {
     return (
       <>
-        <LoginPage onLogin={handleLogin} onToast={(msg) => setToast(msg)} />
-        {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+        <LoginPage onLogin={handleLogin} onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} />
+        {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
       </>
     );
   }
@@ -3240,7 +3146,7 @@ export default function PomeloTechOpsPortal() {
         Pomelo TechOps &nbsp;|&nbsp; Support Hours: Mon–Fri, 9:30 AM – 6:30 PM &nbsp;|&nbsp; Emergency: Slack #techops-urgent
       </footer>
 
-      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
       {profileOpen && <ProfileModal currentUser={currentUser} setCurrentUser={setCurrentUser} role={role} onClose={() => setProfileOpen(false)} onLogout={handleLogout} />}
     </div>
   );

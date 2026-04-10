@@ -4,6 +4,7 @@
 
 import axios from 'axios';
 import { MOCK_DOCS } from '../mocks/docsMockData.js';
+import { extractDocumentContent, isClaudeConfigured } from './claudeApi.js';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const USE_MOCK = !BASE_URL;
@@ -18,7 +19,7 @@ const api = axios.create({
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 const simulateDelay = (ms = 400) => new Promise(r => setTimeout(r, ms));
 
-const errorMessage = (err) => {
+const errorMessage = err => {
   if (err?.response?.data?.message) return err.response.data.message;
   if (err?.message) return err.message;
   return 'An unexpected error occurred. Please try again.';
@@ -29,7 +30,7 @@ const errorMessage = (err) => {
  * @param {() => Promise<any>} fn
  * @returns {Promise<{ data: any, error: string|null }>}
  */
-const wrap = async (fn) => {
+const wrap = async fn => {
   try {
     const data = await fn();
     return { data, error: null };
@@ -41,6 +42,44 @@ const wrap = async (fn) => {
 // ─── In-memory mock store (mutated on upload/update/delete) ───────────────────
 let mockStore = [...MOCK_DOCS];
 
+// ─── File helpers ──────────────────────────────────────────────────────────────
+const FORMAT_ICONS = {
+  PDF: '📄',
+  DOCX: '📝',
+  DOC: '📝',
+  MD: '⬇️',
+  TXT: '📃',
+  CSV: '📊',
+  XLSX: '📈',
+  XLS: '📈',
+  PPTX: '📑',
+  PPT: '📑',
+  PNG: '🖼️',
+  JPG: '🖼️',
+  JPEG: '🖼️',
+  GIF: '🖼️',
+  WEBP: '🖼️',
+};
+
+const fmtBytes = bytes => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+};
+
+const readFileAsText = file =>
+  new Promise(resolve => {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (['md', 'txt', 'csv'].includes(ext)) {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target?.result || '');
+      reader.onerror = () => resolve('');
+      reader.readAsText(file);
+    } else {
+      resolve('');
+    }
+  });
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/docs — List all documents
 // @param {{ category?: string, format?: string, search?: string, status?: string, page?: number, limit?: number }} filters
@@ -51,18 +90,21 @@ export const listDocs = async (filters = {}) => {
     if (USE_MOCK) {
       await simulateDelay(250);
       let result = [...mockStore];
+      // Enforce visibility: 'IT Team Only' docs are only visible to superadmin/admin roles
+      if (filters.role !== 'superadmin' && filters.role !== 'admin') {
+        result = result.filter(d => d.visibility !== 'IT Team Only');
+      }
       if (filters.category && filters.category !== 'All')
         result = result.filter(d => d.category === filters.category);
-      if (filters.format)
-        result = result.filter(d => d.format === filters.format);
-      if (filters.status)
-        result = result.filter(d => d.status === filters.status);
+      if (filters.format) result = result.filter(d => d.format === filters.format);
+      if (filters.status) result = result.filter(d => d.status === filters.status);
       if (filters.search) {
         const q = filters.search.toLowerCase();
-        result = result.filter(d =>
-          d.title.toLowerCase().includes(q) ||
-          d.description.toLowerCase().includes(q) ||
-          (d.tags || []).some(t => t.toLowerCase().includes(q))
+        result = result.filter(
+          d =>
+            d.title.toLowerCase().includes(q) ||
+            d.description.toLowerCase().includes(q) ||
+            (d.tags || []).some(t => t.toLowerCase().includes(q))
         );
       }
       const page = filters.page || 1;
@@ -84,7 +126,7 @@ export const listDocs = async (filters = {}) => {
 // GET /api/docs/:id — Get single document
 // @param {string} id
 // ─────────────────────────────────────────────────────────────────────────────
-export const getDoc = async (id) => {
+export const getDoc = async id => {
   return wrap(async () => {
     if (USE_MOCK) {
       await simulateDelay(150);
@@ -109,24 +151,98 @@ export const uploadDocs = async (fileMetaList, onProgress) => {
       const results = [];
       for (let i = 0; i < fileMetaList.length; i++) {
         const item = fileMetaList[i];
-        await simulateDelay(600);
+        const format = item.file.name.split('.').pop().toUpperCase();
+        const title = item.title || item.file.name.replace(/\.[^.]+$/, '');
+
+        // Read text content for plain-text formats; show rich placeholder for binary formats
+        // Try Claude-powered content extraction first
+        let extractionError = null;
+        let content = await extractDocumentContent(item.file).catch(err => {
+          extractionError = err;
+          // KEY_MISSING may carry pdfjs-extracted text as a fallback
+          return err.fallbackContent || null;
+        });
+
+        if (!content) {
+          // Fallback: read raw text for text-based formats
+          const rawText = await readFileAsText(item.file);
+          if (rawText) {
+            content = rawText;
+          } else {
+            // Could not extract content — show placeholder with actionable hint
+            const uploadedDate = new Date().toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            });
+            let claudeNote;
+            if (extractionError?.code === 'KEY_MISSING') {
+              claudeNote = `\n> 💡 **AI formatting unavailable.** Add \`ANTHROPIC_API_KEY=sk-ant-...\` to \`.env.local\` for better extraction. Raw text shown above.`;
+            } else if (extractionError?.code === 'BFF_DOWN') {
+              claudeNote = `\n> 💡 **BFF proxy is not running.** Start both servers with \`npm run dev:all\` for AI-enhanced extraction.`;
+            } else {
+              claudeNote = `\n> ⚠️ Content extraction was attempted but did not succeed for this file. Download to view the original.`;
+            }
+            content =
+              `# ${title}\n\n` +
+              claudeNote +
+              '\n\n' +
+              `## File Details\n\n` +
+              `- **File name:** ${item.file.name}\n` +
+              `- **File size:** ${fmtBytes(item.file.size)}\n` +
+              `- **Format:** ${format}\n` +
+              `- **Category:** ${item.category || 'Other'}\n` +
+              `- **Uploaded:** ${uploadedDate}\n` +
+              (item.description ? `\n## Description\n\n${item.description}\n` : '');
+          }
+        }
+
+        // Auto-generate description from content when the user left it blank.
+        // Strip Markdown syntax, skip headers/images/code fences, take the
+        // first meaningful sentence(s) up to 200 characters.
+        const autoDescription = (() => {
+          if (item.description) return item.description;
+          if (!content) return '';
+          const lines = content.split('\n');
+          for (const line of lines) {
+            const stripped = line
+              .replace(/^#{1,6}\s+/, '') // headings
+              .replace(/^[-*>]\s+/, '') // list items / blockquotes
+              .replace(/^\d+\.\s+/, '') // numbered lists
+              .replace(/!\[[^\]]*\]\([^)]*\)/, '') // images
+              .replace(/\*\*([^*]+)\*\*/g, '$1') // bold
+              .replace(/`[^`]+`/g, '') // inline code
+              .trim();
+            if (stripped.length > 30) {
+              return stripped.length > 200 ? stripped.slice(0, 197) + '…' : stripped;
+            }
+          }
+          return '';
+        })();
+
+        await simulateDelay(300);
         const newDoc = {
           id: 'doc-' + Date.now() + '-' + i,
-          title: item.title || item.file.name.replace(/\.[^.]+$/, ''),
-          description: item.description || '',
+          title,
+          description: autoDescription,
           category: item.category || 'Other',
-          format: item.file.name.split('.').pop().toUpperCase(),
-          icon: '📄',
+          format,
+          icon: FORMAT_ICONS[format] || '📄',
           fileSize: item.file.size,
           viewCount: 0,
           version: item.version || '1.0',
           author: item.author || 'Unknown',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          tags: item.tags ? item.tags.split(',').map(t => t.trim()) : [],
+          tags: item.tags
+            ? item.tags
+                .split(',')
+                .map(t => t.trim())
+                .filter(Boolean)
+            : [],
           visibility: item.visibility || 'Public',
           status: 'Active',
-          content: `# ${item.title || item.file.name}\n\nDocument uploaded via Pomelo TechOps Portal.`,
+          content,
         };
         mockStore.unshift(newDoc);
         results.push(newDoc);
@@ -168,13 +284,17 @@ export const updateDoc = async (id, updates) => {
 // DELETE /api/docs/:id — Soft delete (set status = Archived)
 // @param {string} id
 // ─────────────────────────────────────────────────────────────────────────────
-export const deleteDoc = async (id) => {
+export const deleteDoc = async id => {
   return wrap(async () => {
     if (USE_MOCK) {
       await simulateDelay(300);
       const idx = mockStore.findIndex(d => d.id === id);
       if (idx === -1) throw new Error('Document not found.');
-      mockStore[idx] = { ...mockStore[idx], status: 'Archived', updatedAt: new Date().toISOString() };
+      mockStore[idx] = {
+        ...mockStore[idx],
+        status: 'Archived',
+        updatedAt: new Date().toISOString(),
+      };
       return { success: true };
     }
     const { data } = await api.delete(`/api/docs/${id}`);
@@ -192,7 +312,9 @@ export const getCategories = async () => {
       const counts = {};
       mockStore
         .filter(d => d.status === 'Active')
-        .forEach(d => { counts[d.category] = (counts[d.category] || 0) + 1; });
+        .forEach(d => {
+          counts[d.category] = (counts[d.category] || 0) + 1;
+        });
       return Object.entries(counts).map(([category, count]) => ({ category, count }));
     }
     const { data } = await api.get('/api/docs/categories');
@@ -204,7 +326,7 @@ export const getCategories = async () => {
 // POST /api/docs/bulk-export — Returns array of doc objects for client-side ZIP
 // @param {string[]} ids
 // ─────────────────────────────────────────────────────────────────────────────
-export const bulkExportDocs = async (ids) => {
+export const bulkExportDocs = async ids => {
   return wrap(async () => {
     if (USE_MOCK) {
       await simulateDelay(500);
@@ -219,18 +341,23 @@ export const bulkExportDocs = async (ids) => {
 // Restore a document (set status = Active)
 // @param {string} id
 // ─────────────────────────────────────────────────────────────────────────────
-export const restoreDoc = async (id) => updateDoc(id, { status: 'Active' });
+export const restoreDoc = async id => updateDoc(id, { status: 'Active' });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bulk archive
 // @param {string[]} ids
 // ─────────────────────────────────────────────────────────────────────────────
-export const bulkArchive = async (ids) => {
+export const bulkArchive = async ids => {
   return wrap(async () => {
     await simulateDelay(400);
     ids.forEach(id => {
       const idx = mockStore.findIndex(d => d.id === id);
-      if (idx !== -1) mockStore[idx] = { ...mockStore[idx], status: 'Archived' };
+      if (idx !== -1)
+        mockStore[idx] = {
+          ...mockStore[idx],
+          status: 'Archived',
+          updatedAt: new Date().toISOString(),
+        };
     });
     return { success: true, count: ids.length };
   });
