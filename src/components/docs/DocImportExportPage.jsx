@@ -9,10 +9,17 @@ import DocUploader from './DocUploader.jsx';
 import DocAdminPanel from './DocAdminPanel.jsx';
 import { bulkZipExport } from './DocExporter.jsx';
 import { DOC_CATEGORIES } from '../../mocks/docsMockData.js';
-import { bulkArchive, updateDoc } from '../../api/docsApi.js';
+import {
+  bulkArchive,
+  updateDoc,
+  pinDoc,
+  markNeedsReview,
+  clearReview,
+  restoreDoc,
+} from '../../api/docsApi.js';
 import DocEditModal from './DocEditModal.jsx';
+import FilePreviewCard from '../FilePreviewCard.jsx';
 
-const ALL_CAT_TABS = ['All', ...DOC_CATEGORIES];
 const VISIBILITY_OPTIONS = ['Public', 'IT Team Only'];
 
 // ─── Skeleton Card ─────────────────────────────────────────────────────────────
@@ -89,7 +96,7 @@ function SkeletonCard() {
 }
 
 // ─── Command Palette ───────────────────────────────────────────────────────────
-function CmdPalette({ docs, onSelectDoc, onAction, onClose }) {
+function CmdPalette({ docs, onSelectDoc, onAction, onClose: _onClose }) {
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef(null);
@@ -182,7 +189,7 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose }) {
             border: 'none',
             outline: 'none',
             fontSize: '15px',
-            color: '#1A2B4A',
+            color: '#111111',
             fontFamily: "'Lato', sans-serif",
             background: 'transparent',
           }}
@@ -237,7 +244,7 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose }) {
               >
                 <span style={{ fontSize: '20px' }}>{doc.icon || '📄'}</span>
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#1A2B4A' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#111111' }}>
                     {doc.title}
                   </div>
                   <div style={{ fontSize: '11px', color: '#94A3B8' }}>
@@ -349,7 +356,7 @@ function UploaderModal({ manager, onClose, currentUser }) {
       >
         <div
           style={{
-            background: '#1A2B4A',
+            background: '#111111',
             padding: '18px 24px',
             display: 'flex',
             alignItems: 'center',
@@ -403,6 +410,7 @@ function UploaderModal({ manager, onClose, currentUser }) {
 function DocFullPage({ doc, allDocs, onClose, onSelect }) {
   const otherDocs = allDocs.filter(d => d.id !== doc.id);
   const [scrollPct, setScrollPct] = useState(0);
+  const [heroImageFailed, setHeroImageFailed] = useState(false);
   const contentRef = useRef(null);
 
   const wordCount = (doc.content || '').split(/\s+/).filter(Boolean).length;
@@ -504,7 +512,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
             overflowX: 'auto',
             fontSize: '13px',
             fontFamily: 'monospace',
-            color: '#1A2B4A',
+            color: '#111111',
             margin: '10px 0 16px',
             lineHeight: 1.6,
           }}
@@ -541,7 +549,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
           <h3
             id={`h-${i}`}
             key={i}
-            style={{ fontSize: '15px', fontWeight: 700, color: '#1A2B4A', margin: '20px 0 6px' }}
+            style={{ fontSize: '15px', fontWeight: 700, color: '#111111', margin: '20px 0 6px' }}
           >
             {renderInline(line.replace(/^###\s/, ''))}
           </h3>
@@ -557,9 +565,9 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
             style={{
               fontSize: '19px',
               fontWeight: 900,
-              color: '#1A2B4A',
+              color: '#111111',
               margin: '28px 0 10px',
-              borderBottom: '2px solid #E8632A',
+              borderBottom: '2px solid #7C3AED',
               paddingBottom: '6px',
             }}
           >
@@ -580,7 +588,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
           <blockquote
             key={i}
             style={{
-              borderLeft: '4px solid #E8632A',
+              borderLeft: '4px solid #7C3AED',
               paddingLeft: '14px',
               margin: '10px 0',
               color: '#64748B',
@@ -716,7 +724,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
             gap: '6px',
             background: 'none',
             border: 'none',
-            color: '#E8632A',
+            color: '#7C3AED',
             fontFamily: "'Lato', sans-serif",
             fontWeight: 700,
             fontSize: '13px',
@@ -740,8 +748,8 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 background: 'none',
                 fontSize: '11px',
                 fontWeight: 700,
-                color: sidebarTab === 'toc' ? '#E8632A' : '#94A3B8',
-                borderBottom: sidebarTab === 'toc' ? '2px solid #E8632A' : '2px solid transparent',
+                color: sidebarTab === 'toc' ? '#7C3AED' : '#94A3B8',
+                borderBottom: sidebarTab === 'toc' ? '2px solid #7C3AED' : '2px solid transparent',
                 cursor: 'pointer',
                 fontFamily: "'Lato', sans-serif",
               }}
@@ -757,8 +765,8 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 background: 'none',
                 fontSize: '11px',
                 fontWeight: 700,
-                color: sidebarTab === 'docs' ? '#E8632A' : '#94A3B8',
-                borderBottom: sidebarTab === 'docs' ? '2px solid #E8632A' : '2px solid transparent',
+                color: sidebarTab === 'docs' ? '#7C3AED' : '#94A3B8',
+                borderBottom: sidebarTab === 'docs' ? '2px solid #7C3AED' : '2px solid transparent',
                 cursor: 'pointer',
                 fontFamily: "'Lato', sans-serif",
               }}
@@ -783,7 +791,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 borderRadius: '6px',
                 marginBottom: '2px',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#E8632A14')}
+              onMouseEnter={e => (e.currentTarget.style.background = '#7C3AED14')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
               {item.text}
@@ -820,10 +828,10 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                   marginBottom: '2px',
                   fontFamily: "'Lato', sans-serif",
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#E8632A14')}
+                onMouseEnter={e => (e.currentTarget.style.background = '#7C3AED14')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1A2B4A' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>
                   {d.icon} {d.title}
                 </div>
                 <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>
@@ -856,7 +864,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
           <div
             style={{
               height: '3px',
-              background: '#E8632A',
+              background: '#7C3AED',
               width: `${scrollPct}%`,
               transition: 'width 0.1s',
             }}
@@ -897,7 +905,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
             style={{
               fontSize: '30px',
               fontWeight: 900,
-              color: '#1A2B4A',
+              color: '#111111',
               marginBottom: '8px',
               lineHeight: 1.2,
             }}
@@ -925,7 +933,64 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
               <span style={{ fontSize: '12px', color: '#94A3B8' }}>· {scrollPct}% read</span>
             )}
           </div>
+          {/* Source-file preview — admins/users can click to open the original
+              file in a new browser tab. Hidden when no source was captured. */}
+          {doc.sourceFile && (
+            <div style={{ marginBottom: '20px' }}>
+              <div
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#475569',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  marginBottom: '8px',
+                }}
+              >
+                Original file
+              </div>
+              <FilePreviewCard
+                name={doc.sourceFile.name}
+                size={doc.sourceFile.size}
+                type={doc.sourceFile.type}
+                src={doc.sourceFile.dataUrl}
+              />
+            </div>
+          )}
           <div style={{ borderBottom: '2px solid #E2E8F0', marginBottom: '28px' }} />
+
+          {/* Image hero — shown for image-format documents uploaded with a blob URL */}
+          {doc.imageUrl && (
+            <div style={{ textAlign: 'center', margin: '0 0 28px 0' }}>
+              {heroImageFailed ? (
+                <div
+                  style={{
+                    padding: '40px 20px',
+                    color: '#94A3B8',
+                    fontSize: '13px',
+                    textAlign: 'center',
+                  }}
+                >
+                  ⚠️ Image could not be loaded.
+                </div>
+              ) : (
+                <img
+                  src={doc.imageUrl}
+                  alt={doc.title}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '560px',
+                    objectFit: 'contain',
+                    borderRadius: '10px',
+                    border: '1px solid #E2E8F0',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                  }}
+                  onError={() => setHeroImageFailed(true)}
+                />
+              )}
+            </div>
+          )}
+
           {renderContent(doc.content)}
 
           {/* Prev/Next navigation */}
@@ -963,7 +1028,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 >
                   ← PREVIOUS
                 </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1A2B4A' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>
                   {prevDoc.icon} {prevDoc.title}
                 </div>
               </button>
@@ -994,7 +1059,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 >
                   NEXT →
                 </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#1A2B4A' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>
                   {nextDoc.icon} {nextDoc.title}
                 </div>
               </button>
@@ -1009,7 +1074,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
 }
 
 // ─── Sidebar ───────────────────────────────────────────────────────────────────
-function DocsSidebar({ docs, bookmarks, onSelect, isBookmarked }) {
+function DocsSidebar({ docs, bookmarks: _bookmarks, onSelect, isBookmarked }) {
   const bookmarkedDocs = docs.filter(d => isBookmarked(d.id));
   const categories = Array.from(new Set(docs.map(d => d.category)));
 
@@ -1049,7 +1114,7 @@ function DocsSidebar({ docs, bookmarks, onSelect, isBookmarked }) {
               marginBottom: '2px',
               cursor: 'pointer',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#E8632A14')}
+            onMouseEnter={e => (e.currentTarget.style.background = '#7C3AED14')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
             <span style={{ fontSize: '12px', color: '#374151', fontWeight: 600 }}>{cat}</span>
@@ -1101,10 +1166,10 @@ function DocsSidebar({ docs, bookmarks, onSelect, isBookmarked }) {
                 fontFamily: "'Lato', sans-serif",
                 marginBottom: '2px',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#E8632A14')}
+              onMouseEnter={e => (e.currentTarget.style.background = '#7C3AED14')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#1A2B4A' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#111111' }}>
                 {d.icon} {d.title}
               </div>
             </button>
@@ -1144,7 +1209,7 @@ function ArchiveConfirmModal({ count, onCancel, onConfirm, working }) {
           style={{
             fontSize: '18px',
             fontWeight: 900,
-            color: '#1A2B4A',
+            color: '#111111',
             textAlign: 'center',
             marginBottom: '8px',
           }}
@@ -1205,8 +1270,291 @@ function ArchiveConfirmModal({ count, onCancel, onConfirm, working }) {
   );
 }
 
+// ─── Archived docs list (admin only) ──────────────────────────────────────────
+import { listDocs } from '../../api/docsApi.js';
+
+function ArchivedDocsList({ onRestore }) {
+  const [archived, setArchived] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = async () => {
+    setLoading(true);
+    const res = await listDocs({ status: 'Archived', role: 'superadmin', limit: 100 });
+    setArchived(res?.data?.docs || []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ padding: '32px', textAlign: 'center', color: '#94A3B8' }}>
+        Loading archived docs…
+      </div>
+    );
+  }
+  if (archived.length === 0) {
+    return (
+      <div
+        style={{
+          padding: '40px',
+          textAlign: 'center',
+          color: '#94A3B8',
+          background: '#fff',
+          borderRadius: '10px',
+          border: '1px solid #E2E8F0',
+        }}
+      >
+        📭 No archived documents.
+      </div>
+    );
+  }
+  return (
+    <div
+      style={{
+        background: '#fff',
+        borderRadius: '12px',
+        border: '1px solid #E2E8F0',
+        overflow: 'hidden',
+      }}
+    >
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        {archived.map(d => (
+          <li
+            key={d.id}
+            style={{
+              padding: '14px 18px',
+              borderTop: '1px solid #F1F5F9',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+            }}
+          >
+            <span style={{ fontSize: '20px' }}>{d.icon || '📄'}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '14px' }}>{d.title}</div>
+              <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                {d.category} · archived{' '}
+                {d.updatedAt ? new Date(d.updatedAt).toLocaleDateString() : ''}
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                await onRestore(d);
+                await refresh();
+              }}
+              style={{
+                padding: '8px 14px',
+                background: '#DCFCE7',
+                color: '#15803D',
+                border: '1px solid #86EFAC',
+                borderRadius: '7px',
+                fontFamily: "'Lato', sans-serif",
+                fontWeight: 700,
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              ↺ Restore
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ─── Flag-for-review modal (admin only) ───────────────────────────────────────
+function FlagReviewModal({ doc, onClose, onConfirm }) {
+  const [reviewerName, setReviewerName] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const panelRef = useRef(null);
+  useEffect(() => {
+    const prev = document.activeElement;
+    const node = panelRef.current;
+    if (!node) return;
+    const FOCUSABLE =
+      'a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusables = () => Array.from(node.querySelectorAll(FOCUSABLE));
+    (focusables()[0] || node).focus({ preventScroll: true });
+    const onKey = e => {
+      if (e.key !== 'Tab') return;
+      const f = focusables();
+      if (!f.length) return;
+      const firstEl = f[0],
+        lastEl = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === firstEl) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && document.activeElement === lastEl) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    };
+    node.addEventListener('keydown', onKey);
+    return () => {
+      node.removeEventListener('keydown', onKey);
+      if (prev?.focus) prev.focus({ preventScroll: true });
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKey = e => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  const submit = e => {
+    e.preventDefault();
+    if (!reviewerName.trim()) return;
+    onConfirm({ reviewerName: reviewerName.trim(), dueDate: dueDate || null });
+  };
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        role="presentation"
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 600 }}
+      />
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Flag ${doc.title} for review`}
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: '#fff',
+          borderRadius: '14px',
+          zIndex: 601,
+          width: '440px',
+          maxWidth: '95vw',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          overflow: 'hidden',
+          outline: 'none',
+        }}
+      >
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid #E2E8F0' }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#111111' }}>
+            Flag for review
+          </h2>
+          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>{doc.title}</div>
+        </div>
+        <form
+          onSubmit={submit}
+          style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+        >
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#475569',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              Reviewer
+            </span>
+            <input
+              aria-label="Reviewer name"
+              value={reviewerName}
+              onChange={e => setReviewerName(e.target.value)}
+              placeholder="e.g. Alex Lee"
+              style={{
+                padding: '10px 14px',
+                border: '1.5px solid #E2E8F0',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontFamily: "'Lato', sans-serif",
+                outline: 'none',
+              }}
+              autoFocus
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                color: '#475569',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              Due date (optional)
+            </span>
+            <input
+              aria-label="Due date"
+              type="date"
+              value={dueDate}
+              onChange={e => setDueDate(e.target.value)}
+              style={{
+                padding: '10px 14px',
+                border: '1.5px solid #E2E8F0',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontFamily: "'Lato', sans-serif",
+                outline: 'none',
+              }}
+            />
+          </label>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                padding: '8px 14px',
+                background: '#F1F5F9',
+                color: '#475569',
+                border: 'none',
+                borderRadius: '7px',
+                fontWeight: 700,
+                fontSize: '13px',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!reviewerName.trim()}
+              style={{
+                padding: '8px 16px',
+                background: reviewerName.trim() ? '#7C3AED' : '#CBD5E1',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '7px',
+                fontWeight: 700,
+                fontSize: '13px',
+                cursor: reviewerName.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >
+              Flag
+            </button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
+
 // ─── DocImportExportPage ───────────────────────────────────────────────────────
-export default function DocImportExportPage({ role, suggestions, setSuggestions, currentUser }) {
+export default function DocImportExportPage({
+  role,
+  suggestions: _suggestions,
+  setSuggestions: _setSuggestions,
+  currentUser,
+  onDocEdit,
+}) {
   const manager = useDocumentManager(role);
 
   const [activeTab, setActiveTab] = useState('library');
@@ -1248,6 +1596,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
   const [bulkCat, setBulkCat] = useState('');
   const [bulkVis, setBulkVis] = useState('');
   const [editingDoc, setEditingDoc] = useState(null);
+  const [flagDoc, setFlagDoc] = useState(null);
 
   // ── Toast system ─────────────────────────────────────────────────────────────
   const [toasts, setToasts] = useState([]);
@@ -1456,14 +1805,14 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
     borderRadius: '6px',
     fontFamily: "'Lato', sans-serif",
     fontSize: '12px',
-    color: '#1A2B4A',
+    color: '#111111',
     background: '#fff',
     cursor: 'pointer',
     outline: 'none',
   };
   const applyBtnStyle = disabled => ({
     padding: '6px 12px',
-    background: disabled ? '#E2E8F0' : '#1A2B4A',
+    background: disabled ? '#E2E8F0' : '#111111',
     color: disabled ? '#94A3B8' : '#fff',
     border: 'none',
     borderRadius: '6px',
@@ -1478,7 +1827,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
       <style>{`
         @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-        *:focus-visible { outline: 2px solid #E8632A !important; outline-offset: 2px !important; }
+        *:focus-visible { outline: 2px solid #7C3AED !important; outline-offset: 2px !important; }
       `}</style>
 
       <div
@@ -1513,7 +1862,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
             }}
           >
             <div>
-              <div style={{ fontSize: '20px', fontWeight: 900, color: '#1A2B4A' }}>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: '#111111' }}>
                 Documentation Library
               </div>
               <div style={{ fontSize: '13px', color: '#94A3B8', marginTop: '2px' }}>
@@ -1536,7 +1885,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                     fontSize: '13px',
                     outline: 'none',
                     background: '#F8F9FB',
-                    color: '#1A2B4A',
+                    color: '#111111',
                     minWidth: '200px',
                   }}
                 />
@@ -1616,7 +1965,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                         padding: '8px 0',
                         background: 'none',
                         border: 'none',
-                        color: '#1A2B4A',
+                        color: '#111111',
                         fontFamily: "'Lato', sans-serif",
                         fontWeight: 700,
                         fontSize: '13px',
@@ -1639,7 +1988,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                     disabled={exportingAll || displayDocs.length === 0}
                     style={{
                       padding: '8px 16px',
-                      background: exportingAll ? '#CBD5E1' : '#1A2B4A',
+                      background: exportingAll ? '#CBD5E1' : '#111111',
                       color: '#fff',
                       border: 'none',
                       borderRadius: '8px',
@@ -1683,7 +2032,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                           fontFamily: "'Lato', sans-serif",
                         }}
                       >
-                        <div style={{ background: '#1A2B4A', padding: '12px 16px' }}>
+                        <div style={{ background: '#111111', padding: '12px 16px' }}>
                           <div style={{ color: '#fff', fontWeight: 900, fontSize: '13px' }}>
                             Export {displayDocs.length} document
                             {displayDocs.length !== 1 ? 's' : ''} as ZIP
@@ -1729,7 +2078,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                                 gap: '10px',
                                 padding: '9px 10px',
                                 borderRadius: '8px',
-                                border: `1.5px solid ${exportAllFormat === fmt.id ? '#1A2B4A' : 'transparent'}`,
+                                border: `1.5px solid ${exportAllFormat === fmt.id ? '#111111' : 'transparent'}`,
                                 background: exportAllFormat === fmt.id ? '#F0F4FF' : 'transparent',
                                 cursor: 'pointer',
                                 textAlign: 'left',
@@ -1743,7 +2092,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                               </span>
                               <div>
                                 <div
-                                  style={{ fontSize: '12px', fontWeight: 700, color: '#1A2B4A' }}
+                                  style={{ fontSize: '12px', fontWeight: 700, color: '#111111' }}
                                 >
                                   {fmt.label}
                                 </div>
@@ -1751,7 +2100,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                               </div>
                               {exportAllFormat === fmt.id && (
                                 <span
-                                  style={{ marginLeft: 'auto', color: '#1A2B4A', fontSize: '13px' }}
+                                  style={{ marginLeft: 'auto', color: '#111111', fontSize: '13px' }}
                                 >
                                   ✓
                                 </span>
@@ -1765,7 +2114,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                             style={{
                               width: '100%',
                               padding: '10px',
-                              background: '#E8632A',
+                              background: '#7C3AED',
                               color: '#fff',
                               border: 'none',
                               borderRadius: '8px',
@@ -1789,7 +2138,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                   onClick={() => setShowUploader(true)}
                   style={{
                     padding: '8px 16px',
-                    background: '#E8632A',
+                    background: '#7C3AED',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '8px',
@@ -1877,9 +2226,9 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
               style={{
                 padding: '10px 16px',
                 border: 'none',
-                borderBottom: `2px solid ${activeTab === 'library' ? '#E8632A' : 'transparent'}`,
+                borderBottom: `2px solid ${activeTab === 'library' ? '#7C3AED' : 'transparent'}`,
                 background: 'transparent',
-                color: activeTab === 'library' ? '#E8632A' : '#64748B',
+                color: activeTab === 'library' ? '#7C3AED' : '#64748B',
                 fontFamily: "'Lato', sans-serif",
                 fontWeight: 700,
                 fontSize: '13px',
@@ -1890,26 +2239,48 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
               📚 Library
             </button>
             {isAdmin && (
-              <button
-                onClick={() => {
-                  setActiveTab('manage');
-                  exitSelection();
-                }}
-                style={{
-                  padding: '10px 16px',
-                  border: 'none',
-                  borderBottom: `2px solid ${activeTab === 'manage' ? '#1A2B4A' : 'transparent'}`,
-                  background: 'transparent',
-                  color: activeTab === 'manage' ? '#1A2B4A' : '#64748B',
-                  fontFamily: "'Lato', sans-serif",
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  marginBottom: '-2px',
-                }}
-              >
-                🛠 Manage Docs
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    setActiveTab('manage');
+                    exitSelection();
+                  }}
+                  style={{
+                    padding: '10px 16px',
+                    border: 'none',
+                    borderBottom: `2px solid ${activeTab === 'manage' ? '#111111' : 'transparent'}`,
+                    background: 'transparent',
+                    color: activeTab === 'manage' ? '#111111' : '#64748B',
+                    fontFamily: "'Lato', sans-serif",
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    marginBottom: '-2px',
+                  }}
+                >
+                  🛠 Manage Docs
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab('archived');
+                    exitSelection();
+                  }}
+                  style={{
+                    padding: '10px 16px',
+                    border: 'none',
+                    borderBottom: `2px solid ${activeTab === 'archived' ? '#64748B' : 'transparent'}`,
+                    background: 'transparent',
+                    color: activeTab === 'archived' ? '#64748B' : '#94A3B8',
+                    fontFamily: "'Lato', sans-serif",
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    marginBottom: '-2px',
+                  }}
+                >
+                  🗑 Archived
+                </button>
+              </>
             )}
           </div>
 
@@ -1948,8 +2319,8 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                       style={{
                         padding: '7px 14px',
                         borderRadius: '100px',
-                        border: `1.5px solid ${isActive ? '#E8632A' : '#E2E8F0'}`,
-                        background: isActive ? '#E8632A' : '#fff',
+                        border: `1.5px solid ${isActive ? '#7C3AED' : '#E2E8F0'}`,
+                        background: isActive ? '#7C3AED' : '#fff',
                         color: isActive ? '#fff' : '#475569',
                         fontFamily: "'Lato', sans-serif",
                         fontWeight: 700,
@@ -2019,10 +2390,10 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                       padding: '3px 0',
                       fontSize: '12px',
                       fontWeight: sortBy === val ? 700 : 400,
-                      color: sortBy === val ? '#E8632A' : '#64748B',
+                      color: sortBy === val ? '#7C3AED' : '#64748B',
                       cursor: 'pointer',
                       fontFamily: "'Lato', sans-serif",
-                      borderBottom: sortBy === val ? '2px solid #E8632A' : '2px solid transparent',
+                      borderBottom: sortBy === val ? '2px solid #7C3AED' : '2px solid transparent',
                     }}
                   >
                     {label}
@@ -2059,7 +2430,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                   style={{
                     background: '#fff',
                     border: '1px solid #E2E8F0',
-                    borderLeft: '4px solid #1A2B4A',
+                    borderLeft: '4px solid #111111',
                     borderRadius: '10px',
                     padding: '12px 16px',
                     marginBottom: '16px',
@@ -2075,7 +2446,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                     style={{
                       fontSize: '13px',
                       fontWeight: 900,
-                      color: '#1A2B4A',
+                      color: '#111111',
                       whiteSpace: 'nowrap',
                       marginRight: '4px',
                     }}
@@ -2117,7 +2488,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                       style={{
                         padding: '7px 14px',
                         background: '#F0F4FF',
-                        color: '#1A2B4A',
+                        color: '#111111',
                         border: '1px solid #BFDBFE',
                         borderRadius: '7px',
                         fontFamily: "'Lato', sans-serif",
@@ -2152,7 +2523,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                             overflow: 'hidden',
                           }}
                         >
-                          <div style={{ background: '#1A2B4A', padding: '10px 14px' }}>
+                          <div style={{ background: '#111111', padding: '10px 14px' }}>
                             <div style={{ color: '#fff', fontWeight: 900, fontSize: '12px' }}>
                               Export {selectedCount} doc{selectedCount !== 1 ? 's' : ''} as ZIP
                             </div>
@@ -2170,14 +2541,14 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                                   width: '100%',
                                   padding: '8px 10px',
                                   borderRadius: '7px',
-                                  border: `1.5px solid ${bulkExportFmt === fmt.id ? '#1A2B4A' : 'transparent'}`,
+                                  border: `1.5px solid ${bulkExportFmt === fmt.id ? '#111111' : 'transparent'}`,
                                   background: bulkExportFmt === fmt.id ? '#F0F4FF' : 'transparent',
                                   cursor: 'pointer',
                                   textAlign: 'left',
                                   fontSize: '12px',
                                   fontFamily: "'Lato', sans-serif",
                                   fontWeight: 700,
-                                  color: '#1A2B4A',
+                                  color: '#111111',
                                   marginBottom: '2px',
                                   display: 'flex',
                                   justifyContent: 'space-between',
@@ -2186,7 +2557,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                               >
                                 {fmt.label}
                                 {bulkExportFmt === fmt.id && (
-                                  <span style={{ color: '#1A2B4A' }}>✓</span>
+                                  <span style={{ color: '#111111' }}>✓</span>
                                 )}
                               </button>
                             ))}
@@ -2197,7 +2568,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                               style={{
                                 width: '100%',
                                 padding: '9px',
-                                background: '#E8632A',
+                                background: '#7C3AED',
                                 color: '#fff',
                                 border: 'none',
                                 borderRadius: '7px',
@@ -2361,11 +2732,11 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                             fontFamily: "'Lato', sans-serif",
                             boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
                           }}
-                          onMouseEnter={e => (e.currentTarget.style.borderColor = '#E8632A')}
+                          onMouseEnter={e => (e.currentTarget.style.borderColor = '#7C3AED')}
                           onMouseLeave={e => (e.currentTarget.style.borderColor = '#E2E8F0')}
                         >
                           <span>{doc.icon}</span>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1A2B4A' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#111111' }}>
                             {doc.title}
                           </span>
                           <span style={{ fontSize: '10px', color: '#94A3B8' }}>{doc.category}</span>
@@ -2435,6 +2806,27 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                       onToggleSelect={manager.toggleSelected}
                       searchQuery={debouncedQuery}
                       matchedContent={contentMatchIds.has(doc.id)}
+                      onTogglePin={async d => {
+                        const featuredCount = manager.docs.filter(
+                          x => x.featured && x.status === 'Active'
+                        ).length;
+                        if (!d.featured && featuredCount >= 3) {
+                          showToast('error', 'You can pin at most 3 docs to Home.');
+                          return;
+                        }
+                        await pinDoc(d.id, !d.featured);
+                        await manager.loadDocs();
+                        showToast(
+                          'success',
+                          d.featured ? 'Unpinned from Home.' : 'Pinned to Home.'
+                        );
+                      }}
+                      onFlagReview={d => setFlagDoc(d)}
+                      onClearReview={async d => {
+                        await clearReview(d.id);
+                        await manager.loadDocs();
+                        showToast('success', 'Review cleared.');
+                      }}
                     />
                   ))}
                 </div>
@@ -2482,7 +2874,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                     style={{
                       fontWeight: 900,
                       fontSize: '16px',
-                      color: '#1A2B4A',
+                      color: '#111111',
                       marginBottom: '6px',
                     }}
                   >
@@ -2498,7 +2890,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                       onClick={() => setShowUploader(true)}
                       style={{
                         padding: '10px 22px',
-                        background: '#E8632A',
+                        background: '#7C3AED',
                         color: '#fff',
                         border: 'none',
                         borderRadius: '8px',
@@ -2582,7 +2974,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                       style={{
                         fontSize: '20px',
                         fontWeight: 900,
-                        color: '#1A2B4A',
+                        color: '#111111',
                         marginBottom: '8px',
                         lineHeight: 1.2,
                       }}
@@ -2662,7 +3054,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                       style={{
                         width: '100%',
                         padding: '12px',
-                        background: '#E8632A',
+                        background: '#7C3AED',
                         color: '#fff',
                         border: 'none',
                         borderRadius: '8px',
@@ -2711,6 +3103,17 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
               onEdit={setEditingDoc}
             />
           )}
+
+          {/* ── Archived tab (admin only) ─────────────────────────────────── */}
+          {activeTab === 'archived' && isAdmin && (
+            <ArchivedDocsList
+              onRestore={async d => {
+                await restoreDoc(d.id);
+                await manager.loadDocs();
+                showToast('success', `${d.title} restored.`);
+              }}
+            />
+          )}
         </div>
 
         {/* Uploader modal */}
@@ -2730,6 +3133,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
           <DocEditModal
             doc={editingDoc}
             onSave={() => {
+              onDocEdit?.(editingDoc);
               manager.loadDocs();
               setEditingDoc(null);
             }}
@@ -2744,6 +3148,20 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
             onCancel={() => setShowArchiveConfirm(false)}
             onConfirm={handleBulkArchive}
             working={bulkWorking}
+          />
+        )}
+
+        {/* Flag-for-review modal */}
+        {flagDoc && (
+          <FlagReviewModal
+            doc={flagDoc}
+            onClose={() => setFlagDoc(null)}
+            onConfirm={async payload => {
+              await markNeedsReview(flagDoc.id, payload);
+              setFlagDoc(null);
+              await manager.loadDocs();
+              showToast('success', 'Flagged for review.');
+            }}
           />
         )}
 
@@ -2818,7 +3236,7 @@ export default function DocImportExportPage({ role, suggestions, setSuggestions,
                 flex: 1,
                 fontSize: '13px',
                 fontWeight: 600,
-                color: '#1A2B4A',
+                color: '#111111',
                 lineHeight: 1.4,
               }}
             >

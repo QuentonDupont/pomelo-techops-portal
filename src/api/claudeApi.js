@@ -7,14 +7,30 @@
 // server environment (no VITE_ prefix). The client never sees the key.
 // See server/index.js POST /api/extract-content for the proxy implementation.
 
-import mammoth from 'mammoth';
-import * as pdfjsLib from 'pdfjs-dist';
+// mammoth (DOCX) and pdfjs-dist are loaded lazily — both are large (~2 MB) and
+// only needed for specific file types. See loadPdfJs() / loadMammoth() below.
 
-// Point pdfjs at its worker bundled alongside the library
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.mjs',
-  import.meta.url
-).href;
+let pdfjsPromise;
+const loadPdfJs = () => {
+  if (!pdfjsPromise) {
+    pdfjsPromise = import('pdfjs-dist').then(mod => {
+      mod.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.mjs',
+        import.meta.url
+      ).href;
+      return mod;
+    });
+  }
+  return pdfjsPromise;
+};
+
+let mammothPromise;
+const loadMammoth = () => {
+  if (!mammothPromise) {
+    mammothPromise = import('mammoth').then(mod => mod.default || mod);
+  }
+  return mammothPromise;
+};
 
 const MODEL = 'claude-haiku-4-5';
 const MAX_TOKENS = 4096;
@@ -48,7 +64,7 @@ const callClaude = async (messages, betas = []) => {
 
   let res;
   try {
-    res = await fetch('/api/extract-content', {
+    res = await fetch('/api/v1/extract-content', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -92,6 +108,7 @@ const callClaude = async (messages, betas = []) => {
 // Used when the Claude BFF is unavailable or the API key is not set.
 // Extracts raw text page-by-page and returns basic Markdown.
 const extractPdfWithPdfJs = async file => {
+  const pdfjsLib = await loadPdfJs();
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const pageTexts = [];
@@ -256,7 +273,7 @@ export const isClaudeConfigured = () => true;
  * Extracts and formats document content using available methods.
  * PDFs and text formats go through the Claude BFF proxy.
  * DOCX/DOC are extracted client-side via mammoth (no API key needed).
- * Image files are embedded as base64 data URLs + optional Claude caption.
+ * Image files return an optional Claude vision caption (image displayed via doc.imageUrl).
  * @param {File} file
  * @returns {Promise<string|null>} Markdown string, or null if unsupported/failed
  */
@@ -293,10 +310,12 @@ export const extractDocumentContent = async file => {
           throw err;
         }
         // BFF_DOWN or any other error — silently fall through to pdfjs
-        console.warn(
-          '[claudeApi] Claude PDF extraction failed, falling back to pdfjs:',
-          claudeErr.message
-        );
+        if (import.meta.env.DEV) {
+          console.warn(
+            '[claudeApi] Claude PDF extraction failed, falling back to pdfjs:',
+            claudeErr.message
+          );
+        }
       }
     }
     // Fallback: extract raw text with pdfjs (no API key needed)
@@ -306,6 +325,7 @@ export const extractDocumentContent = async file => {
   // ── DOCX / DOC: client-side via mammoth (no API key needed) ────────────────
   if (ext === 'docx' || ext === 'doc') {
     try {
+      const mammoth = await loadMammoth();
       const arrayBuffer = await file.arrayBuffer();
       const result = await mammoth.convertToHtml(
         { arrayBuffer },
@@ -318,19 +338,20 @@ export const extractDocumentContent = async file => {
       );
       return htmlToMd(result.value) || null;
     } catch (err) {
-      console.error('[claudeApi] mammoth extraction failed:', err.message);
+      if (import.meta.env.DEV) {
+        console.error('[claudeApi] mammoth extraction failed:', err.message);
+      }
       return null;
     }
   }
 
-  // ── Image files: embed as data URL + optional Claude caption ───────────────
+  // ── Image files: return Claude caption only (image displayed via doc.imageUrl) ─
   if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
     const mimeType = file.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-    const b64 = await readAsBase64(file);
-    const dataUrl = `data:${mimeType};base64,${b64}`;
 
     if (file.size <= IMG_SIZE_LIMIT) {
       try {
+        const b64 = await readAsBase64(file);
         const caption = await callClaude([
           {
             role: 'user',
@@ -340,12 +361,12 @@ export const extractDocumentContent = async file => {
             ],
           },
         ]);
-        return `![${file.name}](${dataUrl})\n\n${caption}`;
+        return caption; // just the text caption — image shown via doc.imageUrl
       } catch {
-        // BFF down or no key — still show the image without a caption
+        // BFF down or no key — no caption available
       }
     }
-    return `![${file.name}](${dataUrl})`;
+    return null; // docsApi will show a simple placeholder
   }
 
   // ── Markdown: return as-is ──────────────────────────────────────────────────

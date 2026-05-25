@@ -121,7 +121,7 @@ export async function createJiraTicket(form) {
 
   try {
     // POST to the BFF proxy — token lives in server env, never in the bundle
-    const response = await fetch('/api/submit-ticket', {
+    const response = await fetch('/api/v1/submit-ticket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

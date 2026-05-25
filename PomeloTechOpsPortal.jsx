@@ -1,6 +1,10 @@
-import { useState, useEffect, useRef, Component } from 'react';
+import { useState, useEffect, useRef, useMemo, Component } from 'react';
 import DocImportExportPage from './src/components/docs/DocImportExportPage.jsx';
 import { createJiraTicket, isJiraConfigured } from './src/api/jiraApi.js';
+import { listFeaturedDocs, listDocSummaries } from './src/api/docsApi.js';
+import FilePreviewCard, { fileToAttachment, ATTACHMENT_DATAURL_LIMIT as _ATT_LIMIT } from './src/components/FilePreviewCard.jsx'; // eslint-disable-line no-unused-vars
+import { NotificationProvider, useNotifications, buildSeedNotifications } from './src/context/NotificationContext.jsx';
+import NotificationBell from './src/components/NotificationBell.jsx';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 // Catches render errors in any child subtree and shows a friendly fallback
@@ -24,7 +28,7 @@ class ErrorBoundary extends Component {
       return (
         <div style={{ padding: '40px 28px', textAlign: 'center', fontFamily: "'Lato', sans-serif" }}>
           <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
-          <div style={{ fontSize: '16px', fontWeight: 700, color: '#1A2B4A', marginBottom: '8px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: '#111111', marginBottom: '8px' }}>
             Something went wrong
           </div>
           <div style={{ fontSize: '13px', color: '#64748B', marginBottom: '20px', maxWidth: '420px', margin: '0 auto 20px' }}>
@@ -32,7 +36,7 @@ class ErrorBoundary extends Component {
           </div>
           <button
             onClick={() => this.setState({ hasError: false, message: '' })}
-            style={{ padding: '9px 20px', background: '#E8632A', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Lato', sans-serif", fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+            style={{ padding: '9px 20px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Lato', sans-serif", fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
           >
             Try again
           </button>
@@ -236,6 +240,27 @@ const MOCK_TICKETS = [
   },
 ];
 
+// ─── Ticket store (in-place mutable singleton + pub/sub) ─────────────────────
+// MOCK_TICKETS is the single source of truth. Pages subscribe to bumpTickets to
+// re-render after mutations; updateTickets is the one mutation path.
+let _ticketsVersion = 0;
+const _ticketsListeners = new Set();
+const bumpTickets = () => {
+  _ticketsVersion++;
+  _ticketsListeners.forEach(fn => fn(_ticketsVersion));
+  saveStore('tickets', MOCK_TICKETS);
+};
+const subscribeTickets = (fn) => { _ticketsListeners.add(fn); return () => _ticketsListeners.delete(fn); };
+const updateTickets = (updater) => {
+  const next = typeof updater === 'function' ? updater(MOCK_TICKETS.slice()) : updater;
+  replaceArrayInPlace(MOCK_TICKETS, next);
+  bumpTickets();
+};
+const addTicket = (ticket) => {
+  MOCK_TICKETS.unshift(ticket);
+  bumpTickets();
+};
+
 const ALL_AGENTS = ['Kai Nguyen', 'Prim Srisawat', 'Unassigned'];
 
 const DOCS = [
@@ -298,20 +323,42 @@ const PRIORITY_COLORS = {
   Low: '#16A34A',
 };
 
+// Color mapping covers both the legacy local names and the Jira Service
+// Management workflow names. Unknown statuses fall back to slate gray.
 const STATUS_COLORS = {
+  // Legacy local names
   'Open': '#3B82F6',
   'In Progress': '#8B5CF6',
   'Pending': '#F59E0B',
   'Resolved': '#16A34A',
   'Closed': '#6B7280',
+  // Jira Service Management canonical names
+  'To Do': '#3B82F6',
+  'Blocked': '#DC2626',
+  'Waiting for Customer': '#F59E0B',
+  'Waiting for Support': '#F97316',
+  'Done': '#6B7280',
 };
+const STATUS_BG = {
+  '#3B82F6': '#EFF6FF',
+  '#8B5CF6': '#F5F3FF',
+  '#DC2626': '#FEF2F2',
+  '#F59E0B': '#FFFBEB',
+  '#F97316': '#FFF7ED',
+  '#16A34A': '#F0FDF4',
+  '#6B7280': '#F1F5F9',
+};
+const statusColorFor = name => STATUS_COLORS[name] || '#64748B';
 
-const KANBAN_COLUMNS = [
-  { id: 'Open',        label: 'Open',        color: '#3B82F6', bg: '#EFF6FF' },
-  { id: 'In Progress', label: 'In Progress',  color: '#8B5CF6', bg: '#F5F3FF' },
-  { id: 'Pending',     label: 'Pending',      color: '#F59E0B', bg: '#FFFBEB' },
-  { id: 'Resolved',    label: 'Resolved',     color: '#16A34A', bg: '#F0FDF4' },
-];
+// Maps legacy local statuses → canonical Jira Service Management names.
+const LEGACY_TO_JIRA_STATUS = {
+  Open: 'To Do',
+  'In Progress': 'In Progress',
+  Pending: 'Waiting for Customer',
+  Resolved: 'Resolved',
+  Closed: 'Done',
+};
+const mapLegacyStatus = name => LEGACY_TO_JIRA_STATUS[name] || name;
 
 const SLA_DATA = [
   { priority: 'Critical', response: '15 minutes', resolution: '4 hours', color: '#DC2626' },
@@ -319,6 +366,510 @@ const SLA_DATA = [
   { priority: 'Medium', response: '4 hours', resolution: '2 business days', color: '#CA8A04' },
   { priority: 'Low', response: '1 business day', resolution: '5 business days', color: '#16A34A' },
 ];
+
+// Machine-readable SLA targets (hours) — mirrors SLA_DATA for breach math.
+// Business days are approximated as 8h for the calculation.
+const SLA_TARGETS_HOURS = {
+  Critical: { response: 0.25, resolution: 4 },
+  High: { response: 1, resolution: 8 },
+  Medium: { response: 4, resolution: 16 },
+  Low: { response: 8, resolution: 40 },
+};
+
+const DONE_STATUSES = new Set(['Resolved', 'Done', 'Closed']);
+
+// Returns 'ok' | 'at-risk' (≥75% of resolution target) | 'breached' (past target).
+// Done/Resolved/Closed tickets always return 'ok'.
+const slaStateFor = (ticket) => {
+  if (!ticket || !ticket.created || DONE_STATUSES.has(ticket.status)) return 'ok';
+  const target = SLA_TARGETS_HOURS[ticket.priority];
+  if (!target) return 'ok';
+  const ageHrs = (Date.now() - new Date(ticket.created).getTime()) / 3600000;
+  if (ageHrs >= target.resolution) return 'breached';
+  if (ageHrs >= target.resolution * 0.75) return 'at-risk';
+  return 'ok';
+};
+
+// ─── Jira workflow (live, with fallback) ──────────────────────────────────────
+// Loaded from the BFF on app boot; cached in memory. The fallback list ships
+// with the BFF so a stale cache or a startup race never breaks the UI.
+const JIRA_DEFAULT_STATUSES = [
+  { name: 'To Do', category: 'new' },
+  { name: 'In Progress', category: 'indeterminate' },
+  { name: 'Blocked', category: 'indeterminate' },
+  { name: 'Waiting for Customer', category: 'indeterminate' },
+  { name: 'Waiting for Support', category: 'indeterminate' },
+  { name: 'Resolved', category: 'done' },
+  { name: 'Done', category: 'done' },
+];
+let JIRA_WORKFLOW = { statuses: JIRA_DEFAULT_STATUSES, source: 'fallback', loadedAt: null, note: null };
+const _jiraWorkflowListeners = new Set();
+const subscribeJiraWorkflow = (fn) => { _jiraWorkflowListeners.add(fn); return () => _jiraWorkflowListeners.delete(fn); };
+const setJiraWorkflow = (payload) => {
+  JIRA_WORKFLOW = { ...payload, loadedAt: new Date().toISOString() };
+  _jiraWorkflowListeners.forEach(fn => fn(JIRA_WORKFLOW));
+};
+const getJiraWorkflow = () => JIRA_WORKFLOW;
+
+// Push a status transition to Jira via BFF. Updates jiraSyncState/syncedAt
+// on the matching local ticket. Returns { ok, error? }.
+const pushJiraTransition = async (ticket, newStatus) => {
+  if (!ticket?.jiraKey) return { ok: false, error: 'no-jira-key' };
+  updateTickets(ts => ts.map(t => t.id === ticket.id ? { ...t, jiraSyncState: 'syncing' } : t));
+  try {
+    const res = await fetch('/api/v1/jira/transition', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: ticket.jiraKey, statusName: newStatus }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      updateTickets(ts => ts.map(t => t.id === ticket.id ? { ...t, jiraSyncState: 'error', jiraSyncError: err?.error || ('HTTP ' + res.status) } : t));
+      recordAudit('ticket.jira_transition_failed', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title }, { jiraKey: ticket.jiraKey, target: newStatus, error: err?.error });
+      return { ok: false, error: err?.error || ('HTTP ' + res.status) };
+    }
+    const data = await res.json();
+    updateTickets(ts => ts.map(t => t.id === ticket.id ? { ...t, jiraSyncState: 'synced', jiraSyncedAt: new Date().toISOString(), jiraSyncError: null } : t));
+    recordAudit('ticket.jira_transition', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title }, { jiraKey: ticket.jiraKey, status: data.status });
+    return { ok: true, status: data.status };
+  } catch (err) {
+    updateTickets(ts => ts.map(t => t.id === ticket.id ? { ...t, jiraSyncState: 'error', jiraSyncError: err.message } : t));
+    return { ok: false, error: err.message };
+  }
+};
+
+// Poll Jira for changes since `lastSyncAt`. Reconciles local tickets whose
+// jiraKey matches a returned issue. Issues not yet known locally are ignored
+// for now (we don't auto-create stubs). Returns the latest fetchedAt.
+let LAST_JIRA_POLL_AT = null;
+const pollJira = async (project = 'PESD1') => {
+  try {
+    const since = LAST_JIRA_POLL_AT ? `&since=${encodeURIComponent(LAST_JIRA_POLL_AT)}` : '';
+    const res = await fetch(`/api/v1/jira/poll?project=${encodeURIComponent(project)}${since}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    LAST_JIRA_POLL_AT = data.fetchedAt || LAST_JIRA_POLL_AT;
+    if (data.unavailable || !Array.isArray(data.issues) || data.issues.length === 0) return data;
+
+    // Reconcile: update any local ticket whose jiraKey matches; for Jira-side
+    // issues we don't have locally, create a stub so admins see them.
+    const byKey = new Map(data.issues.map(i => [i.key, i]));
+    let touched = 0;
+    let created = 0;
+    updateTickets(ts => {
+      const knownKeys = new Set(ts.filter(t => t.jiraKey).map(t => t.jiraKey));
+      const updated = ts.map(t => {
+        if (!t.jiraKey || !byKey.has(t.jiraKey)) return t;
+        const incoming = byKey.get(t.jiraKey);
+        if (!incoming) return t;
+        const next = { ...t };
+        if (incoming.status && incoming.status !== t.status) next.status = incoming.status;
+        if (incoming.assignee !== undefined && incoming.assignee !== t.assignee) next.assignee = incoming.assignee;
+        next.jiraSyncState = 'synced';
+        next.jiraSyncedAt = data.fetchedAt;
+        if (next.status !== t.status || next.assignee !== t.assignee) touched++;
+        return next;
+      });
+      // Auto-create stubs for Jira issues we don't yet have locally
+      for (const issue of data.issues) {
+        if (!issue.key || knownKeys.has(issue.key)) continue;
+        const today = new Date().toISOString().slice(0, 10);
+        const createdDay = issue.created ? issue.created.slice(0, 10) : today;
+        const updatedDay = issue.updated ? issue.updated.slice(0, 10) : today;
+        updated.unshift({
+          id: issue.key,
+          title: issue.summary || `Jira issue ${issue.key}`,
+          category: 'Imported from Jira',
+          priority: issue.priority || 'Medium',
+          status: issue.status || 'To Do',
+          created: createdDay,
+          updated: updatedDay,
+          description: '(Imported from Jira — open in Atlassian for full details)',
+          assignee: issue.assignee || null,
+          department: '—',
+          shop: '—',
+          platforms: [],
+          timeline: [{ date: createdDay, actor: issue.assignee || 'Jira', action: 'Imported from Jira' }],
+          messages: [],
+          internalNotes: [],
+          requester: { name: 'Jira import', email: null },
+          jiraKey: issue.key,
+          jiraSyncedAt: data.fetchedAt,
+          jiraSyncState: 'synced',
+          source: 'jira',
+        });
+        created++;
+      }
+      return updated;
+    });
+    if (created > 0) {
+      recordAudit('jira.stub_imported', _currentActor, null, { project, count: created });
+    }
+    return { ...data, reconciled: touched, imported: created };
+  } catch {
+    return null;
+  }
+};
+
+// ─── Issue types + Components (live, with fallback) ──────────────────────────
+let JIRA_ISSUE_TYPES = { issueTypes: [{ id: 'fb', name: 'Service Request' }, { id: 'fb', name: 'Incident' }, { id: 'fb', name: 'Bug' }], source: 'fallback' };
+let JIRA_COMPONENTS = { components: [], source: 'fallback' };
+const _typesListeners = new Set();
+const _componentsListeners = new Set();
+const subscribeIssueTypes = (fn) => { _typesListeners.add(fn); return () => _typesListeners.delete(fn); };
+const subscribeComponents = (fn) => { _componentsListeners.add(fn); return () => _componentsListeners.delete(fn); };
+const loadIssueTypes = async (project = 'PESD1') => {
+  try {
+    const res = await fetch(`/api/v1/jira/issue-types?project=${encodeURIComponent(project)}`);
+    if (!res.ok) return JIRA_ISSUE_TYPES;
+    const data = await res.json();
+    JIRA_ISSUE_TYPES = { issueTypes: data.issueTypes || [], source: data.source || 'fallback' };
+    _typesListeners.forEach(fn => fn(JIRA_ISSUE_TYPES));
+    return JIRA_ISSUE_TYPES;
+  } catch { return JIRA_ISSUE_TYPES; }
+};
+const loadComponents = async (project = 'PESD1') => {
+  try {
+    const res = await fetch(`/api/v1/jira/components?project=${encodeURIComponent(project)}`);
+    if (!res.ok) return JIRA_COMPONENTS;
+    const data = await res.json();
+    JIRA_COMPONENTS = { components: data.components || [], source: data.source || 'fallback' };
+    _componentsListeners.forEach(fn => fn(JIRA_COMPONENTS));
+    return JIRA_COMPONENTS;
+  } catch { return JIRA_COMPONENTS; }
+};
+
+// ─── Assignable users (live, with fallback) ───────────────────────────────────
+let ASSIGNABLE_USERS = { users: [], source: 'fallback', loadedAt: null };
+const _assignableListeners = new Set();
+const subscribeAssignable = (fn) => { _assignableListeners.add(fn); return () => _assignableListeners.delete(fn); };
+const loadAssignableUsers = async (project = 'PESD1') => {
+  try {
+    const res = await fetch(`/api/v1/jira/users/assignable?project=${encodeURIComponent(project)}`);
+    if (!res.ok) return ASSIGNABLE_USERS;
+    const data = await res.json();
+    ASSIGNABLE_USERS = { users: Array.isArray(data.users) ? data.users : [], source: data.source || 'fallback', loadedAt: new Date().toISOString() };
+    _assignableListeners.forEach(fn => fn(ASSIGNABLE_USERS));
+    return ASSIGNABLE_USERS;
+  } catch { return ASSIGNABLE_USERS; }
+};
+const getAssignableUsers = () => ASSIGNABLE_USERS;
+
+// ─── Webhook event polling (W) ────────────────────────────────────────────────
+// Polls /api/v1/events every 5s for webhook-relayed Jira changes. Reconciles
+// local tickets keyed on jiraKey. Cheap because BFF buffers events in memory.
+let LAST_EVENT_AT = null;
+let LAST_WEBHOOK_RECEIVED_AT = null;
+const _webhookListeners = new Set();
+const subscribeWebhookState = (fn) => { _webhookListeners.add(fn); return () => _webhookListeners.delete(fn); };
+const pollWebhookEvents = async () => {
+  try {
+    const since = LAST_EVENT_AT ? `?since=${encodeURIComponent(LAST_EVENT_AT)}` : '';
+    const res = await fetch(`/api/v1/events${since}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    LAST_EVENT_AT = data.fetchedAt || LAST_EVENT_AT;
+    LAST_WEBHOOK_RECEIVED_AT = data.lastWebhookAt || LAST_WEBHOOK_RECEIVED_AT;
+    _webhookListeners.forEach(fn => fn({ lastWebhookAt: LAST_WEBHOOK_RECEIVED_AT }));
+    if (data.count === 0) return data;
+    // Apply each event to local state (only updates, not creates — poll handles creates)
+    let touched = 0;
+    updateTickets(ts => ts.map(t => {
+      if (!t.jiraKey) return t;
+      const relevant = data.events.find(e => e.issueKey === t.jiraKey);
+      if (!relevant) return t;
+      const next = { ...t };
+      if (relevant.issueStatus && relevant.issueStatus !== t.status) next.status = relevant.issueStatus;
+      if (relevant.issueAssignee !== undefined && relevant.issueAssignee !== t.assignee) next.assignee = relevant.issueAssignee;
+      next.jiraSyncedAt = data.fetchedAt;
+      next.jiraSyncState = 'synced';
+      if (next.status !== t.status || next.assignee !== t.assignee) touched++;
+      return next;
+    }));
+    return { ...data, applied: touched };
+  } catch {
+    return null;
+  }
+};
+
+// Loads the active Jira workflow from the BFF. Safe to call multiple times.
+const loadJiraWorkflow = async (project = 'PESD1') => {
+  try {
+    const res = await fetch(`/api/v1/jira/statuses?project=${encodeURIComponent(project)}`);
+    if (!res.ok) throw new Error('http ' + res.status);
+    const data = await res.json();
+    if (Array.isArray(data?.statuses) && data.statuses.length > 0) {
+      setJiraWorkflow({ statuses: data.statuses, source: data.source || 'fallback', note: data.note || null });
+      return data;
+    }
+  } catch { /* keep current cache / default */ }
+  return getJiraWorkflow();
+};
+
+// ─── localStorage persistence helpers ─────────────────────────────────────────
+// Versioned keys so a future schema change can ignore stale payloads cleanly.
+const STORE_PREFIX = 'pomelo:v1:';
+const __safeLocal = typeof window !== 'undefined' && window.localStorage;
+const loadStore = (key, fallback) => {
+  if (!__safeLocal) return fallback;
+  try {
+    const raw = window.localStorage.getItem(STORE_PREFIX + key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch { return fallback; }
+};
+const saveStore = (key, value) => {
+  if (!__safeLocal) return;
+  try { window.localStorage.setItem(STORE_PREFIX + key, JSON.stringify(value)); } catch { /* quota / private mode — drop silently */ }
+};
+// Replace an array's contents in-place so existing references stay valid.
+const replaceArrayInPlace = (arr, next) => {
+  arr.length = 0;
+  for (const x of next) arr.push(x);
+};
+
+// ─── Jira workflow React hook ─────────────────────────────────────────────────
+function useJiraWorkflow() {
+  const [workflow, setWorkflow] = useState(getJiraWorkflow);
+  useEffect(() => subscribeJiraWorkflow(setWorkflow), []);
+  return workflow;
+}
+
+function useAssignableUsers() {
+  const [state, setState] = useState(getAssignableUsers);
+  useEffect(() => subscribeAssignable(setState), []);
+  return state;
+}
+
+function useIssueTypes() {
+  const [state, setState] = useState(() => JIRA_ISSUE_TYPES);
+  useEffect(() => subscribeIssueTypes(setState), []);
+  return state;
+}
+
+function useComponents() {
+  const [state, setState] = useState(() => JIRA_COMPONENTS);
+  useEffect(() => subscribeComponents(setState), []);
+  return state;
+}
+
+function useJiraChangelog(jiraKey) {
+  const [history, setHistory] = useState([]);
+  useEffect(() => {
+    if (!jiraKey) { setHistory([]); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/jira/issue/${encodeURIComponent(jiraKey)}/changelog`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setHistory(Array.isArray(json.history) ? json.history : []);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [jiraKey]);
+  return history;
+}
+
+function useJiraCsat(jiraKey, status) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!jiraKey || !DONE_STATUSES.has(status)) { setData(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/jsm/request/${encodeURIComponent(jiraKey)}/csat`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled && json.available) setData(json);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [jiraKey, status]);
+  return data;
+}
+
+function useJiraWorklog(jiraKey) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!jiraKey) { setData(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/jira/issue/${encodeURIComponent(jiraKey)}/worklog`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setData(json);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [jiraKey]);
+  return data;
+}
+
+function useJiraWatchers(jiraKey) {
+  const [state, setState] = useState({ watchers: [], watchCount: 0 });
+  useEffect(() => {
+    if (!jiraKey) { setState({ watchers: [], watchCount: 0 }); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/jira/issue/${encodeURIComponent(jiraKey)}/watchers`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setState({ watchers: json.watchers || [], watchCount: json.watchCount || 0 });
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [jiraKey]);
+  return state;
+}
+
+function useWebhookState() {
+  const [state, setState] = useState({ lastWebhookAt: LAST_WEBHOOK_RECEIVED_AT });
+  useEffect(() => subscribeWebhookState(setState), []);
+  return state;
+}
+
+// Fetches the extended Jira issue (links, attachments, labels, components,
+// watcher count, fixVersions, issuetype) once per ticket open. Cached per key.
+const _jiraIssueCache = new Map();
+function useJiraIssueDetail(jiraKey) {
+  const [data, setData] = useState(() => (jiraKey ? _jiraIssueCache.get(jiraKey) || null : null));
+  useEffect(() => {
+    if (!jiraKey) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/jira/issue/${encodeURIComponent(jiraKey)}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        _jiraIssueCache.set(jiraKey, json);
+        setData(json);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [jiraKey]);
+  return data;
+}
+
+function useJiraSla(jiraKey) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!jiraKey) { setData(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/jira/issue/${encodeURIComponent(jiraKey)}/sla`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setData(json);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [jiraKey]);
+  return data;
+}
+
+// FilePreviewCard, FILE_CATEGORIES, categoryForFile, fileToAttachment, etc.
+// are imported from src/components/FilePreviewCard.jsx (top of file).
+
+// Renders combined local + Jira attachments using the shared FilePreviewCard.
+// Hidden when there's nothing to show.
+function TicketAttachments({ local = [], jira = [] }) {
+  const localList = (local || []).map((a, i) => ({
+    key: `l-${i}-${a.name}`,
+    name: a.name,
+    size: a.size,
+    type: a.type,
+    src: a.dataUrl || null,
+    origin: 'local',
+  }));
+  const jiraList = (jira || []).map(a => ({
+    key: `j-${a.id}`,
+    name: a.filename,
+    size: a.size,
+    type: a.mimeType,
+    src: a.content,
+    origin: 'jira',
+  }));
+  const all = [...localList, ...jiraList];
+  if (all.length === 0) return null;
+  return (
+    <div style={{ ...S.card, marginBottom: '20px' }}>
+      <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        📎 Attachments ({all.length})
+        {jiraList.length > 0 && localList.length > 0 && (
+          <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 600 }}>· {localList.length} local · {jiraList.length} from Jira</span>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
+        {all.map(a => (
+          <FilePreviewCard key={a.key} name={a.name} size={a.size} type={a.type} src={a.src} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Wraps File[] in blob URLs for live preview during form editing. The URLs
+// are revoked when the file list changes so we don't leak memory.
+function SubmitFilesPreview({ files, onRemove }) {
+  const [urls, setUrls] = useState([]);
+  useEffect(() => {
+    const generated = files.map(f => URL.createObjectURL(f));
+    setUrls(generated);
+    return () => { generated.forEach(u => URL.revokeObjectURL(u)); };
+  }, [files]);
+  return (
+    <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
+      {files.map((f, i) => (
+        <FilePreviewCard
+          key={`${f.name}-${i}-${f.size}`}
+          name={f.name}
+          size={f.size}
+          type={f.type}
+          src={urls[i] || null}
+          onRemove={() => onRemove(i)}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Modal focus trap hook ────────────────────────────────────────────────────
+// Autofocuses the first focusable child of the ref'd element, traps Tab/Shift+Tab
+// inside it, and returns focus to the previously focused element on unmount.
+function useModalFocusTrap(ref) {
+  useEffect(() => {
+    const prev = typeof document !== 'undefined' ? document.activeElement : null;
+    const node = ref.current;
+    if (!node) return;
+    const FOCUSABLE = 'a[href], area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusables = () => Array.from(node.querySelectorAll(FOCUSABLE));
+    const first = focusables()[0];
+    (first || node).focus({ preventScroll: true });
+    const onKey = e => {
+      if (e.key !== 'Tab') return;
+      const f = focusables();
+      if (f.length === 0) return;
+      const firstEl = f[0];
+      const lastEl = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === firstEl) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && document.activeElement === lastEl) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    };
+    node.addEventListener('keydown', onKey);
+    return () => {
+      node.removeEventListener('keydown', onKey);
+      if (prev && typeof prev.focus === 'function') prev.focus({ preventScroll: true });
+    };
+  }, [ref]);
+}
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 const SESSION_KEY  = 'pomelo_techops_session';
@@ -329,26 +880,300 @@ const LOCKOUT_MS   = 30_000;
 const AUTH_DELAY   = 600;
 
 let MOCK_USERS = [
-  { id: 'u1', name: 'Alex Lee',       email: 'alex.lee@pomelo.com',      passwordHash: btoa('salt_u1_Admin123!'),   role: 'superadmin', department: 'IT & Technology' },
-  { id: 'u2', name: 'Kai Nguyen',     email: 'kai.nguyen@pomelo.com',    passwordHash: btoa('salt_u2_User123!'),    role: 'user',       department: 'IT & Technology' },
-  { id: 'u3', name: 'Prim Srisawat',  email: 'prim.srisawat@pomelo.com', passwordHash: btoa('salt_u3_User123!'),    role: 'user',       department: 'IT & Technology' },
-  { id: 'u4', name: 'Quenton Dupont', email: 'quentondupont@gmail.com',  passwordHash: 'c2FsdF91NF9Ub3lvdGFzdXByYTdA', role: 'superadmin', department: 'IT & Technology' },
+  { id: 'u1', name: 'Alex Lee',       email: 'alex.lee@pomelo.com',      passwordHash: btoa('salt_u1_Admin123!'),   role: 'superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-09-01' },
+  { id: 'u2', name: 'Kai Nguyen',     email: 'kai.nguyen@pomelo.com',    passwordHash: btoa('salt_u2_User123!'),    role: 'user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-11-12' },
+  { id: 'u3', name: 'Prim Srisawat',  email: 'prim.srisawat@pomelo.com', passwordHash: btoa('salt_u3_User123!'),    role: 'user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2025-01-22' },
+  { id: 'u4', name: 'Quenton Dupont', email: 'quentondupont@gmail.com',  passwordHash: 'c2FsdF91NF9Ub3lvdGFzdXByYTdA', role: 'superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-08-15' },
 ];
+
+// ─── Chat log store (in-memory) ───────────────────────────────────────────────
+// Sessions captured for future training / cap tuning. Each session is one
+// continuous chat between a user and the assistant.
+const CHAT_SESSIONS = [];
+const _chatListeners = new Set();
+const subscribeChat = (fn) => { _chatListeners.add(fn); return () => _chatListeners.delete(fn); };
+const bumpChat = () => {
+  _chatListeners.forEach(fn => fn());
+  saveStore('chatSessions', CHAT_SESSIONS);
+};
+
+const startChatSession = ({ userName, userEmail, userRole }) => {
+  const id = 'c' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  CHAT_SESSIONS.unshift({
+    id,
+    userName: userName || 'Anonymous',
+    userEmail: userEmail || null,
+    userRole: userRole || 'user',
+    startedAt: new Date().toISOString(),
+    messages: [],
+  });
+  bumpChat();
+  return id;
+};
+
+const appendChatMessage = (sessionId, role, content) => {
+  const s = CHAT_SESSIONS.find(s => s.id === sessionId);
+  if (!s) return;
+  s.messages.push({ role, content, ts: new Date().toISOString() });
+  bumpChat();
+};
+
+const listChatSessions = () => CHAT_SESSIONS.slice();
+
+// ─── Maintenance mode (in-memory toggle) ──────────────────────────────────────
+let MAINTENANCE = { active: false, message: '', enabledBy: null, enabledAt: null };
+const _maintListeners = new Set();
+const subscribeMaintenance = (fn) => { _maintListeners.add(fn); return () => _maintListeners.delete(fn); };
+const setMaintenanceMode = (active, message, actor) => {
+  MAINTENANCE = active
+    ? { active: true, message: message || 'Scheduled maintenance in progress.', enabledBy: actor?.name || 'Admin', enabledAt: new Date().toISOString() }
+    : { active: false, message: '', enabledBy: null, enabledAt: null };
+  saveStore('maintenance', MAINTENANCE);
+  _maintListeners.forEach(fn => fn(MAINTENANCE));
+  if (actor) recordAudit(active ? 'system.maintenance_on' : 'system.maintenance_off', actor, null, { message });
+};
+const getMaintenanceMode = () => MAINTENANCE;
+
+// ─── Audit log (in-memory append-only) ────────────────────────────────────────
+// Charter R-10: every admin action is recorded immutably. Entries cannot be
+// edited or deleted once written.
+const AUDIT_LOG = [];
+let _auditVersion = 0;
+const _auditListeners = new Set();
+const bumpAudit = () => {
+  _auditVersion++;
+  _auditListeners.forEach(fn => fn(_auditVersion));
+  saveStore('audit', AUDIT_LOG);
+};
+const subscribeAudit = (fn) => { _auditListeners.add(fn); return () => _auditListeners.delete(fn); };
+
+const recordAudit = (action, actor, target = null, details = null) => {
+  AUDIT_LOG.unshift({
+    id: 'a' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    ts: new Date().toISOString(),
+    action,            // e.g. 'user.promote'
+    actorEmail: actor?.email || 'unknown',
+    actorName: actor?.name || 'Unknown',
+    targetType: target?.type || null,   // 'user' | 'doc' | 'ticket' | 'system' | null
+    targetId: target?.id || null,
+    targetLabel: target?.label || null,
+    details: details || null,
+  });
+  bumpAudit();
+};
+const listAudit = () => AUDIT_LOG.slice();
+
+// Module-level holder so admin API functions can resolve the current actor
+// without threading actor through every mutation call.
+let _currentActor = null;
+const setAuditActor = (actor) => { _currentActor = actor; };
+
+// ─── Admin user-management API (in-memory) ────────────────────────────────────
+// Returns a sanitised list (no password hashes) and emits a version counter
+// so React components can re-fetch after mutations.
+let _usersVersion = 0;
+const _usersListeners = new Set();
+const bumpUsers = () => {
+  _usersVersion++;
+  _usersListeners.forEach(fn => fn(_usersVersion));
+  saveStore('users', MOCK_USERS);
+};
+const subscribeUsers = (fn) => { _usersListeners.add(fn); return () => _usersListeners.delete(fn); };
+
+// Back-fill seed tickets with a requester so existing fixtures show up under
+// "My Tickets" for the demo users.
+const SEED_REQUESTERS = {
+  'TKT-2026-0042': { name: 'Kai Nguyen', email: 'kai.nguyen@pomelo.com' },
+  'TKT-2026-0038': { name: 'Kai Nguyen', email: 'kai.nguyen@pomelo.com' },
+  'TKT-2026-0031': { name: 'Prim Srisawat', email: 'prim.srisawat@pomelo.com' },
+  'TKT-2026-0045': { name: 'Prim Srisawat', email: 'prim.srisawat@pomelo.com' },
+  'TKT-2026-0044': { name: 'Kai Nguyen', email: 'kai.nguyen@pomelo.com' },
+  'TKT-2026-0043': { name: 'Prim Srisawat', email: 'prim.srisawat@pomelo.com' },
+  'TKT-2026-0041': { name: 'Kai Nguyen', email: 'kai.nguyen@pomelo.com' },
+  'TKT-2026-0039': { name: 'Prim Srisawat', email: 'prim.srisawat@pomelo.com' },
+};
+for (const t of MOCK_TICKETS) {
+  if (!t.requester) t.requester = SEED_REQUESTERS[t.id] || { name: 'Unknown', email: null };
+}
+
+// ─── Hydrate from localStorage at module load ─────────────────────────────────
+// Each store is replaced in-place so existing references stay valid.
+(() => {
+  const storedUsers = loadStore('users', null);
+  if (Array.isArray(storedUsers) && storedUsers.length) {
+    MOCK_USERS = storedUsers;
+  }
+  const storedTickets = loadStore('tickets', null);
+  if (Array.isArray(storedTickets) && storedTickets.length) {
+    replaceArrayInPlace(MOCK_TICKETS, storedTickets);
+  }
+  const storedAudit = loadStore('audit', null);
+  if (Array.isArray(storedAudit)) {
+    replaceArrayInPlace(AUDIT_LOG, storedAudit);
+  }
+  const storedChat = loadStore('chatSessions', null);
+  if (Array.isArray(storedChat)) {
+    replaceArrayInPlace(CHAT_SESSIONS, storedChat);
+  }
+  const storedMaint = loadStore('maintenance', null);
+  if (storedMaint && typeof storedMaint === 'object') {
+    MAINTENANCE = storedMaint;
+  }
+
+  // Migrate any legacy status names (Open / Pending / Closed) on persisted or
+  // seed tickets to the canonical Jira Service Management names so the new
+  // dynamic status list doesn't fight with stale data.
+  for (const t of MOCK_TICKETS) {
+    if (t.status && LEGACY_TO_JIRA_STATUS[t.status]) {
+      t.status = mapLegacyStatus(t.status);
+    }
+  }
+})();
+
+const sanitiseUser = ({ passwordHash: _, ...u }) => u;
+const listUsers = () => MOCK_USERS.map(sanitiseUser);
+const findUserById = (id) => MOCK_USERS.find(u => u.id === id);
+
+const updateUser = (id, updates) => {
+  const u = findUserById(id);
+  if (!u) return null;
+  const before = { ...u };
+  Object.assign(u, updates);
+  bumpUsers();
+  recordAudit('user.update', _currentActor, { type: 'user', id: u.id, label: u.name },
+    { changedKeys: Object.keys(updates), before: Object.fromEntries(Object.keys(updates).map(k => [k, before[k]])), after: updates });
+  return sanitiseUser(u);
+};
+
+const setUserRole = (id, role) => {
+  const u = findUserById(id);
+  if (!u) return null;
+  const prev = u.role;
+  u.role = role;
+  bumpUsers();
+  recordAudit(role === 'superadmin' ? 'user.promote' : 'user.demote', _currentActor,
+    { type: 'user', id: u.id, label: u.name }, { from: prev, to: role });
+  return sanitiseUser(u);
+};
+
+const setUserActive = (id, active) => {
+  const u = findUserById(id);
+  if (!u) return null;
+  u.active = active;
+  bumpUsers();
+  recordAudit(active ? 'user.reactivate' : 'user.deactivate', _currentActor,
+    { type: 'user', id: u.id, label: u.name });
+  return sanitiseUser(u);
+};
+
+const forceUserReOtp = (id) => {
+  const u = findUserById(id);
+  if (!u) return null;
+  u.forceReOtp = true;
+  bumpUsers();
+  recordAudit('user.force_re_otp', _currentActor, { type: 'user', id: u.id, label: u.name });
+  return sanitiseUser(u);
+};
+
+const resetUserPassword = async (id, tempPassword) => {
+  const u = findUserById(id);
+  if (!u) return null;
+  await setPassword(u, tempPassword);
+  u.forceReOtp = true;
+  bumpUsers();
+  recordAudit('user.reset_password', _currentActor, { type: 'user', id: u.id, label: u.name });
+  return sanitiseUser(u);
+};
+
+const adminCreateUser = async ({ name, email, role = 'user', department = 'IT & Technology', tempPassword }) => {
+  const sanitisedEmail = String(email || '').trim().toLowerCase();
+  if (!sanitisedEmail || !name) return { error: 'Name and email are required.' };
+  if (MOCK_USERS.some(u => u.email === sanitisedEmail)) return { error: 'Email already in use.' };
+  if (!tempPassword || tempPassword.length < 8) return { error: 'Temp password must be at least 8 characters.' };
+  const id = 'u' + Date.now();
+  const u = {
+    id, name: name.trim(), email: sanitisedEmail,
+    passwordHash: '', passwordSalt: '',
+    role, department,
+    active: true, lastLoginAt: null, forceReOtp: true,
+    createdAt: new Date().toISOString().slice(0, 10),
+  };
+  await setPassword(u, tempPassword);
+  MOCK_USERS.push(u);
+  bumpUsers();
+  recordAudit('user.create', _currentActor, { type: 'user', id, label: u.name }, { role, department });
+  return { user: sanitiseUser(u) };
+};
 
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
-const validateCredentials = (email, password) => {
+// ─── Password hashing ─────────────────────────────────────────────────────────
+// Web Crypto SHA-256 with a per-user random 128-bit salt. Legacy btoa-based
+// hashes are accepted once on login and auto-upgraded to the new scheme.
+const _subtle = typeof crypto !== 'undefined' && crypto.subtle;
+const randomSalt = () => {
+  const a = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(a);
+  else for (let i = 0; i < 16; i++) a[i] = Math.floor(Math.random() * 256);
+  return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+const sha256Hex = async (text) => {
+  if (!_subtle) return null;
+  const data = new TextEncoder().encode(text);
+  const hash = await _subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+const hashPassword = (salt, password) => sha256Hex(salt + ':' + password);
+
+const verifyPassword = async (user, password) => {
+  if (!user) return false;
+  if (user.passwordSalt) {
+    const h = await hashPassword(user.passwordSalt, password);
+    return h === user.passwordHash;
+  }
+  // Legacy btoa scheme (reversible — kept only for migration of seed users)
+  const legacy = btoa('salt_' + user.id + '_' + password);
+  return legacy === user.passwordHash;
+};
+
+const upgradePassword = async (user, password) => {
+  const salt = randomSalt();
+  const h = await hashPassword(salt, password);
+  if (!h) return;
+  user.passwordSalt = salt;
+  user.passwordHash = h;
+  bumpUsers();
+};
+
+const setPassword = async (user, password) => {
+  const salt = randomSalt();
+  const h = await hashPassword(salt, password);
+  if (!h) return;
+  user.passwordSalt = salt;
+  user.passwordHash = h;
+};
+
+const validateCredentials = async (email, password) => {
   const sanitised = email.trim().toLowerCase();
   const user = MOCK_USERS.find(u => u.email === sanitised);
-  // Always compute a hash to simulate constant-time comparison
-  const candidate = btoa('salt_' + (user?.id ?? 'fake') + '_' + password);
-  if (!user || candidate !== user.passwordHash) return null;
-  const { passwordHash: _, ...safe } = user;
+  if (!user) {
+    // Compute a dummy hash so timing is comparable across hit/miss
+    await hashPassword('dummy_salt_' + sanitised, password).catch(() => null);
+    return null;
+  }
+  const ok = await verifyPassword(user, password);
+  if (!ok) return null;
+  if (!user.passwordSalt) await upgradePassword(user, password);
+  if (user.active === false) return { _deactivated: true };
+  const { passwordHash: _, passwordSalt: __, ...safe } = user;
   return safe;
 };
 
 const createSession = (user) => {
   const { passwordHash: _, ...safe } = user;
+  // Record lastLoginAt on the canonical record so the admin Users panel reflects it
+  const canonical = MOCK_USERS.find(u => u.id === user.id);
+  if (canonical) { canonical.lastLoginAt = new Date().toISOString(); bumpUsers(); }
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...safe, loginAt: Date.now() }));
 };
 const getSession = () => { try { const r = sessionStorage.getItem(SESSION_KEY); return r ? JSON.parse(r) : null; } catch { return null; } };
@@ -357,19 +1182,24 @@ const getLockState = () => { try { const r = sessionStorage.getItem(LOCK_KEY); r
 const setLockState = (attempts, lockedUntil) => sessionStorage.setItem(LOCK_KEY, JSON.stringify({ attempts, lockedUntil }));
 const clearLockState = () => sessionStorage.removeItem(LOCK_KEY);
 
-const registerUser = (firstName, lastName, email, password) => {
+const registerUser = async (firstName, lastName, email, password) => {
   const sanitisedEmail = email.trim().toLowerCase();
   if (MOCK_USERS.some(u => u.email === sanitisedEmail))
     return 'An account with this email already exists.';
   const id = 'u' + Date.now();
-  MOCK_USERS.push({
+  const u = {
     id,
     name: firstName.trim() + ' ' + lastName.trim(),
     email: sanitisedEmail,
-    passwordHash: btoa('salt_' + id + '_' + password),
+    passwordHash: '', passwordSalt: '',
     role: 'user',
     department: 'IT & Technology',
-  });
+    active: true, lastLoginAt: null, forceReOtp: false,
+    createdAt: new Date().toISOString().slice(0, 10),
+  };
+  await setPassword(u, password);
+  MOCK_USERS.push(u);
+  bumpUsers();
   return null;
 };
 
@@ -412,7 +1242,7 @@ function SignupModal({ onClose, onToast }) {
     }
     setIsLoading(true);
     await delay(AUTH_DELAY);
-    const registrationError = registerUser(firstName, lastName, email, password);
+    const registrationError = await registerUser(firstName, lastName, email, password);
     setIsLoading(false);
     if (registrationError) { setError(registrationError); return; }
     onToast?.('Welcome To Pomelo TechOps Portal');
@@ -426,7 +1256,7 @@ function SignupModal({ onClose, onToast }) {
     outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s',
   };
   const pwFieldStyle = { ...fieldStyle, paddingRight: '44px' };
-  const focusOrange = (e) => { e.target.style.borderColor = '#E8632A'; };
+  const focusOrange = (e) => { e.target.style.borderColor = '#7C3AED'; };
   const blurGray    = (e) => { e.target.style.borderColor = '#E2E8F0'; };
 
   const Lbl = ({ children }) => (
@@ -442,13 +1272,13 @@ function SignupModal({ onClose, onToast }) {
   );
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.48)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '460px', maxWidth: '95vw', background: '#fff', borderRadius: '16px', boxShadow: '0 24px 72px rgba(0,0,0,0.22)', overflow: 'hidden', animation: 'slideUp 0.2s ease' }}>
+    <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.48)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Create your account" style={{ width: '460px', maxWidth: '95vw', background: '#fff', borderRadius: '16px', boxShadow: '0 24px 72px rgba(0,0,0,0.22)', overflow: 'hidden', animation: 'slideUp 0.2s ease' }}>
 
         {/* Header */}
-        <div style={{ background: '#1A2B4A', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ background: '#111111', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0, color: '#fff', fontSize: '18px', fontWeight: 900, fontFamily: "'Lato', sans-serif" }}>Create your account</h2>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.65)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: '2px 6px', borderRadius: '4px' }}>×</button>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.65)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: '2px 6px', borderRadius: '4px' }}>×</button>
         </div>
 
         {/* Form */}
@@ -458,25 +1288,25 @@ function SignupModal({ onClose, onToast }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <Lbl>First Name</Lbl>
-              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First" autoComplete="given-name" style={fieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First" aria-label="First name" autoComplete="given-name" style={fieldStyle} onFocus={focusOrange} onBlur={blurGray} />
             </div>
             <div>
               <Lbl>Last Name</Lbl>
-              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last" autoComplete="family-name" style={fieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last" aria-label="Last name" autoComplete="family-name" style={fieldStyle} onFocus={focusOrange} onBlur={blurGray} />
             </div>
           </div>
 
           {/* Email */}
           <div>
             <Lbl>Email</Lbl>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@pomelo.com" autoComplete="email" style={fieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@pomelo.com" aria-label="Email" autoComplete="email" style={fieldStyle} onFocus={focusOrange} onBlur={blurGray} />
           </div>
 
           {/* Password */}
           <div>
             <Lbl>Password</Lbl>
             <div style={{ position: 'relative' }}>
-              <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={pwFieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+              <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" aria-label="Password" autoComplete="new-password" style={pwFieldStyle} onFocus={focusOrange} onBlur={blurGray} />
               <Eye show={showPassword} onToggle={() => setShowPassword(v => !v)} />
             </div>
             <PasswordStrengthMeter password={password} />
@@ -486,7 +1316,7 @@ function SignupModal({ onClose, onToast }) {
           <div>
             <Lbl>Confirm Password</Lbl>
             <div style={{ position: 'relative' }}>
-              <input type={showConfirm ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password" style={pwFieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+              <input type={showConfirm ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" aria-label="Confirm password" autoComplete="new-password" style={pwFieldStyle} onFocus={focusOrange} onBlur={blurGray} />
               <Eye show={showConfirm} onToggle={() => setShowConfirm(v => !v)} />
             </div>
           </div>
@@ -499,7 +1329,7 @@ function SignupModal({ onClose, onToast }) {
           )}
 
           {/* Submit */}
-          <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '13px 0', background: isLoading ? '#CBD5E1' : '#E8632A', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Lato', sans-serif", fontWeight: 900, fontSize: '15px', cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.15s' }}>
+          <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '13px 0', background: isLoading ? '#CBD5E1' : '#7C3AED', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Lato', sans-serif", fontWeight: 900, fontSize: '15px', cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.15s' }}>
             {isLoading ? <Spin /> : 'Create Account'}
           </button>
         </form>
@@ -580,10 +1410,10 @@ function OtpInput({ value, onChange }) {
           style={{
             width: '48px', height: '56px', textAlign: 'center',
             fontSize: '24px', fontWeight: 900,
-            border: `2px solid ${focusedIdx === i ? '#E8632A' : '#E2E8F0'}`,
+            border: `2px solid ${focusedIdx === i ? '#7C3AED' : '#E2E8F0'}`,
             borderRadius: '10px', outline: 'none',
             fontFamily: "'Lato', sans-serif",
-            color: '#1A2B4A', background: '#F8F9FB',
+            color: '#111111', background: '#F8F9FB',
             transition: 'border-color 0.15s',
           }}
         />
@@ -650,7 +1480,7 @@ function LoginPage({ onLogin, onToast }) {
     setIsLoading(true); setError('');
     await delay(AUTH_DELAY);
     const sanitised = email.trim().toLowerCase();
-    const user = validateCredentials(sanitised, password);
+    const user = await validateCredentials(sanitised, password);
     if (!user) {
       const current = getLockState();
       const newAttempts = current.attempts + 1;
@@ -658,6 +1488,10 @@ function LoginPage({ onLogin, onToast }) {
       setLockState(newAttempts, lockedUntil);
       setLockStateLocal({ attempts: newAttempts, lockedUntil });
       setError('Invalid email or password');
+      setIsLoading(false); return;
+    }
+    if (user._deactivated) {
+      setError('Your account has been deactivated. Please contact an administrator.');
       setIsLoading(false); return;
     }
     clearLockState();
@@ -717,9 +1551,9 @@ function LoginPage({ onLogin, onToast }) {
   );
 
   const FieldInput = ({ type, value, onChange, placeholder, autoComplete, extra = {} }) => (
-    <input type={type} value={value} onChange={onChange} placeholder={placeholder} autoComplete={autoComplete}
+    <input type={type} value={value} onChange={onChange} placeholder={placeholder} aria-label={placeholder} autoComplete={autoComplete}
       style={{ width: '100%', padding: '11px 44px 11px 14px', borderRadius: '8px', border: '1.5px solid #E2E8F0', fontFamily: "'Lato', sans-serif", fontSize: '14px', color: '#1E293B', background: '#F8F9FB', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s', ...extra }}
-      onFocus={e => e.target.style.borderColor = '#E8632A'}
+      onFocus={e => e.target.style.borderColor = '#7C3AED'}
       onBlur={e => e.target.style.borderColor = '#E2E8F0'}
     />
   );
@@ -731,13 +1565,13 @@ function LoginPage({ onLogin, onToast }) {
   ) : null;
 
   const BackLink = ({ onClick }) => (
-    <button type="button" onClick={onClick} style={{ background: 'none', border: 'none', color: '#E8632A', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '24px' }}>
+    <button type="button" onClick={onClick} style={{ background: 'none', border: 'none', color: '#7C3AED', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '24px' }}>
       ← Back to sign in
     </button>
   );
 
   const submitBtnStyle = (disabled) => ({
-    width: '100%', padding: '13px', background: disabled ? '#CBD5E1' : '#E8632A',
+    width: '100%', padding: '13px', background: disabled ? '#CBD5E1' : '#7C3AED',
     color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Lato', sans-serif",
     fontWeight: 700, fontSize: '15px', cursor: disabled ? 'not-allowed' : 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
@@ -751,30 +1585,30 @@ function LoginPage({ onLogin, onToast }) {
   const renderRight = () => {
     if (view === 'login') return (
       <div>
-        <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#1A2B4A', marginBottom: '6px' }}>Welcome back 👋</h1>
+        <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#111111', marginBottom: '6px' }}>Welcome back 👋</h1>
         <p style={{ fontSize: '14px', color: '#64748B', marginBottom: '32px' }}>Sign in to your TechOps account</p>
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <Label>Email</Label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@pomelo.com" autoComplete="email" disabled={isLocked || isLoading}
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@pomelo.com" aria-label="Email" autoComplete="email" disabled={isLocked || isLoading}
               style={{ width: '100%', padding: '11px 14px', borderRadius: '8px', border: '1.5px solid #E2E8F0', fontFamily: "'Lato', sans-serif", fontSize: '14px', color: '#1E293B', background: isLocked ? '#F1F5F9' : '#F8F9FB', outline: 'none', boxSizing: 'border-box' }}
-              onFocus={e => e.target.style.borderColor = '#E8632A'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+              onFocus={e => e.target.style.borderColor = '#7C3AED'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
           </div>
           <div>
             <Label>Password</Label>
             <div style={{ position: 'relative' }}>
-              <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" disabled={isLocked || isLoading}
+              <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" aria-label="Password" autoComplete="current-password" disabled={isLocked || isLoading}
                 style={{ width: '100%', padding: '11px 44px 11px 14px', borderRadius: '8px', border: '1.5px solid #E2E8F0', fontFamily: "'Lato', sans-serif", fontSize: '14px', color: '#1E293B', background: isLocked ? '#F1F5F9' : '#F8F9FB', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => e.target.style.borderColor = '#E8632A'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                onFocus={e => e.target.style.borderColor = '#7C3AED'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
               <EyeToggle show={showPassword} onToggle={() => setShowPassword(v => !v)} />
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '2px 0' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#64748B', cursor: 'pointer', userSelect: 'none' }}>
-              <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} style={{ accentColor: '#E8632A' }} />
+              <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} style={{ accentColor: '#7C3AED' }} />
               Remember me
             </label>
-            <button type="button" onClick={() => setView('forgot-email')} style={{ background: 'none', border: 'none', color: '#E8632A', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+            <button type="button" onClick={() => setView('forgot-email')} style={{ background: 'none', border: 'none', color: '#7C3AED', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: 0 }}>
               Forgot password?
             </button>
           </div>
@@ -790,7 +1624,7 @@ function LoginPage({ onLogin, onToast }) {
         </form>
         <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '14px', color: '#64748B' }}>
           {"Don't have an account? "}
-          <button type="button" onClick={() => setShowSignup(true)} style={{ background: 'none', border: 'none', color: '#E8632A', fontWeight: 700, fontSize: '14px', cursor: 'pointer', padding: 0 }}>
+          <button type="button" onClick={() => setShowSignup(true)} style={{ background: 'none', border: 'none', color: '#7C3AED', fontWeight: 700, fontSize: '14px', cursor: 'pointer', padding: 0 }}>
             Sign up
           </button>
         </p>
@@ -800,14 +1634,14 @@ function LoginPage({ onLogin, onToast }) {
     if (view === 'forgot-email') return (
       <div>
         <BackLink onClick={resetToLogin} />
-        <h1 style={{ fontSize: '26px', fontWeight: 900, color: '#1A2B4A', marginBottom: '6px' }}>Forgot your password?</h1>
+        <h1 style={{ fontSize: '26px', fontWeight: 900, color: '#111111', marginBottom: '6px' }}>Forgot your password?</h1>
         <p style={{ fontSize: '14px', color: '#64748B', marginBottom: '28px' }}>{"We'll send a 6-digit code to your email."}</p>
         <form onSubmit={handleSendCode} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <Label>Email</Label>
-            <input type="email" value={forgotEmail || email} onChange={e => setForgotEmail(e.target.value)} placeholder="you@pomelo.com" autoComplete="email"
+            <input type="email" value={forgotEmail || email} onChange={e => setForgotEmail(e.target.value)} placeholder="you@pomelo.com" aria-label="Email" autoComplete="email"
               style={{ width: '100%', padding: '11px 14px', borderRadius: '8px', border: '1.5px solid #E2E8F0', fontFamily: "'Lato', sans-serif", fontSize: '14px', color: '#1E293B', background: '#F8F9FB', outline: 'none', boxSizing: 'border-box' }}
-              onFocus={e => e.target.style.borderColor = '#E8632A'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+              onFocus={e => e.target.style.borderColor = '#7C3AED'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
           </div>
           <button type="submit" disabled={isLoading} style={submitBtnStyle(isLoading)}>
             {isLoading ? <Spinner /> : 'Send Reset Code'}
@@ -819,7 +1653,7 @@ function LoginPage({ onLogin, onToast }) {
     if (view === 'forgot-code') return (
       <div>
         <BackLink onClick={resetToLogin} />
-        <h1 style={{ fontSize: '26px', fontWeight: 900, color: '#1A2B4A', marginBottom: '6px' }}>Check your email</h1>
+        <h1 style={{ fontSize: '26px', fontWeight: 900, color: '#111111', marginBottom: '6px' }}>Check your email</h1>
         <p style={{ fontSize: '14px', color: '#64748B', marginBottom: '8px' }}>
           Enter the 6-digit code sent to <strong>{forgotEmail || email}</strong>
         </p>
@@ -833,7 +1667,7 @@ function LoginPage({ onLogin, onToast }) {
         <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '13px' }}>
           {resendCooldown > 0
             ? <span style={{ color: '#94A3B8' }}>Resend code in {resendCooldown}s</span>
-            : <button type="button" onClick={() => setResendCooldown(30)} style={{ background: 'none', border: 'none', color: '#E8632A', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Resend code</button>
+            : <button type="button" onClick={() => setResendCooldown(30)} style={{ background: 'none', border: 'none', color: '#7C3AED', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Resend code</button>
           }
         </div>
       </div>
@@ -841,15 +1675,15 @@ function LoginPage({ onLogin, onToast }) {
 
     if (view === 'forgot-password') return (
       <div>
-        <h1 style={{ fontSize: '26px', fontWeight: 900, color: '#1A2B4A', marginBottom: '6px' }}>Create new password</h1>
+        <h1 style={{ fontSize: '26px', fontWeight: 900, color: '#111111', marginBottom: '6px' }}>Create new password</h1>
         <p style={{ fontSize: '14px', color: '#64748B', marginBottom: '28px' }}>Choose a strong password for your account.</p>
         <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <Label>New Password</Label>
             <div style={{ position: 'relative' }}>
-              <input type={showNewPass ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password"
+              <input type={showNewPass ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" aria-label="New password" autoComplete="new-password"
                 style={{ width: '100%', padding: '11px 44px 11px 14px', borderRadius: '8px', border: '1.5px solid #E2E8F0', fontFamily: "'Lato', sans-serif", fontSize: '14px', color: '#1E293B', background: '#F8F9FB', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => e.target.style.borderColor = '#E8632A'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                onFocus={e => e.target.style.borderColor = '#7C3AED'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
               <EyeToggle show={showNewPass} onToggle={() => setShowNewPass(v => !v)} />
             </div>
             <PasswordStrengthMeter password={newPassword} />
@@ -857,9 +1691,9 @@ function LoginPage({ onLogin, onToast }) {
           <div>
             <Label>Confirm Password</Label>
             <div style={{ position: 'relative' }}>
-              <input type={showConfPass ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" autoComplete="new-password"
+              <input type={showConfPass ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" aria-label="Confirm new password" autoComplete="new-password"
                 style={{ width: '100%', padding: '11px 44px 11px 14px', borderRadius: '8px', border: '1.5px solid #E2E8F0', fontFamily: "'Lato', sans-serif", fontSize: '14px', color: '#1E293B', background: '#F8F9FB', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => e.target.style.borderColor = '#E8632A'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                onFocus={e => e.target.style.borderColor = '#7C3AED'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
               <EyeToggle show={showConfPass} onToggle={() => setShowConfPass(v => !v)} />
             </div>
           </div>
@@ -881,15 +1715,15 @@ function LoginPage({ onLogin, onToast }) {
       `}</style>
 
       {/* Left panel — hidden on mobile via .login-left media query */}
-      <div className="login-left" style={{ width: '42%', background: '#1A2B4A', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '44px 52px', position: 'relative', overflow: 'hidden' }}>
+      <div className="login-left" style={{ width: '42%', background: '#111111', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '44px 52px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 12px)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', bottom: '-80px', right: '-80px', width: '320px', height: '320px', borderRadius: '50%', background: 'rgba(232,99,42,0.08)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: '-80px', right: '-80px', width: '320px', height: '320px', borderRadius: '50%', background: 'rgba(124,58,237,0.08)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', top: '-60px', left: '-60px', width: '240px', height: '240px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
 
         {/* Logo */}
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={{ color: '#fff', fontWeight: 900, fontSize: '22px', letterSpacing: '-0.01em' }}>Pomelo</div>
-          <div style={{ color: '#E8632A', fontWeight: 700, fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', marginTop: '1px' }}>TechOps Portal</div>
+          <div style={{ color: '#7C3AED', fontWeight: 700, fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', marginTop: '1px' }}>TechOps Portal</div>
         </div>
 
         {/* Center content */}
@@ -938,13 +1772,14 @@ const S = {
     color: '#1E293B',
   },
   nav: {
-    background: '#1A2B4A',
+    background: '#FFFFFF',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '0 28px',
     height: '60px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    borderBottom: '1px solid #E5E7EB',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
     position: 'sticky',
     top: 0,
     zIndex: 100,
@@ -955,13 +1790,13 @@ const S = {
     gap: '10px',
   },
   navLogoText: {
-    color: '#FFFFFF',
+    color: '#0A0A0A',
     fontWeight: 900,
     fontSize: '17px',
     letterSpacing: '0.02em',
   },
   navLogoSub: {
-    color: '#E8632A',
+    color: '#7C3AED',
     fontWeight: 700,
     fontSize: '11px',
     letterSpacing: '0.12em',
@@ -977,11 +1812,11 @@ const S = {
     padding: '7px 14px',
     borderRadius: '6px',
     border: 'none',
-    background: active ? 'rgba(232,99,42,0.18)' : 'transparent',
-    color: active ? '#E8632A' : 'rgba(255,255,255,0.65)',
+    background: active ? 'rgba(124,58,237,0.10)' : 'transparent',
+    color: active ? '#7C3AED' : '#4B5563',
     fontFamily: "'Lato', sans-serif",
     fontSize: '13px',
-    fontWeight: active ? 700 : 400,
+    fontWeight: active ? 700 : 500,
     cursor: 'pointer',
     transition: 'all 0.15s',
     whiteSpace: 'nowrap',
@@ -990,14 +1825,14 @@ const S = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    color: 'rgba(255,255,255,0.75)',
+    color: '#374151',
     fontSize: '13px',
   },
   avatar: {
     width: '32px',
     height: '32px',
     borderRadius: '50%',
-    background: '#E8632A',
+    background: '#7C3AED',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1016,7 +1851,7 @@ const S = {
   pageTitle: {
     fontSize: '24px',
     fontWeight: 900,
-    color: '#1A2B4A',
+    color: '#111111',
     marginBottom: '4px',
   },
   pageSub: {
@@ -1032,7 +1867,7 @@ const S = {
     boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
   },
   orangeBtn: {
-    background: '#E8632A',
+    background: '#7C3AED',
     color: '#fff',
     border: 'none',
     borderRadius: '8px',
@@ -1045,8 +1880,8 @@ const S = {
   },
   ghostBtn: {
     background: 'transparent',
-    color: '#E8632A',
-    border: '1.5px solid #E8632A',
+    color: '#7C3AED',
+    border: '1.5px solid #7C3AED',
     borderRadius: '8px',
     padding: '8px 16px',
     fontFamily: "'Lato', sans-serif",
@@ -1126,7 +1961,7 @@ const S = {
   statNum: {
     fontSize: '36px',
     fontWeight: 900,
-    color: '#1A2B4A',
+    color: '#111111',
     lineHeight: 1,
   },
   statLabel: {
@@ -1135,7 +1970,7 @@ const S = {
     marginTop: '4px',
   },
   footer: {
-    background: '#1A2B4A',
+    background: '#111111',
     color: 'rgba(255,255,255,0.55)',
     textAlign: 'center',
     padding: '16px 24px',
@@ -1153,7 +1988,7 @@ function Toast({ message, type = 'success', onDone }) {
   }, [onDone]);
 
   const variants = {
-    success: { bg: '#1A2B4A', icon: '✅', title: 'Done!' },
+    success: { bg: '#111111', icon: '✅', title: 'Done!' },
     error:   { bg: '#DC2626', icon: '❌', title: 'Something went wrong' },
     info:    { bg: '#0369A1', icon: 'ℹ️',  title: 'Note' },
   };
@@ -1212,7 +2047,7 @@ function PrioritySuggester({ onSelect }) {
 
   return (
     <div style={{ background: '#F0F4FF', border: '1.5px solid #BFDBFE', borderRadius: '10px', padding: '16px 20px' }}>
-      <div style={{ fontSize: '13px', fontWeight: 700, color: '#1A2B4A', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
         <span>🧠</span> Smart Priority Suggester
         {step > 0 && <button onClick={reset} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#64748B', cursor: 'pointer', fontSize: '11px' }}>Reset</button>}
       </div>
@@ -1239,11 +2074,11 @@ function PrioritySuggester({ onSelect }) {
 function DocPanel({ doc, onClose, onReadFull }) {
   return (
     <>
-      <div onClick={onClose} style={{
+      <div onClick={onClose} role="presentation" style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 200,
         animation: 'fadeIn 0.2s ease',
       }} />
-      <div style={{
+      <div role="dialog" aria-modal="true" aria-label={doc?.title || 'Document preview'} style={{
         position: 'fixed', right: 0, top: 0, bottom: 0, width: '520px', maxWidth: '95vw',
         background: '#fff', zIndex: 201, boxShadow: '-8px 0 40px rgba(0,0,0,0.15)',
         display: 'flex', flexDirection: 'column',
@@ -1252,7 +2087,7 @@ function DocPanel({ doc, onClose, onReadFull }) {
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '24px' }}>{doc.icon}</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '16px', fontWeight: 900, color: '#1A2B4A' }}>{doc.title}</div>
+            <div style={{ fontSize: '16px', fontWeight: 900, color: '#111111' }}>{doc.title}</div>
             <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{doc.category}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: '#94A3B8', lineHeight: 1 }}>×</button>
@@ -1306,7 +2141,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
         <div style={{ padding: '16px 18px', borderBottom: '1px solid #E2E8F0' }}>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#E8632A', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '5px' }}
+            style={{ background: 'none', border: 'none', color: '#7C3AED', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '5px' }}
           >
             ← Back to Library
           </button>
@@ -1330,8 +2165,8 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                       style={{
                         width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
                         padding: '9px 18px', display: 'flex', alignItems: 'center', gap: '9px',
-                        background: isActive ? '#FFF5F0' : 'transparent',
-                        borderRight: isActive ? '3px solid #E8632A' : '3px solid transparent',
+                        background: isActive ? '#F5F3FF' : 'transparent',
+                        borderRight: isActive ? '3px solid #7C3AED' : '3px solid transparent',
                         transition: 'background 0.1s',
                         fontFamily: "'Lato', sans-serif",
                       }}
@@ -1339,7 +2174,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                       onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                     >
                       <span style={{ fontSize: '16px', flexShrink: 0 }}>{d.icon}</span>
-                      <span style={{ fontSize: '13px', fontWeight: isActive ? 700 : 400, color: isActive ? '#E8632A' : '#334155', lineHeight: 1.3 }}>{d.title}</span>
+                      <span style={{ fontSize: '13px', fontWeight: isActive ? 700 : 400, color: isActive ? '#7C3AED' : '#334155', lineHeight: 1.3 }}>{d.title}</span>
                     </button>
                   );
                 })}
@@ -1357,7 +2192,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
             <span style={{ fontSize: '32px' }}>{activeDoc.icon}</span>
             <span style={{ ...S.badge('#64748B'), fontSize: '11px' }}>{activeDoc.category}</span>
           </div>
-          <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#1A2B4A', marginBottom: '10px', lineHeight: 1.2 }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 900, color: '#111111', marginBottom: '10px', lineHeight: 1.2 }}>
             {activeDoc.title}
           </h1>
           <p style={{ fontSize: '15px', color: '#64748B', lineHeight: 1.6, margin: 0 }}>{activeDoc.summary}</p>
@@ -1383,15 +2218,15 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                     display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
                     transition: 'all 0.15s',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#E8632A'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(232,99,42,0.08)'; }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#7C3AED'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(124,58,237,0.08)'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; }}
                 >
                   <span style={{ fontSize: '22px' }}>{d.icon}</span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#1A2B4A' }}>{d.title}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#111111' }}>{d.title}</div>
                     <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{d.category}</div>
                   </div>
-                  <span style={{ color: '#E8632A', fontSize: '16px' }}>→</span>
+                  <span style={{ color: '#7C3AED', fontSize: '16px' }}>→</span>
                 </button>
               ))}
             </div>
@@ -1421,11 +2256,11 @@ function DocMarkdown({ content }) {
   return (
     <div style={{ fontSize: '14px', color: '#334155', lineHeight: 1.7 }}>
       {lines.map((line, i) => {
-        if (line.startsWith('# '))   return <h1 key={i} style={{ fontSize: '20px', fontWeight: 900, color: '#1A2B4A', marginBottom: '12px', marginTop: i === 0 ? 0 : '20px' }}>{line.slice(2)}</h1>;
-        if (line.startsWith('## '))  return <h2 key={i} style={{ fontSize: '16px', fontWeight: 700, color: '#1A2B4A', marginBottom: '8px', marginTop: '18px' }}>{line.slice(3)}</h2>;
+        if (line.startsWith('# '))   return <h1 key={i} style={{ fontSize: '20px', fontWeight: 900, color: '#111111', marginBottom: '12px', marginTop: i === 0 ? 0 : '20px' }}>{line.slice(2)}</h1>;
+        if (line.startsWith('## '))  return <h2 key={i} style={{ fontSize: '16px', fontWeight: 700, color: '#111111', marginBottom: '8px', marginTop: '18px' }}>{line.slice(3)}</h2>;
         if (line.startsWith('### ')) return <h3 key={i} style={{ fontSize: '14px', fontWeight: 700, color: '#334155', marginBottom: '6px', marginTop: '14px' }}>{line.slice(4)}</h3>;
         if (line.startsWith('- [ ] ')) return <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}><span style={{ color: '#CBD5E1' }}>☐</span><span>{line.slice(6)}</span></div>;
-        if (line.startsWith('- '))   return <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}><span style={{ color: '#E8632A', flexShrink: 0 }}>•</span><span><InlineMd text={line.slice(2)} /></span></div>;
+        if (line.startsWith('- '))   return <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}><span style={{ color: '#7C3AED', flexShrink: 0 }}>•</span><span><InlineMd text={line.slice(2)} /></span></div>;
         if (line.startsWith('| '))   return null;
         if (line === '')             return <div key={i} style={{ height: '8px' }} />;
         return <p key={i} style={{ marginBottom: '6px' }}><InlineMd text={line} /></p>;
@@ -1435,44 +2270,284 @@ function DocMarkdown({ content }) {
 }
 
 // ─── Ticket Detail ────────────────────────────────────────────────────────────
-function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }) {
+function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, onAddNotification }) {
   const [newMsg, setNewMsg] = useState('');
   const [messages, setMessages] = useState(ticket.messages);
+  const [internalNotes, setInternalNotes] = useState(ticket.internalNotes || []);
+  const [newNote, setNewNote] = useState('');
   const messagesEndRef = useRef(null);
+  const jiraDetail = useJiraIssueDetail(ticket?.jiraKey);
+  const jiraSla = useJiraSla(ticket?.jiraKey);
+  const jiraChangelog = useJiraChangelog(ticket?.jiraKey);
+  const jiraWatchers = useJiraWatchers(ticket?.jiraKey);
+  const jiraCsat = useJiraCsat(ticket?.jiraKey, ticket?.status);
+  const jiraWorklog = useJiraWorklog(ticket?.jiraKey);
 
-  const statusOrder = ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
+  const workflow = useJiraWorkflow();
+  const statusOrder = workflow.statuses.map(s => s.name);
   const currentIdx = statusOrder.indexOf(ticket.status);
 
-  const sendMsg = () => {
+  // Admin-only context about the assignee: department + their own ticket count
+  const assigneeContext = useMemo(() => {
+    if (role !== 'superadmin' || !ticket.assignee) return null;
+    const u = MOCK_USERS.find(u => u.name === ticket.assignee);
+    const open = MOCK_TICKETS.filter(t => t.assignee === ticket.assignee && (t.status === 'Open' || t.status === 'In Progress')).length;
+    const total = MOCK_TICKETS.filter(t => t.assignee === ticket.assignee).length;
+    return { dept: u?.department || 'Unknown', email: u?.email || null, open, total };
+  }, [role, ticket.assignee]);
+
+  const addInternalNote = () => {
+    const text = newNote.trim();
+    if (!text) return;
+    const note = {
+      id: 'n' + Date.now(),
+      author: 'You',
+      ts: new Date().toISOString(),
+      text,
+    };
+    setInternalNotes(prev => [...prev, note]);
+    if (!ticket.internalNotes) ticket.internalNotes = [];
+    ticket.internalNotes.push(note);
+    bumpTickets();
+    setNewNote('');
+    recordAudit('ticket.internal_note', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title });
+  };
+
+  const sendMsg = async () => {
     if (!newMsg.trim()) return;
-    setMessages([...messages, {
-      from: 'You',
+    const text = newMsg.trim();
+    const localMsg = {
+      from: _currentActor?.name || 'You',
       time: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      text: newMsg.trim(),
-    }]);
+      text,
+      synced: false,
+    };
+    setMessages(prev => [...prev, localMsg]);
     setNewMsg('');
+    onAddNotification?.({
+      type: 'ticket_message',
+      title: `New message on ${ticket.id}`,
+      body: text,
+      actorName: _currentActor?.name || 'You',
+      ticketId: ticket.id,
+    });
+
+    // Fire-and-forget push to Jira when the ticket is linked
+    if (ticket.jiraKey) {
+      try {
+        const res = await fetch('/api/v1/jira/comment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: ticket.jiraKey, body: text, author: _currentActor?.name }),
+        });
+        if (res.ok) {
+          setMessages(prev => prev.map(m => m === localMsg ? { ...m, synced: true } : m));
+          recordAudit('ticket.jira_comment', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title }, { jiraKey: ticket.jiraKey });
+        } else {
+          recordAudit('ticket.jira_comment_failed', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title }, { jiraKey: ticket.jiraKey, status: res.status });
+        }
+      } catch { /* keep local-only */ }
+    }
   };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // On open, if this ticket is linked to Jira, pull any newer comments
+  useEffect(() => {
+    if (!ticket?.jiraKey) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/jira/issue/${encodeURIComponent(ticket.jiraKey)}/comments`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !Array.isArray(data.comments)) return;
+        // Merge any Jira comments not already in our local thread (match by body+author)
+        setMessages(prev => {
+          const known = new Set(prev.map(m => `${m.from}|${m.text}`));
+          const additions = data.comments
+            .filter(c => !known.has(`${c.author}|${c.body.replace(/^\[Posted via TechOps Portal by [^\]]+\]\n/, '')}`))
+            .map(c => ({
+              from: c.author,
+              time: c.created ? c.created.slice(0, 16).replace('T', ' ') : '',
+              text: c.body,
+              synced: true,
+              fromJira: true,
+            }));
+          return additions.length === 0 ? prev : [...prev, ...additions];
+        });
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [ticket?.jiraKey]);
+
   return (
     <div>
-      <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#E8632A', fontWeight: 700, fontSize: '14px', cursor: 'pointer', padding: 0, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#7C3AED', fontWeight: 700, fontSize: '14px', cursor: 'pointer', padding: 0, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '4px' }}>
         ← Back to My Tickets
       </button>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 700, letterSpacing: '0.06em', marginBottom: '4px' }}>{ticket.id}</div>
-          <div style={{ fontSize: '22px', fontWeight: 900, color: '#1A2B4A' }}>{ticket.title}</div>
+          <div style={{ fontSize: '22px', fontWeight: 900, color: '#111111' }}>{ticket.title}</div>
+          {(assigneeContext || ticket.requester) && (
+            <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {role === 'superadmin' && ticket.requester && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: '#EFF6FF', borderRadius: '100px', border: '1px solid #BFDBFE', fontSize: '11px', color: '#1E3A8A', fontWeight: 600 }}>
+                  🙋 Submitted by <strong>{ticket.requester.name}</strong>{ticket.requester.email ? <> · {ticket.requester.email}</> : null}
+                </div>
+              )}
+              {assigneeContext && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: '#F5F3FF', borderRadius: '100px', border: '1px solid #C4B5FD', fontSize: '11px', color: '#5B21B6', fontWeight: 600 }}>
+                  👤 Assigned to <strong>{ticket.assignee}</strong> · {assigneeContext.dept} · {assigneeContext.open} open / {assigneeContext.total} total
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <span style={S.badge(PRIORITY_COLORS[ticket.priority])}>{ticket.priority}</span>
           <span style={S.badge(STATUS_COLORS[ticket.status])}>{ticket.status}</span>
         </div>
       </div>
+
+      {/* JSM SLA cycles (Jira-authoritative) */}
+      {jiraSla?.available && Array.isArray(jiraSla.cycles) && jiraSla.cycles.length > 0 && (
+        <div style={{ ...S.card, marginBottom: '20px', borderLeft: '4px solid #3B82F6' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>SLA (from Jira Service Management)</div>
+          <div style={{ display: 'grid', gap: '6px' }}>
+            {jiraSla.cycles.map(c => (
+              <div key={c.name} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '13px' }}>
+                <span style={{ fontWeight: 700, color: '#111111' }}>{c.name}</span>
+                {c.paused && <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#F1F5F9', color: '#475569', fontWeight: 700 }}>⏸ Paused</span>}
+                {c.breached
+                  ? <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: '#FEE2E2', color: '#B91C1C', fontWeight: 700 }}>🔴 Breached</span>
+                  : <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: '#DCFCE7', color: '#15803D', fontWeight: 700 }}>🟢 On track</span>}
+                {c.remainingTime && <span style={{ color: '#64748B' }}>Remaining: {c.remainingTime}</span>}
+                {c.elapsedTime && <span style={{ color: '#94A3B8' }}>Elapsed: {c.elapsedTime}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Linked Jira issues */}
+      {jiraDetail?.links && jiraDetail.links.length > 0 && (
+        <div style={{ ...S.card, marginBottom: '20px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>🔗 Linked issues</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {jiraDetail.links.map(l => (
+              <a
+                key={`${l.key}-${l.direction}`}
+                href={`https://pomelofashion.atlassian.net/browse/${l.key}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: '#F8FAFC', borderRadius: '7px', textDecoration: 'none', color: '#1E293B' }}
+              >
+                <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: '#E2E8F0', color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{l.label || l.type}</span>
+                <span style={{ fontSize: '12px', color: '#1D4ED8', fontWeight: 700 }}>{l.key}</span>
+                <span style={{ fontSize: '12px', color: '#475569', flex: 1 }}>{l.summary}</span>
+                {l.status && <span style={{ ...S.badge(statusColorFor(l.status)), fontSize: '10px' }}>{l.status}</span>}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CSAT (resolved tickets only) */}
+      {jiraCsat?.available && jiraCsat.rating != null && (
+        <div style={{ ...S.card, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>Customer satisfaction</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '20px' }}>
+            {Array.from({ length: jiraCsat.max || 5 }).map((_, i) => (
+              <span key={i} style={{ color: i < jiraCsat.rating ? '#F59E0B' : '#E2E8F0' }}>★</span>
+            ))}
+            <span style={{ fontSize: '13px', color: '#475569', fontWeight: 700, marginLeft: '4px' }}>{jiraCsat.rating}/{jiraCsat.max || 5}</span>
+          </div>
+          {jiraCsat.comment && <div style={{ flex: 1, fontSize: '13px', color: '#475569', fontStyle: 'italic' }}>"{jiraCsat.comment}"</div>}
+        </div>
+      )}
+
+      {/* Worklog summary */}
+      {jiraWorklog && jiraWorklog.totalSeconds > 0 && role === 'superadmin' && (
+        <div style={{ ...S.card, marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>⏱ Time logged ({Math.round(jiraWorklog.totalSeconds / 360) / 10}h total)</span>
+            <span style={{ fontSize: '11px', color: '#94A3B8' }}>{jiraWorklog.entries.length} entries</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {jiraWorklog.totals.map(t => (
+              <span key={t.author} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '4px', background: '#F1F5F9', color: '#475569', fontWeight: 700 }}>
+                {t.author}: {t.hours}h
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Watchers */}
+      {ticket?.jiraKey && jiraWatchers.watchCount > 0 && (
+        <div style={{ ...S.card, marginBottom: '20px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>👁 Watchers ({jiraWatchers.watchCount})</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {jiraWatchers.watchers.length === 0
+              ? <span style={{ fontSize: '12px', color: '#94A3B8' }}>Watcher list requires elevated Jira permissions.</span>
+              : jiraWatchers.watchers.map(w => (
+                  <span key={w.accountId} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '100px', background: '#EFF6FF', color: '#1E3A8A', fontWeight: 600 }}>{w.displayName}</span>
+                ))}
+          </div>
+        </div>
+      )}
+
+      {/* Jira issue metadata badges */}
+      {jiraDetail && (jiraDetail.issueType || jiraDetail.labels.length > 0 || jiraDetail.components.length > 0 || jiraDetail.fixVersions.length > 0) && (
+        <div style={{ ...S.card, marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+          {jiraDetail.issueType && <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '4px', background: '#F1F5F9', color: '#475569', fontWeight: 700 }}>📋 {jiraDetail.issueType}</span>}
+          {jiraDetail.components.map(c => <span key={c.id} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '4px', background: '#ECFCCB', color: '#3F6212', fontWeight: 700 }}>🧩 {c.name}</span>)}
+          {jiraDetail.labels.map(l => <span key={l} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '100px', background: '#FAF5FF', color: '#6B21A8', fontWeight: 600 }}>#{l}</span>)}
+          {jiraDetail.fixVersions.map(v => <span key={v} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '4px', background: '#FFF7ED', color: '#5B21B6', fontWeight: 700 }}>🏷 fixVersion: {v}</span>)}
+        </div>
+      )}
+
+      {/* Attachments — merges locally-persisted files (with data URLs for in-tab
+          preview) and Jira-side attachments (linked at their Jira content URLs). */}
+      <TicketAttachments local={ticket.attachments} jira={jiraDetail?.attachments} />
+
+      {role === 'superadmin' && (
+        <div style={{ ...S.card, marginBottom: '20px', borderLeft: '4px solid #FBBF24' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>Internal notes</span>
+            <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Admin only</span>
+          </div>
+          {internalNotes.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
+              {internalNotes.map(n => (
+                <div key={n.id} style={{ padding: '10px 12px', background: '#FFFBEB', borderRadius: '8px', border: '1px solid #FDE68A' }}>
+                  <div style={{ fontSize: '13px', color: '#1E293B', whiteSpace: 'pre-wrap' }}>{n.text}</div>
+                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>{n.author} · {new Date(n.ts).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              value={newNote}
+              onChange={e => setNewNote(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addInternalNote(); }}
+              placeholder="Leave a note other admins will see…"
+              aria-label="Add internal note"
+              style={{ flex: 1, padding: '9px 14px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontFamily: "'Lato', sans-serif", outline: 'none' }}
+            />
+            <button onClick={addInternalNote} disabled={!newNote.trim()} style={{ padding: '9px 16px', background: newNote.trim() ? '#111111' : '#E2E8F0', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: newNote.trim() ? 'pointer' : 'not-allowed' }}>
+              Add note
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Status Tracker */}
       <div style={{ ...S.card, marginBottom: '20px' }}>
@@ -1483,7 +2558,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                 <div style={{
                   width: '28px', height: '28px', borderRadius: '50%',
-                  background: i <= currentIdx ? '#E8632A' : '#E2E8F0',
+                  background: i <= currentIdx ? '#7C3AED' : '#E2E8F0',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: i <= currentIdx ? '#fff' : '#94A3B8',
                   fontSize: '13px', fontWeight: 700,
@@ -1492,10 +2567,10 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
                 }}>
                   {i < currentIdx ? '✓' : i + 1}
                 </div>
-                <div style={{ fontSize: '11px', color: i <= currentIdx ? '#E8632A' : '#94A3B8', fontWeight: i === currentIdx ? 700 : 400, whiteSpace: 'nowrap' }}>{s}</div>
+                <div style={{ fontSize: '11px', color: i <= currentIdx ? '#7C3AED' : '#94A3B8', fontWeight: i === currentIdx ? 700 : 400, whiteSpace: 'nowrap' }}>{s}</div>
               </div>
               {i < statusOrder.length - 1 && (
-                <div style={{ flex: 1, height: '2px', background: i < currentIdx ? '#E8632A' : '#E2E8F0', margin: '0 4px', marginBottom: '20px' }} />
+                <div style={{ flex: 1, height: '2px', background: i < currentIdx ? '#7C3AED' : '#E2E8F0', margin: '0 4px', marginBottom: '20px' }} />
               )}
             </div>
           ))}
@@ -1503,22 +2578,35 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-        {/* Timeline */}
+        {/* Timeline — merges local actions + Jira changelog when ticket is linked */}
         <div style={S.card}>
           <div style={{ fontSize: '13px', fontWeight: 700, color: '#475569', marginBottom: '14px' }}>Activity Timeline</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {ticket.timeline.map((t, i) => (
-              <div key={i} style={{ display: 'flex', gap: '10px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#E8632A', flexShrink: 0, marginTop: '3px' }} />
-                  {i < ticket.timeline.length - 1 && <div style={{ width: '1px', flex: 1, background: '#E2E8F0', marginTop: '4px' }} />}
+            {(() => {
+              const localEntries = (ticket.timeline || []).map((t, i) => ({ key: `l-${i}`, when: t.date, actor: t.actor, action: t.action, source: 'local' }));
+              const jiraEntries = (jiraChangelog || []).flatMap(h =>
+                h.changes.map((c, idx) => ({
+                  key: `j-${h.id}-${idx}`,
+                  when: h.created,
+                  actor: h.author,
+                  action: `${c.field}: ${c.from || '—'} → ${c.to || '—'}`,
+                  source: 'jira',
+                }))
+              );
+              const merged = [...localEntries, ...jiraEntries].sort((a, b) => String(b.when).localeCompare(String(a.when)));
+              return merged.map((t, i) => (
+                <div key={t.key} style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: t.source === 'jira' ? '#1D4ED8' : '#7C3AED', flexShrink: 0, marginTop: '3px' }} />
+                    {i < merged.length - 1 && <div style={{ width: '1px', flex: 1, background: '#E2E8F0', marginTop: '4px' }} />}
+                  </div>
+                  <div style={{ paddingBottom: '8px' }}>
+                    <div style={{ fontSize: '13px', color: '#334155' }}>{t.action} {t.source === 'jira' && <span style={{ fontSize: '10px', color: '#1D4ED8', fontWeight: 700 }}>· Jira</span>}</div>
+                    <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>{String(t.when).slice(0, 16).replace('T', ' ')} · {t.actor}</div>
+                  </div>
                 </div>
-                <div style={{ paddingBottom: '8px' }}>
-                  <div style={{ fontSize: '13px', color: '#334155', fontWeight: 400 }}>{t.action}</div>
-                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>{t.date} · {t.actor}</div>
-                </div>
-              </div>
-            ))}
+              ));
+            })()}
           </div>
         </div>
 
@@ -1533,14 +2621,14 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
                   <select
                     value={ticket.assignee || ''}
                     onChange={e => onAssigneeChange(ticket.id, e.target.value || null)}
-                    style={{ ...S.select, width: 'auto', padding: '3px 24px 3px 8px', fontSize: '13px', fontWeight: 700, color: '#1A2B4A' }}
+                    style={{ ...S.select, width: 'auto', padding: '3px 24px 3px 8px', fontSize: '13px', fontWeight: 700, color: '#111111' }}
                   >
                     <option value="">Unassigned</option>
                     {ALL_AGENTS.filter(a => a !== 'Unassigned').map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </div>
               ) : (
-                <span style={{ fontSize: '13px', color: '#1A2B4A', fontWeight: 700 }}>{ticket.assignee || 'Unassigned'}</span>
+                <span style={{ fontSize: '13px', color: '#111111', fontWeight: 700 }}>{ticket.assignee || 'Unassigned'}</span>
               )}
             </div>
             {[
@@ -1554,14 +2642,27 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
             ].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '13px', color: '#64748B' }}>{k}</span>
-                <span style={{ fontSize: '13px', color: '#1A2B4A', fontWeight: 700 }}>{v}</span>
+                <span style={{ fontSize: '13px', color: '#111111', fontWeight: 700 }}>{v}</span>
               </div>
             ))}
           </div>
           <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
             <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Description</div>
-            <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>{ticket.description}</div>
+            <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.description}</div>
           </div>
+          {ticket.currentResult && (
+            <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Current result</div>
+              <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.currentResult}</div>
+            </div>
+          )}
+          {ticket.expectedResult && (
+            <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>Expected result</div>
+              <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.expectedResult}</div>
+            </div>
+          )}
+          {/* Attachment summary line is replaced by the dedicated preview card above. */}
           <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #F1F5F9' }}>
             {(role === 'superadmin' || role === 'admin') ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1597,7 +2698,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
               <div key={i} style={{ display: 'flex', flexDirection: isYou ? 'row-reverse' : 'row', gap: '8px', alignItems: 'flex-end' }}>
                 <div style={{
                   width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
-                  background: isYou ? '#E8632A' : '#1A2B4A',
+                  background: isYou ? '#7C3AED' : '#111111',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: '#fff', fontSize: '11px', fontWeight: 700,
                 }}>
@@ -1608,7 +2709,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
                     {m.from} · {m.time}
                   </div>
                   <div style={{
-                    background: isYou ? '#E8632A' : '#F1F5F9',
+                    background: isYou ? '#7C3AED' : '#F1F5F9',
                     color: isYou ? '#fff' : '#334155',
                     padding: '10px 14px', borderRadius: isYou ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
                     fontSize: '13px', lineHeight: 1.5,
@@ -1641,6 +2742,138 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange }
   );
 }
 
+// ─── SLA chip ─────────────────────────────────────────────────────────────────
+function SlaChip({ ticket }) {
+  const state = slaStateFor(ticket);
+  if (state === 'ok') return null;
+  const target = SLA_TARGETS_HOURS[ticket.priority];
+  if (!target) return null;
+  const ageHrs = (Date.now() - new Date(ticket.created).getTime()) / 3600000;
+  const overdueHrs = Math.max(0, ageHrs - target.resolution);
+  const fmt = h => h >= 24 ? `${Math.floor(h / 24)}d` : `${Math.round(h)}h`;
+  const palette = state === 'breached'
+    ? { bg: '#FEE2E2', fg: '#B91C1C', label: `🔴 SLA breached +${fmt(overdueHrs)}` }
+    : { bg: '#FEF3C7', fg: '#92400E', label: `🟡 SLA at risk` };
+  const title = `Priority ${ticket.priority}: resolution target ${target.resolution}h; age ${fmt(ageHrs)}`;
+  return <span title={title} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: palette.bg, color: palette.fg, fontWeight: 700 }}>{palette.label}</span>;
+}
+
+// ─── Jira sync chip ───────────────────────────────────────────────────────────
+function JiraSyncChip({ ticket }) {
+  if (!ticket) return null;
+  const state = ticket.jiraSyncState || (ticket.jiraKey ? 'synced' : 'local-only');
+  const palette = {
+    'synced': { bg: '#DBEAFE', fg: '#1D4ED8', label: `🔵 ${ticket.jiraKey || 'Jira'}` },
+    'syncing': { bg: '#FEF3C7', fg: '#92400E', label: '🔄 Syncing…' },
+    'error': { bg: '#FEE2E2', fg: '#B91C1C', label: '❌ Sync error' },
+    'diverged': { bg: '#FFEDD5', fg: '#5B21B6', label: '⚠️ Diverged' },
+    'local-only': { bg: '#F1F5F9', fg: '#64748B', label: '⚪ Local only' },
+  };
+  const p = palette[state] || palette['local-only'];
+  const title = state === 'error' ? (ticket.jiraSyncError || 'Sync error')
+    : state === 'synced' && ticket.jiraSyncedAt ? `Synced with ${ticket.jiraKey} at ${new Date(ticket.jiraSyncedAt).toLocaleString()}`
+    : state === 'local-only' ? 'No Jira link — submit while Jira is configured to create one'
+    : '';
+  return (
+    <span title={title} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: p.bg, color: p.fg, fontWeight: 700 }}>{p.label}</span>
+  );
+}
+
+// ─── Recent Activity feed (Home) ──────────────────────────────────────────────
+// Live view of the most-recently-updated tickets, plus (admin only) the last
+// few audit entries so admins see admin actions on their dashboard.
+function RecentActivityFeed({ role, onTicket, setSection }) {
+  const [, _setV] = useState(0);
+  useEffect(() => subscribeTickets(_setV), []);
+  useEffect(() => subscribeAudit(_setV), []);
+
+  const recentTickets = useMemo(() => {
+    return MOCK_TICKETS
+      .slice()
+      .sort((a, b) => (b.updated || '').localeCompare(a.updated || ''))
+      .slice(0, role === 'superadmin' ? 3 : 5);
+  }, [role]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const recentAudit = useMemo(() => {
+    if (role !== 'superadmin') return [];
+    return listAudit().slice(0, 3);
+  }, [role]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const auditLabel = a => ({
+    'user.create': '➕ User created',
+    'user.update': '✏️ User edited',
+    'user.promote': '⬆️ Promoted to superadmin',
+    'user.demote': '⬇️ Demoted to user',
+    'user.deactivate': '🚫 User deactivated',
+    'user.reactivate': '✅ User reactivated',
+    'user.force_re_otp': '🔁 Force re-OTP',
+    'user.reset_password': '🔑 Password reset',
+    'admin.view_as': '👁 View-as switched',
+    'session.login': '🔓 Admin login',
+    'session.logout': '🔒 Admin logout',
+    'system.maintenance_on': '🛠 Maintenance ON',
+    'system.maintenance_off': '🛠 Maintenance OFF',
+    'ticket.bulk_status': '📋 Bulk status change',
+    'ticket.bulk_reassign': '📋 Bulk reassign',
+    'ticket.internal_note': '📝 Internal note',
+  })[a] || a;
+
+  const fmtAgo = iso => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+        <div style={{ fontSize: '16px', fontWeight: 700, color: '#111111' }}>Recent Activity</div>
+        {role === 'superadmin' && (
+          <button onClick={() => setSection('audit')} style={{ background: 'none', border: 'none', color: '#7C3AED', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}>
+            View full audit log →
+          </button>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {recentTickets.map(t => (
+          <button
+            key={t.id}
+            onClick={() => onTicket(t)}
+            style={{ ...S.card, display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', width: '100%', textAlign: 'left', cursor: 'pointer', transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#7C3AED'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(124,58,237,0.08)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; }}
+          >
+            <span style={S.badge(PRIORITY_COLORS[t.priority])}>{t.priority}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#111111' }}>{t.title}</div>
+              <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>{t.id} · {t.category} · updated {t.updated}</div>
+            </div>
+            <span style={S.badge(STATUS_COLORS[t.status])}>{t.status}</span>
+            <span style={{ color: '#CBD5E1', fontSize: '16px', flexShrink: 0 }}>↗</span>
+          </button>
+        ))}
+        {recentAudit.length > 0 && (
+          <div style={{ marginTop: '6px', fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Admin actions</div>
+        )}
+        {recentAudit.map(e => (
+          <div key={e.id} style={{ ...S.card, display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 16px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B', flexShrink: 0 }}>{auditLabel(e.action)}</div>
+            <div style={{ flex: 1, fontSize: '12px', color: '#64748B' }}>
+              {e.actorName}{e.targetLabel ? ` · ${e.targetLabel}` : ''}
+            </div>
+            <div style={{ fontSize: '11px', color: '#94A3B8', flexShrink: 0 }}>{fmtAgo(e.ts)}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 // ─── Ticket Popup Modal (Home Recent Activity) ────────────────────────────────
 function TicketPopupModal({ ticket, onClose }) {
   useEffect(() => {
@@ -1651,8 +2884,8 @@ function TicketPopupModal({ ticket, onClose }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 300, animation: 'fadeIn 0.15s ease' }} />
-      <div style={{
+      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 300, animation: 'fadeIn 0.15s ease' }} />
+      <div role="dialog" aria-modal="true" aria-label={ticket?.title || 'Ticket details'} style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         background: '#fff', borderRadius: '16px', zIndex: 301,
         width: '540px', maxWidth: '95vw', maxHeight: '85vh',
@@ -1660,7 +2893,7 @@ function TicketPopupModal({ ticket, onClose }) {
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         {/* Header */}
-        <div style={{ background: '#1A2B4A', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+        <div style={{ background: '#111111', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 700, marginBottom: '4px', letterSpacing: '0.06em' }}>{ticket.id}</div>
             <div style={{ fontSize: '16px', fontWeight: 900, color: '#fff', lineHeight: 1.3 }}>{ticket.title}</div>
@@ -1680,8 +2913,20 @@ function TicketPopupModal({ ticket, onClose }) {
           {/* Description */}
           <div style={{ background: '#F8F9FB', borderRadius: '8px', padding: '14px' }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Description</div>
-            <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>{ticket.description}</div>
+            <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.description}</div>
           </div>
+          {ticket.currentResult && (
+            <div style={{ background: '#F8F9FB', borderRadius: '8px', padding: '14px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Current result</div>
+              <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.currentResult}</div>
+            </div>
+          )}
+          {ticket.expectedResult && (
+            <div style={{ background: '#F8F9FB', borderRadius: '8px', padding: '14px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Expected result</div>
+              <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.expectedResult}</div>
+            </div>
+          )}
 
           {/* Meta grid */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -1695,7 +2940,7 @@ function TicketPopupModal({ ticket, onClose }) {
             ].map(([k, v]) => (
               <div key={k} style={{ background: '#F8F9FB', borderRadius: '8px', padding: '10px 12px' }}>
                 <div style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>{k}</div>
-                <div style={{ fontSize: '13px', color: '#1A2B4A', fontWeight: 700 }}>{v}</div>
+                <div style={{ fontSize: '13px', color: '#111111', fontWeight: 700 }}>{v}</div>
               </div>
             ))}
           </div>
@@ -1707,7 +2952,7 @@ function TicketPopupModal({ ticket, onClose }) {
               {ticket.timeline.map((t, i) => (
                 <div key={i} style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#E8632A', flexShrink: 0, marginTop: '3px' }} />
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#7C3AED', flexShrink: 0, marginTop: '3px' }} />
                     {i < ticket.timeline.length - 1 && <div style={{ width: '1px', flex: 1, background: '#E2E8F0', marginTop: '3px' }} />}
                   </div>
                   <div style={{ paddingBottom: '6px' }}>
@@ -1744,8 +2989,8 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 400, animation: 'fadeIn 0.15s ease' }} />
-      <div style={{
+      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 400, animation: 'fadeIn 0.15s ease' }} />
+      <div role="dialog" aria-modal="true" aria-label="Profile" style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         background: '#fff', borderRadius: '16px', zIndex: 401,
         width: '400px', maxWidth: '95vw',
@@ -1753,7 +2998,7 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
         overflow: 'hidden',
       }}>
         {/* Header */}
-        <div style={{ background: '#1A2B4A', padding: '20px 22px 40px', position: 'relative' }}>
+        <div style={{ background: '#111111', padding: '20px 22px 40px', position: 'relative' }}>
           <button onClick={onClose} style={{ position: 'absolute', top: '14px', right: '16px', background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
           <div style={{ fontSize: '14px', fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>My Profile</div>
         </div>
@@ -1762,7 +3007,7 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: '-32px', marginBottom: '16px' }}>
           <div style={{
             width: '64px', height: '64px', borderRadius: '50%',
-            background: '#E8632A', border: '3px solid #fff',
+            background: '#7C3AED', border: '3px solid #fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: '#fff', fontSize: '22px', fontWeight: 900,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
@@ -1773,8 +3018,8 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           <span style={{
             display: 'inline-block', padding: '4px 14px', borderRadius: '100px',
-            background: role === 'superadmin' ? '#E8632A18' : '#1A2B4A18',
-            color: role === 'superadmin' ? '#E8632A' : '#1A2B4A',
+            background: role === 'superadmin' ? '#7C3AED18' : '#11111118',
+            color: role === 'superadmin' ? '#7C3AED' : '#111111',
             fontSize: '12px', fontWeight: 700,
           }}>
             {role === 'superadmin' ? '⭐ Super Admin' : '👤 User'}
@@ -1797,7 +3042,7 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
                   style={S.input}
                 />
               ) : (
-                <div style={{ fontSize: '14px', color: '#1A2B4A', fontWeight: 700, padding: '10px 0', borderBottom: '1px solid #F1F5F9' }}>{form[key]}</div>
+                <div style={{ fontSize: '14px', color: '#111111', fontWeight: 700, padding: '10px 0', borderBottom: '1px solid #F1F5F9' }}>{form[key]}</div>
               )}
             </div>
           ))}
@@ -1862,8 +3107,8 @@ function NewDocModal({ onSave, onClose }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 500, animation: 'fadeIn 0.15s ease' }} />
-      <div style={{
+      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 500, animation: 'fadeIn 0.15s ease' }} />
+      <div role="dialog" aria-modal="true" aria-label="New document" style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         background: '#fff', borderRadius: '16px', zIndex: 501,
         width: '600px', maxWidth: '95vw', maxHeight: '88vh',
@@ -1871,7 +3116,7 @@ function NewDocModal({ onSave, onClose }) {
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: '16px', fontWeight: 900, color: '#1A2B4A' }}>Create New Document</div>
+          <div style={{ fontSize: '16px', fontWeight: 900, color: '#111111' }}>Create New Document</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94A3B8', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
         </div>
 
@@ -1879,28 +3124,28 @@ function NewDocModal({ onSave, onClose }) {
           <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr 1fr', gap: '14px' }}>
             <div>
               <label style={S.label}>Icon</label>
-              <input value={form.icon} onChange={e => setForm(f => ({ ...f, icon: e.target.value }))} maxLength={2} placeholder="📄" style={{ ...S.input, textAlign: 'center', fontSize: '20px' }} />
+              <input value={form.icon} onChange={e => setForm(f => ({ ...f, icon: e.target.value }))} maxLength={2} placeholder="📄" aria-label="Document icon" style={{ ...S.input, textAlign: 'center', fontSize: '20px' }} />
               {err('icon')}
             </div>
             <div>
               <label style={S.label}>Title *</label>
-              <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Document title" style={{ ...S.input, borderColor: errors.title ? '#DC2626' : '#E2E8F0' }} />
+              <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Document title" aria-label="Document title" style={{ ...S.input, borderColor: errors.title ? '#DC2626' : '#E2E8F0' }} />
               {err('title')}
             </div>
             <div>
               <label style={S.label}>Category *</label>
-              <input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="e.g. Security" style={{ ...S.input, borderColor: errors.category ? '#DC2626' : '#E2E8F0' }} />
+              <input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="e.g. Security" aria-label="Category" style={{ ...S.input, borderColor: errors.category ? '#DC2626' : '#E2E8F0' }} />
               {err('category')}
             </div>
           </div>
           <div>
             <label style={S.label}>Summary *</label>
-            <textarea value={form.summary} onChange={e => setForm(f => ({ ...f, summary: e.target.value }))} placeholder="One or two sentences describing the document." style={{ ...S.textarea, minHeight: '72px', borderColor: errors.summary ? '#DC2626' : '#E2E8F0' }} />
+            <textarea value={form.summary} onChange={e => setForm(f => ({ ...f, summary: e.target.value }))} placeholder="One or two sentences describing the document." aria-label="Document summary" style={{ ...S.textarea, minHeight: '72px', borderColor: errors.summary ? '#DC2626' : '#E2E8F0' }} />
             {err('summary')}
           </div>
           <div>
             <label style={S.label}>Content * <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#94A3B8' }}>— supports # headings, ## subheadings, - bullet lists, **bold**</span></label>
-            <textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} placeholder={'# Document Title\n\n## Section\nYour content here...'} style={{ ...S.textarea, minHeight: '220px', fontFamily: 'monospace', fontSize: '13px', borderColor: errors.content ? '#DC2626' : '#E2E8F0' }} />
+            <textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} placeholder={'# Document Title\n\n## Section\nYour content here...'} aria-label="Document content (Markdown)" style={{ ...S.textarea, minHeight: '220px', fontFamily: 'monospace', fontSize: '13px', borderColor: errors.content ? '#DC2626' : '#E2E8F0' }} />
             {err('content')}
           </div>
         </div>
@@ -1926,8 +3171,8 @@ function EditSuggestionModal({ suggestion, onSave, onClose }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 500, animation: 'fadeIn 0.15s ease' }} />
-      <div style={{
+      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 500, animation: 'fadeIn 0.15s ease' }} />
+      <div role="dialog" aria-modal="true" aria-label="Edit suggestion" style={{
         position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
         background: '#fff', borderRadius: '14px', zIndex: 501,
         width: '480px', maxWidth: '95vw',
@@ -1935,17 +3180,17 @@ function EditSuggestionModal({ suggestion, onSave, onClose }) {
         overflow: 'hidden',
       }}>
         <div style={{ padding: '18px 22px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: '15px', fontWeight: 900, color: '#1A2B4A' }}>Edit Suggestion</div>
+          <div style={{ fontSize: '15px', fontWeight: 900, color: '#111111' }}>Edit Suggestion</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94A3B8', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
         </div>
         <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
             <label style={S.label}>Title</label>
-            <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} style={S.input} />
+            <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} aria-label="Suggestion title" style={S.input} />
           </div>
           <div>
             <label style={S.label}>Description</label>
-            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ ...S.textarea, minHeight: '100px' }} />
+            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} aria-label="Suggestion description" style={{ ...S.textarea, minHeight: '100px' }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
             <button onClick={onClose} style={S.ghostBtn}>Cancel</button>
@@ -1977,12 +3222,12 @@ function SuggestionCard({ suggestion, currentUser, role, onEdit, onDelete }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
           <div style={{
-            width: '30px', height: '30px', borderRadius: '50%', background: '#1A2B4A',
+            width: '30px', height: '30px', borderRadius: '50%', background: '#111111',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: '#fff', fontSize: '11px', fontWeight: 700, flexShrink: 0,
           }}>{initials}</div>
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: '#1A2B4A' }}>{suggestion.author}</div>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>{suggestion.author}</div>
             <div style={{ fontSize: '11px', color: '#94A3B8' }}>{timeAgo}</div>
           </div>
         </div>
@@ -1995,7 +3240,7 @@ function SuggestionCard({ suggestion, currentUser, role, onEdit, onDelete }) {
           )}
         </div>
       </div>
-      <div style={{ fontSize: '15px', fontWeight: 900, color: '#1A2B4A' }}>{suggestion.title}</div>
+      <div style={{ fontSize: '15px', fontWeight: 900, color: '#111111' }}>{suggestion.title}</div>
       <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>{suggestion.description}</div>
     </div>
   );
@@ -2018,14 +3263,14 @@ function NewSuggestionForm({ currentUser, onSubmit }) {
 
   return (
     <div style={{ ...S.card, marginBottom: '16px', background: '#FAFBFF', border: '1.5px solid #BFDBFE' }}>
-      <div style={{ fontSize: '14px', fontWeight: 700, color: '#1A2B4A', marginBottom: '12px' }}>💡 Suggest a Documentation Topic</div>
+      <div style={{ fontSize: '14px', fontWeight: 700, color: '#111111', marginBottom: '12px' }}>💡 Suggest a Documentation Topic</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <div>
-          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Topic title — what should be documented?" style={{ ...S.input, borderColor: errors.title ? '#DC2626' : '#E2E8F0' }} />
+          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Topic title — what should be documented?" aria-label="Suggestion title" style={{ ...S.input, borderColor: errors.title ? '#DC2626' : '#E2E8F0' }} />
           {errors.title && <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '3px' }}>{errors.title}</div>}
         </div>
         <div>
-          <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe what you need — why it would be helpful, who it's for, what it should cover." style={{ ...S.textarea, minHeight: '80px', borderColor: errors.description ? '#DC2626' : '#E2E8F0' }} />
+          <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe what you need — why it would be helpful, who it's for, what it should cover." aria-label="Suggestion description" style={{ ...S.textarea, minHeight: '80px', borderColor: errors.description ? '#DC2626' : '#E2E8F0' }} />
           {errors.description && <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '3px' }}>{errors.description}</div>}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -2043,14 +3288,30 @@ function HomePage({ setSection, role, currentUser }) {
   const [activeTicket, setActiveTicket] = useState(null);
   const firstName = currentUser?.name?.split(' ')[0] || 'there';
 
+  // Admin-only stats: critical open, oldest unresolved age, p50 resolution time, SLA breaches
+  const adminStats = useMemo(() => {
+    if (role !== 'superadmin') return null;
+    const now = Date.now();
+    const isOpen = t => !DONE_STATUSES.has(t.status);
+    const critical = MOCK_TICKETS.filter(t => t.priority === 'Critical' && isOpen(t)).length;
+    const unresolved = MOCK_TICKETS.filter(isOpen);
+    const oldestAgeDays = unresolved.length === 0 ? 0 : Math.max(...unresolved.map(t => Math.floor((now - new Date(t.created).getTime()) / 86400000)));
+    const resolvedTickets = MOCK_TICKETS.filter(t => DONE_STATUSES.has(t.status));
+    const avgResolutionDays = resolvedTickets.length === 0 ? 0 :
+      Math.round(resolvedTickets.reduce((acc, t) => acc + Math.max(0, (new Date(t.updated) - new Date(t.created)) / 86400000), 0) / resolvedTickets.length);
+    const slaBreached = MOCK_TICKETS.filter(t => slaStateFor(t) === 'breached').length;
+    const slaAtRisk = MOCK_TICKETS.filter(t => slaStateFor(t) === 'at-risk').length;
+    return { critical, oldestAgeDays, avgResolutionDays, unresolvedCount: unresolved.length, slaBreached, slaAtRisk };
+  }, [role]);
+
   return (
     <div>
       {/* Edge-to-edge hero banner */}
-      <div style={{ position: 'relative', left: '50%', transform: 'translateX(-50%)', width: '100vw', marginTop: '-32px', marginBottom: '28px', background: 'linear-gradient(150deg, #1A2B4A 0%, #1E3560 55%, #2B4F8A 100%)', padding: '64px 40px 68px', textAlign: 'center', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', left: '50%', transform: 'translateX(-50%)', width: '100vw', marginTop: '-32px', marginBottom: '28px', background: 'linear-gradient(150deg, #111111 0%, #1F0F40 55%, #3F1E80 100%)', padding: '64px 40px 68px', textAlign: 'center', overflow: 'hidden' }}>
         {/* Subtle radial glow */}
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 70% 80% at 50% 120%, rgba(43,79,138,0.6) 0%, transparent 70%)', pointerEvents: 'none' }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: '#E8632A', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '14px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: '#7C3AED', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '14px' }}>
             IT Service Management
           </div>
           <h1 style={{ fontSize: '48px', fontWeight: 900, color: '#fff', margin: '0 0 14px', lineHeight: 1.1, letterSpacing: '-0.01em' }}>
@@ -2059,16 +3320,86 @@ function HomePage({ setSection, role, currentUser }) {
           <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.65)', margin: '0 0 36px', fontWeight: 400 }}>
             Your single hub for IT support, documentation, and service requests.
           </p>
-          <button onClick={() => setSection('submit')} style={{ background: '#E8632A', color: '#fff', border: 'none', borderRadius: '100px', padding: '16px 40px', fontFamily: "'Lato', sans-serif", fontWeight: 900, fontSize: '16px', cursor: 'pointer', letterSpacing: '0.01em' }}>
+          <button onClick={() => setSection('submit')} style={{ background: '#7C3AED', color: '#fff', border: 'none', borderRadius: '100px', padding: '16px 40px', fontFamily: "'Lato', sans-serif", fontWeight: 900, fontSize: '16px', cursor: 'pointer', letterSpacing: '0.01em' }}>
             Submit a Ticket
           </button>
         </div>
       </div>
 
+      {/* Featured docs — visible to everyone when admin pins them */}
+      {(() => {
+        const featured = listFeaturedDocs();
+        if (featured.length === 0) return null;
+        return (
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#92400E', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>📌 Featured by IT</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+              {featured.slice(0, 3).map(d => (
+                <button key={d.id} onClick={() => setSection('docs')} style={{ textAlign: 'left', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', padding: '14px 16px', cursor: 'pointer', fontFamily: "'Lato', sans-serif" }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>{d.icon || '📄'}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                      <div style={{ fontSize: '11px', color: '#92400E', fontWeight: 700, marginTop: '2px' }}>{d.category}</div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {adminStats && (
+        <div style={{ background: 'linear-gradient(135deg, #111111 0%, #000000 100%)', borderRadius: '14px', padding: '20px 24px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: '#7C3AED', borderRadius: '8px', width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px' }}>🛠</div>
+              <div>
+                <div style={{ color: '#fff', fontWeight: 900, fontSize: '14px' }}>Admin dashboard</div>
+                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', marginTop: '2px' }}>Live ticket health across the queue</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#7C3AED', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{adminStats.unresolvedCount}</div>
+                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>Open</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{adminStats.critical}</div>
+                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>Critical Active</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#FBBF24', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{adminStats.oldestAgeDays}d</div>
+                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>Oldest Unresolved</div>
+              </div>
+              <button
+                onClick={() => setSection('mytickets')}
+                title={`${adminStats.slaBreached} breached + ${adminStats.slaAtRisk} at risk — click for My Tickets`}
+                style={{ textAlign: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+              >
+                <div style={{ color: adminStats.slaBreached > 0 ? '#FCA5A5' : '#fff', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>
+                  {adminStats.slaBreached}
+                  {adminStats.slaAtRisk > 0 && <span style={{ fontSize: '13px', color: '#FBBF24', marginLeft: '4px' }}>+{adminStats.slaAtRisk}</span>}
+                </div>
+                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>SLA Breached</div>
+              </button>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ color: '#fff', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{adminStats.avgResolutionDays}d</div>
+                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>Avg Resolution</div>
+              </div>
+              <button onClick={() => setSection('admin')} style={{ alignSelf: 'center', background: 'rgba(124,58,237,0.2)', color: '#7C3AED', border: '1px solid #7C3AED', borderRadius: '7px', padding: '8px 14px', fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                Open Console →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '28px' }}>
         {[
-          { num: MOCK_TICKETS.length, label: 'Total Tickets', color: '#1A2B4A' },
-          { num: open, label: 'Active', color: '#E8632A' },
+          { num: MOCK_TICKETS.length, label: 'Total Tickets', color: '#111111' },
+          { num: open, label: 'Active', color: '#7C3AED' },
           { num: resolved, label: 'Resolved', color: '#16A34A' },
         ].map(s => (
           <div key={s.label} style={S.statCard}>
@@ -2078,7 +3409,7 @@ function HomePage({ setSection, role, currentUser }) {
         ))}
       </div>
 
-      <div style={{ fontSize: '16px', fontWeight: 700, color: '#1A2B4A', marginBottom: '14px' }}>Quick Actions</div>
+      <div style={{ fontSize: '16px', fontWeight: 700, color: '#111111', marginBottom: '14px' }}>Quick Actions</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '28px' }}>
         {[
           { icon: '🔑', label: 'Password Reset', desc: 'Reset account or MFA', section: 'docs' },
@@ -2093,38 +3424,19 @@ function HomePage({ setSection, role, currentUser }) {
             transition: 'border-color 0.15s, box-shadow 0.15s',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#E8632A'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(232,99,42,0.1)'; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#7C3AED'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(124,58,237,0.1)'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; }}
           >
             <span style={{ fontSize: '24px' }}>{q.icon}</span>
             <div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#1A2B4A' }}>{q.label}</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#111111' }}>{q.label}</div>
               <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{q.desc}</div>
             </div>
           </button>
         ))}
       </div>
 
-      <div style={{ fontSize: '16px', fontWeight: 700, color: '#1A2B4A', marginBottom: '14px' }}>Recent Activity</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {MOCK_TICKETS.slice(0, 3).map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTicket(t)}
-            style={{ ...S.card, display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', width: '100%', textAlign: 'left', cursor: 'pointer', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#E8632A'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(232,99,42,0.08)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; }}
-          >
-            <span style={S.badge(PRIORITY_COLORS[t.priority])}>{t.priority}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#1A2B4A' }}>{t.title}</div>
-              <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>{t.id} · {t.category}</div>
-            </div>
-            <span style={S.badge(STATUS_COLORS[t.status])}>{t.status}</span>
-            <span style={{ color: '#CBD5E1', fontSize: '16px', flexShrink: 0 }}>↗</span>
-          </button>
-        ))}
-      </div>
+      <RecentActivityFeed role={role} onTicket={setActiveTicket} setSection={setSection} />
 
       {activeTicket && <TicketPopupModal ticket={activeTicket} onClose={() => setActiveTicket(null)} />}
     </div>
@@ -2139,6 +3451,7 @@ const EMPTY_FORM = {
   email: '', title: '', description: '', currentResult: '',
   expectedResult: '', platforms: [], shop: '', priority: '',
   department: '', files: [],
+  issueType: '', components: [], labels: '',
 };
 
 function PlatformCheckbox({ value, selected, onChange }) {
@@ -2147,9 +3460,9 @@ function PlatformCheckbox({ value, selected, onChange }) {
     <label style={{
       display: 'flex', alignItems: 'center', gap: '8px',
       padding: '7px 12px', borderRadius: '7px', cursor: 'pointer',
-      background: checked ? '#FFF5F0' : '#F8F9FB',
-      border: `1.5px solid ${checked ? '#E8632A' : '#E2E8F0'}`,
-      fontSize: '13px', color: checked ? '#E8632A' : '#475569',
+      background: checked ? '#F5F3FF' : '#F8F9FB',
+      border: `1.5px solid ${checked ? '#7C3AED' : '#E2E8F0'}`,
+      fontSize: '13px', color: checked ? '#7C3AED' : '#475569',
       fontWeight: checked ? 700 : 400, transition: 'all 0.15s',
       userSelect: 'none',
     }}>
@@ -2161,8 +3474,8 @@ function PlatformCheckbox({ value, selected, onChange }) {
       />
       <span style={{
         width: '15px', height: '15px', borderRadius: '4px', flexShrink: 0,
-        background: checked ? '#E8632A' : '#fff',
-        border: `1.5px solid ${checked ? '#E8632A' : '#CBD5E1'}`,
+        background: checked ? '#7C3AED' : '#fff',
+        border: `1.5px solid ${checked ? '#7C3AED' : '#CBD5E1'}`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {checked && <span style={{ color: '#fff', fontSize: '10px', lineHeight: 1 }}>✓</span>}
@@ -2176,8 +3489,51 @@ function FieldHint({ text }) {
   return <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '5px', lineHeight: 1.5 }}>{text}</div>;
 }
 
-function SubmitPage({ setSection, showToast }) {
+function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-line no-unused-vars
+  const workflow = useJiraWorkflow();
+  const issueTypes = useIssueTypes();
+  const components = useComponents();
+  const initialStatus = (workflow.statuses.find(s => s.category === 'new') || workflow.statuses[0])?.name || 'To Do';
   const [form, setForm] = useState(EMPTY_FORM);
+  const [triage, setTriage] = useState(null); // { priority, reasoning, suggestedDocs, confidence }
+  const [triaging, setTriaging] = useState(false);
+  const [triageError, setTriageError] = useState('');
+
+  const runTriage = async () => {
+    if (!form.title.trim() || !form.description.trim()) {
+      setTriageError('Add a title and description first.');
+      return;
+    }
+    setTriaging(true);
+    setTriageError('');
+    setTriage(null);
+    try {
+      const res = await fetch('/api/v1/triage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: form.title.trim(),
+          description: form.description.trim(),
+          currentResult: form.currentResult.trim() || undefined,
+          expectedResult: form.expectedResult.trim() || undefined,
+          docs: listDocSummaries(),
+        }),
+      });
+      if (res.status === 503) {
+        setTriageError('AI triage is not configured on the server.');
+      } else if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setTriageError(err?.error || `HTTP ${res.status}`);
+      } else {
+        setTriage(await res.json());
+      }
+    } catch (e) {
+      setTriageError(e.message || 'Could not reach triage.');
+    } finally {
+      setTriaging(false);
+    }
+  };
+
   const [showSuggester, setShowSuggester] = useState(false);
   const [errors, setErrors] = useState({});
   const fileInputRef = useRef(null);
@@ -2214,35 +3570,106 @@ function SubmitPage({ setSection, showToast }) {
 
   const [submitting, setSubmitting] = useState(false);
 
+  const buildLocalTicket = (id) => {
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      id,
+      title: form.title.trim(),
+      category: form.category || 'General',
+      priority: form.priority || 'Medium',
+      status: initialStatus,
+      created: today,
+      updated: today,
+      description: form.description.trim(),
+      currentResult: form.currentResult.trim(),
+      expectedResult: form.expectedResult.trim(),
+      assignee: null,
+      department: form.department,
+      shop: form.shop,
+      platforms: [...form.platforms],
+      issueType: form.issueType || null,
+      components: [...form.components],
+      labels: form.labels.split(',').map(s => s.trim()).filter(Boolean),
+      attachmentCount: form.files.length,
+      attachments: [], // populated below in submit() once files are read
+      timeline: [{ date: today, actor: currentUser?.name || form.email, action: 'Ticket opened' }],
+      messages: [],
+      internalNotes: [],
+      requester: {
+        name: currentUser?.name || form.email,
+        email: (currentUser?.email || form.email || '').toLowerCase(),
+      },
+    };
+  };
+
   const submit = async () => {
     if (!validate()) return;
     setSubmitting(true);
 
-    if (isJiraConfigured()) {
-      // Live path — create Jira issue
-      const result = await createJiraTicket(form);
-      setSubmitting(false);
+    let ticketId;
+    let jiraKey = null;
+    let extraNote = '';
 
+    if (isJiraConfigured()) {
+      const result = await createJiraTicket(form);
       if (result.error) {
+        setSubmitting(false);
         showToast(`Jira error: ${result.error}`, 'error');
-      } else {
-        showToast(`Ticket ${result.key} created in Jira. Reference: ${result.url}`);
-        setForm(EMPTY_FORM);
-        setErrors({});
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
       }
+      ticketId = result.key;
+      jiraKey = result.key;
+      extraNote = ` (Jira: ${result.url})`;
+      // Upload attachments if any
+      if (form.files.length > 0) {
+        try {
+          const payload = {
+            files: await Promise.all(form.files.slice(0, 10).map(file => new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const dataUrl = reader.result || '';
+                const dataBase64 = String(dataUrl).split(',')[1] || '';
+                resolve({ filename: file.name, contentType: file.type || 'application/octet-stream', dataBase64 });
+              };
+              reader.onerror = () => reject(new Error('read'));
+              reader.readAsDataURL(file);
+            }))),
+          };
+          await fetch(`/api/v1/jira/issue/${encodeURIComponent(jiraKey)}/attachments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+        } catch { /* attachments are best-effort */ }
+      }
+      setSubmitting(false);
     } else {
-      // Fallback — no Jira token, generate local reference
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 400));
       setSubmitting(false);
       const year = new Date().getFullYear();
-      const num  = String(Math.floor(Math.random() * 9000) + 1000);
-      const id   = `TKT-${year}-${num}`;
-      showToast(`Your ticket ${id} has been submitted. We'll respond within SLA hours.`);
-      setForm(EMPTY_FORM);
-      setErrors({});
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      const num = String(Math.floor(Math.random() * 9000) + 1000);
+      ticketId = `TKT-${year}-${num}`;
     }
+
+    const ticket = buildLocalTicket(ticketId);
+    if (jiraKey) {
+      ticket.jiraKey = jiraKey;
+      ticket.jiraSyncedAt = new Date().toISOString();
+      ticket.jiraSyncState = 'synced';
+    } else {
+      ticket.jiraSyncState = 'local-only';
+    }
+    // Persist attachments as data URLs (capped per-file) so TicketDetail can
+    // preview them. Larger files keep only metadata.
+    if (form.files.length > 0) {
+      ticket.attachments = await Promise.all(form.files.slice(0, 10).map(fileToAttachment));
+    }
+    addTicket(ticket);
+    showToast(`Your ticket ${ticketId} has been submitted.${extraNote}`);
+    setForm(EMPTY_FORM);
+    setErrors({});
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setSection?.('mytickets');
   };
 
   const err = (k) => errors[k] ? <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '4px' }}>{errors[k]}</div> : null;
@@ -2368,17 +3795,128 @@ function SubmitPage({ setSection, showToast }) {
             </div>
           </div>
 
+          {/* Issue Type (from Jira) */}
+          <div>
+            <label style={S.label}>Issue Type</label>
+            <div style={{ position: 'relative' }}>
+              <select
+                value={form.issueType}
+                onChange={e => handleChange('issueType', e.target.value)}
+                style={S.select}
+              >
+                <option value="">Auto-detect</option>
+                {issueTypes.issueTypes.filter(t => !t.subtask).map(t => (
+                  <option key={t.id} value={t.name}>{t.name}</option>
+                ))}
+              </select>
+              <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#94A3B8' }}>▾</span>
+            </div>
+            <FieldHint text={issueTypes.source === 'jira' ? `Live from your Jira project (${issueTypes.issueTypes.length} types).` : 'Using fallback types — connect Jira to load your project\'s real types.'} />
+          </div>
+
+          {/* Components (from Jira) — only render if any exist */}
+          {components.components.length > 0 && (
+            <div>
+              <label style={S.label}>Components</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {components.components.map(c => {
+                  const checked = form.components.includes(c.name);
+                  return (
+                    <label key={c.id} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      padding: '6px 12px', borderRadius: '6px', cursor: 'pointer',
+                      background: checked ? '#F5F3FF' : '#F8F9FB',
+                      border: `1.5px solid ${checked ? '#7C3AED' : '#E2E8F0'}`,
+                      fontSize: '12px', color: checked ? '#7C3AED' : '#475569',
+                      fontWeight: checked ? 700 : 400, userSelect: 'none',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => handleChange('components', checked ? form.components.filter(x => x !== c.name) : [...form.components, c.name])}
+                        style={{ width: '14px', height: '14px' }}
+                      />
+                      {c.name}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Labels — free-form, comma-separated */}
+          <div>
+            <label style={S.label}>Labels</label>
+            <input
+              type="text"
+              value={form.labels}
+              onChange={e => handleChange('labels', e.target.value)}
+              placeholder="e.g. needs-followup, q2-revenue"
+              aria-label="Labels"
+              style={{ ...S.input, ...borderOf('labels') }}
+            />
+            <FieldHint text="Comma-separated tags. Synced to Jira labels on linked tickets." />
+          </div>
+
           {/* Priority */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
               <label style={{ ...S.label, marginBottom: 0 }}>Priority *</label>
-              <button
-                onClick={() => setShowSuggester(!showSuggester)}
-                style={{ background: 'none', border: 'none', color: '#E8632A', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
-              >
-                {showSuggester ? 'Hide suggester' : '🧠 Not sure? Use Smart Suggester'}
-              </button>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={runTriage}
+                  disabled={triaging}
+                  style={{ background: 'none', border: 'none', color: triaging ? '#94A3B8' : '#1D4ED8', fontSize: '13px', fontWeight: 700, cursor: triaging ? 'wait' : 'pointer', padding: 0 }}
+                >
+                  {triaging ? '✨ Triaging…' : '✨ AI Suggest'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSuggester(!showSuggester)}
+                  style={{ background: 'none', border: 'none', color: '#7C3AED', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                >
+                  {showSuggester ? 'Hide suggester' : '🧠 Smart Suggester'}
+                </button>
+              </div>
             </div>
+            {triageError && (
+              <div style={{ marginBottom: '8px', padding: '8px 12px', background: '#FEF2F2', color: '#B91C1C', borderRadius: '7px', fontSize: '12px', fontWeight: 600 }}>
+                ⚠ {triageError}
+              </div>
+            )}
+            {triage && (
+              <div style={{ marginBottom: '10px', padding: '12px 14px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.06em' }}>✨ AI suggested</span>
+                  <span style={S.badge(PRIORITY_COLORS[triage.priority])}>{triage.priority}</span>
+                  <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#DBEAFE', color: '#1E3A8A', fontWeight: 700 }}>{triage.confidence} confidence</span>
+                  <button
+                    type="button"
+                    onClick={() => { handleChange('priority', triage.priority); }}
+                    style={{ marginLeft: 'auto', padding: '5px 12px', background: '#1D4ED8', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Accept
+                  </button>
+                </div>
+                {triage.reasoning && <div style={{ fontSize: '12px', color: '#334155', lineHeight: 1.5 }}>{triage.reasoning}</div>}
+                {triage.suggestedDocs.length > 0 && (
+                  <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: 700 }}>📚 Relevant docs:</span>
+                    {triage.suggestedDocs.map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setSection?.('docs')}
+                        style={{ padding: '4px 10px', background: '#fff', border: '1px solid #BFDBFE', borderRadius: '100px', fontSize: '12px', color: '#1E3A8A', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {d} →
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ position: 'relative' }}>
               <select
                 value={form.priority}
@@ -2417,7 +3955,7 @@ function SubmitPage({ setSection, showToast }) {
                 textAlign: 'center', cursor: 'pointer', background: '#FAFBFC',
                 transition: 'border-color 0.15s',
               }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = '#E8632A'}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#7C3AED'}
               onMouseLeave={e => e.currentTarget.style.borderColor = '#E2E8F0'}
             >
               <div style={{ fontSize: '28px', marginBottom: '8px' }}>📎</div>
@@ -2426,16 +3964,7 @@ function SubmitPage({ setSection, showToast }) {
               <input ref={fileInputRef} type="file" multiple onChange={handleFiles} style={{ display: 'none' }} />
             </div>
             {form.files.length > 0 && (
-              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {form.files.map((f, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#F1F5F9', borderRadius: '7px', padding: '8px 12px' }}>
-                    <span style={{ fontSize: '14px' }}>📄</span>
-                    <span style={{ flex: 1, fontSize: '13px', color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                    <span style={{ fontSize: '12px', color: '#94A3B8', flexShrink: 0 }}>{(f.size / 1024).toFixed(0)} KB</span>
-                    <button onClick={() => removeFile(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '16px', lineHeight: 1, padding: 0 }}>×</button>
-                  </div>
-                ))}
-              </div>
+              <SubmitFilesPreview files={form.files} onRemove={removeFile} />
             )}
             <FieldHint text="If you have more files to share, contact the TechOps representative directly and they'll add them to the ticket." />
           </div>
@@ -2548,7 +4077,7 @@ function SLAPage() {
                   <td style={{ padding: '14px 16px' }}>
                     <span style={S.badge(row.color)}>{row.priority}</span>
                   </td>
-                  <td style={{ padding: '14px 16px', fontSize: '14px', fontWeight: 700, color: '#1A2B4A' }}>{row.response}</td>
+                  <td style={{ padding: '14px 16px', fontSize: '14px', fontWeight: 700, color: '#111111' }}>{row.response}</td>
                   <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{row.resolution}</td>
                   <td style={{ padding: '14px 16px' }}>
                     <span style={{ fontSize: '12px', color: '#16A34A', fontWeight: 700, background: '#DCFCE7', padding: '3px 10px', borderRadius: '100px' }}>Active</span>
@@ -2562,7 +4091,7 @@ function SLAPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <div style={S.card}>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: '#1A2B4A', marginBottom: '12px' }}>Support Hours</div>
+          <div style={{ fontSize: '15px', fontWeight: 700, color: '#111111', marginBottom: '12px' }}>Support Hours</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {[
               ['Monday – Friday', '9:30 AM – 6:30 PM (ICT)'],
@@ -2572,13 +4101,13 @@ function SLAPage() {
             ].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                 <span style={{ color: '#64748B' }}>{k}</span>
-                <span style={{ color: '#1A2B4A', fontWeight: 700 }}>{v}</span>
+                <span style={{ color: '#111111', fontWeight: 700 }}>{v}</span>
               </div>
             ))}
           </div>
         </div>
         <div style={S.card}>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: '#1A2B4A', marginBottom: '12px' }}>Standards & Compliance</div>
+          <div style={{ fontSize: '15px', fontWeight: 700, color: '#111111', marginBottom: '12px' }}>Standards & Compliance</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {[
               'All tickets acknowledged within SLA response time',
@@ -2588,7 +4117,7 @@ function SLAPage() {
               'Escalation to IT Manager after 2× resolution time',
             ].map((item, i) => (
               <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '13px', color: '#334155' }}>
-                <span style={{ color: '#E8632A', flexShrink: 0 }}>✓</span> {item}
+                <span style={{ color: '#7C3AED', flexShrink: 0 }}>✓</span> {item}
               </div>
             ))}
           </div>
@@ -2598,26 +4127,95 @@ function SLAPage() {
   );
 }
 
-function MyTicketsPage({ role }) {
-  const [tickets, setTickets] = useState(MOCK_TICKETS);
+function MyTicketsPage({ role, currentUser }) {
+  const [, _setTicketsVersion] = useState(0);
+  useEffect(() => subscribeTickets(_setTicketsVersion), []);
+  const tickets = MOCK_TICKETS;
   const [filter, setFilter] = useState('All');
-  const [selected, setSelected] = useState(null);
+  const [priorityFilter, setPriorityFilter] = useState('All');
+  const [assigneeFilter, setAssigneeFilter] = useState('All');
+  const [staleOnly, setStaleOnly] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const selected = selectedId ? tickets.find(t => t.id === selectedId) : null;
+  const [bulkIds, setBulkIds] = useState(new Set());
+  const [refreshMsg, setRefreshMsg] = useState('');
+  const { addNotification } = useNotifications();
 
-  const statuses = ['All', 'Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
-  const filtered = filter === 'All' ? tickets : tickets.filter(t => t.status === filter);
+  const isAdmin = role === 'superadmin';
+  const workflow = useJiraWorkflow();
+  const assignable = useAssignableUsers();
+  const STATUS_OPTIONS = workflow.statuses.map(s => s.name);
+  const statuses = ['All', ...STATUS_OPTIONS];
+  const assignees = useMemo(() => {
+    const set = new Set(tickets.map(t => t.assignee).filter(Boolean));
+    // Augment with Jira assignable users so admins can re-route to anyone eligible
+    for (const u of assignable.users) set.add(u.displayName);
+    return ['All', ...Array.from(set).sort(), 'Unassigned'];
+  }, [tickets, assignable.users]);
+
+  // Regular users see only tickets they submitted; admins see all.
+  const visibleTickets = useMemo(() => {
+    if (isAdmin) return tickets;
+    const email = currentUser?.email?.toLowerCase();
+    return tickets.filter(t => t.requester?.email?.toLowerCase() === email);
+  }, [tickets, isAdmin, currentUser?.email]);
+
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    return visibleTickets.filter(t => {
+      if (filter !== 'All' && t.status !== filter) return false;
+      if (isAdmin && priorityFilter !== 'All' && t.priority !== priorityFilter) return false;
+      if (isAdmin && assigneeFilter !== 'All') {
+        if (assigneeFilter === 'Unassigned' && t.assignee) return false;
+        if (assigneeFilter !== 'Unassigned' && t.assignee !== assigneeFilter) return false;
+      }
+      if (isAdmin && staleOnly) {
+        if (t.status === 'Resolved' || t.status === 'Closed') return false;
+        const ageDays = (now - new Date(t.updated).getTime()) / 86400000;
+        if (ageDays < 7) return false;
+      }
+      return true;
+    });
+  }, [visibleTickets, filter, priorityFilter, assigneeFilter, staleOnly, isAdmin]);
 
   const handleStatusChange = (id, newStatus) => {
-    setTickets(ts => ts.map(t => t.id === id ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) } : t));
-    setSelected(s => s && s.id === id ? { ...s, status: newStatus } : s);
+    const ticket = tickets.find(t => t.id === id);
+    updateTickets(ts => ts.map(t => t.id === id ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) } : t));
+    if (ticket?.jiraKey) pushJiraTransition(ticket, newStatus);
   };
 
   const handleAssigneeChange = (id, assignee) => {
-    setTickets(ts => ts.map(t => t.id === id ? { ...t, assignee } : t));
-    setSelected(s => s && s.id === id ? { ...s, assignee } : s);
+    updateTickets(ts => ts.map(t => t.id === id ? { ...t, assignee } : t));
+  };
+
+  const toggleBulk = (id) => {
+    setBulkIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const bulkSetStatus = (newStatus) => {
+    if (bulkIds.size === 0) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const affected = tickets.filter(t => bulkIds.has(t.id));
+    updateTickets(ts => ts.map(t => bulkIds.has(t.id) ? { ...t, status: newStatus, updated: today } : t));
+    recordAudit('ticket.bulk_status', _currentActor, null, { count: bulkIds.size, status: newStatus });
+    // Push Jira transitions for any linked tickets (best-effort, parallel).
+    affected.filter(t => t.jiraKey).forEach(t => pushJiraTransition(t, newStatus));
+    setBulkIds(new Set());
+  };
+
+  const bulkReassign = (assignee) => {
+    if (bulkIds.size === 0) return;
+    updateTickets(ts => ts.map(t => bulkIds.has(t.id) ? { ...t, assignee } : t));
+    recordAudit('ticket.bulk_reassign', _currentActor, null, { count: bulkIds.size, assignee });
+    setBulkIds(new Set());
   };
 
   if (selected) {
-    return <TicketDetail ticket={selected} onBack={() => setSelected(null)} role={role} onStatusChange={handleStatusChange} onAssigneeChange={handleAssigneeChange} />;
+    return <TicketDetail ticket={selected} onBack={() => setSelectedId(null)} role={role} onStatusChange={handleStatusChange} onAssigneeChange={handleAssigneeChange} onAddNotification={addNotification} />;
   }
 
   return (
@@ -2625,45 +4223,112 @@ function MyTicketsPage({ role }) {
       <div style={S.pageTitle}>My Tickets</div>
       <div style={S.pageSub}>Track and manage all your IT requests.</div>
 
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '18px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
         {statuses.map(s => (
           <button key={s} onClick={() => setFilter(s)} style={{
             padding: '7px 14px', borderRadius: '100px', border: '1.5px solid',
-            borderColor: filter === s ? '#E8632A' : '#E2E8F0',
-            background: filter === s ? '#FFF5F0' : '#fff',
-            color: filter === s ? '#E8632A' : '#64748B',
+            borderColor: filter === s ? '#7C3AED' : '#E2E8F0',
+            background: filter === s ? '#F5F3FF' : '#fff',
+            color: filter === s ? '#7C3AED' : '#64748B',
             fontFamily: "'Lato', sans-serif",
             fontSize: '12px', fontWeight: 700, cursor: 'pointer',
           }}>{s}</button>
         ))}
       </div>
 
+      {isAdmin && (
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '18px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <select aria-label="Filter by priority" value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} style={{ padding: '7px 12px', border: '1.5px solid #E2E8F0', borderRadius: '7px', fontSize: '12px', fontWeight: 700 }}>
+            <option value="All">All priorities</option>
+            <option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+          </select>
+          <select aria-label="Filter by assignee" value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} style={{ padding: '7px 12px', border: '1.5px solid #E2E8F0', borderRadius: '7px', fontSize: '12px', fontWeight: 700 }}>
+            {assignees.map(a => <option key={a} value={a}>{a === 'All' ? 'All assignees' : a}</option>)}
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}>
+            <input type="checkbox" checked={staleOnly} onChange={e => setStaleOnly(e.target.checked)} aria-label="Show stale tickets only" />
+            Stale (no update in 7+ days)
+          </label>
+          <button
+            onClick={async () => {
+              setRefreshMsg('Refreshing…');
+              const result = await pollJira('PESD1');
+              if (!result) { setRefreshMsg('Refresh failed — Jira unreachable.'); return; }
+              setRefreshMsg(result.unavailable
+                ? 'Jira unavailable — local tickets unchanged.'
+                : `Refreshed: ${result.count} updated, ${result.reconciled || 0} reconciled, ${result.imported || 0} imported.`);
+              setTimeout(() => setRefreshMsg(''), 5000);
+            }}
+            style={{ marginLeft: 'auto', padding: '7px 12px', background: '#111111', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+          >
+            🔄 Refresh from Jira
+          </button>
+        </div>
+      )}
+      {isAdmin && refreshMsg && (
+        <div style={{ marginBottom: '12px', padding: '8px 12px', background: '#F1F5F9', borderRadius: '6px', fontSize: '12px', color: '#475569', fontWeight: 600 }}>
+          {refreshMsg}
+        </div>
+      )}
+
+      {isAdmin && bulkIds.size > 0 && (
+        <div style={{ background: '#111111', color: '#fff', padding: '12px 18px', borderRadius: '10px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '13px', fontWeight: 700 }}>{bulkIds.size} selected</span>
+          <select aria-label="Bulk change status" defaultValue="" onChange={e => { if (e.target.value) { bulkSetStatus(e.target.value); e.target.value = ''; } }} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: 700 }}>
+            <option value="" disabled>Change status to…</option>
+            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select aria-label="Bulk reassign" defaultValue="" onChange={e => { if (e.target.value) { bulkReassign(e.target.value === '__none' ? null : e.target.value); e.target.value = ''; } }} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: 700 }}>
+            <option value="" disabled>Reassign to…</option>
+            <option value="__none">Unassigned</option>
+            {assignees.filter(a => a !== 'All' && a !== 'Unassigned').map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <button onClick={() => setBulkIds(new Set())} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Clear</button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {filtered.length === 0 && (
           <div style={{ ...S.card, textAlign: 'center', color: '#94A3B8', padding: '40px' }}>No tickets found.</div>
         )}
-        {filtered.map(t => (
-          <button key={t.id} onClick={() => setSelected(t)} style={{
-            ...S.card, textAlign: 'left', cursor: 'pointer', width: '100%',
-            display: 'flex', alignItems: 'center', gap: '14px', padding: '16px 20px',
-            transition: 'all 0.15s',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#E8632A'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(232,99,42,0.08)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: '#1A2B4A' }}>{t.title}</span>
+        {filtered.map(t => {
+          const checked = bulkIds.has(t.id);
+          const ageDays = Math.floor((Date.now() - new Date(t.updated).getTime()) / 86400000);
+          const isStale = ageDays >= 7 && t.status !== 'Resolved' && t.status !== 'Closed';
+          return (
+            <div key={t.id} style={{
+              ...S.card, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '14px',
+              borderColor: checked ? '#7C3AED' : '#E2E8F0',
+            }}>
+              {isAdmin && (
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleBulk(t.id)}
+                  onClick={e => e.stopPropagation()}
+                  aria-label={`Select ticket ${t.id}`}
+                  style={{ flexShrink: 0, width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+              )}
+              <button onClick={() => setSelectedId(t.id)} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>{t.title}</span>
+                  {isAdmin && isStale && <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', fontWeight: 700 }}>Stale {ageDays}d</span>}
+                  {isAdmin && <SlaChip ticket={t} />}
+                  {isAdmin && <JiraSyncChip ticket={t} />}
+                </div>
+                <div style={{ fontSize: '12px', color: '#94A3B8' }}>
+                  {t.id} · {t.category} · Updated {t.updated}{isAdmin && t.assignee && <> · 👤 {t.assignee}</>}
+                </div>
+              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+                <span style={S.badge(PRIORITY_COLORS[t.priority])}>{t.priority}</span>
+                <span style={{ ...S.badge(statusColorFor(t.status)), background: statusColorFor(t.status) + '18', color: statusColorFor(t.status) }}>{t.status}</span>
+                <span style={{ color: '#CBD5E1', fontSize: '16px' }}>›</span>
               </div>
-              <div style={{ fontSize: '12px', color: '#94A3B8' }}>{t.id} · {t.category} · Updated {t.updated}</div>
             </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
-              <span style={S.badge(PRIORITY_COLORS[t.priority])}>{t.priority}</span>
-              <span style={S.badge(STATUS_COLORS[t.status])}>{t.status}</span>
-              <span style={{ color: '#CBD5E1', fontSize: '16px' }}>›</span>
-            </div>
-          </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -2671,7 +4336,16 @@ function MyTicketsPage({ role }) {
 
 // ─── Admin Kanban ─────────────────────────────────────────────────────────────
 function AdminPage() {
-  const [tickets, setTickets] = useState([...MOCK_TICKETS]);
+  const [, _setTicketsVersion] = useState(0);
+  useEffect(() => subscribeTickets(_setTicketsVersion), []);
+  const tickets = MOCK_TICKETS;
+  const workflow = useJiraWorkflow();
+  const kanbanColumns = workflow.statuses.map(s => ({
+    id: s.name,
+    label: s.name,
+    color: statusColorFor(s.name),
+    bg: STATUS_BG[statusColorFor(s.name)] || '#F1F5F9',
+  }));
   const [filterPriority, setFilterPriority] = useState('All');
   const [filterAssignee, setFilterAssignee] = useState('All');
   const [dragId, setDragId] = useState(null);
@@ -2690,14 +4364,16 @@ function AdminPage() {
   const columnTickets = (colId) => visible.filter(t => t.status === colId);
 
   const moveTicket = (id, newStatus) => {
-    setTickets(ts => ts.map(t => t.id === id
+    const ticket = tickets.find(t => t.id === id);
+    updateTickets(ts => ts.map(t => t.id === id
       ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) }
       : t
     ));
+    if (ticket?.jiraKey) pushJiraTransition(ticket, newStatus);
   };
 
   const assignTicket = (id, assignee) => {
-    setTickets(ts => ts.map(t => t.id === id ? { ...t, assignee: assignee || null } : t));
+    updateTickets(ts => ts.map(t => t.id === id ? { ...t, assignee: assignee || null } : t));
     setEditingAssignee(null);
   };
 
@@ -2728,14 +4404,20 @@ function AdminPage() {
 
   return (
     <div>
+      {/* System health + maintenance toggle (admin only — gates own access) */}
+      <div className="pomelo-stack-on-mobile" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px', marginBottom: '22px' }}>
+        <SystemHealthCard />
+        <MaintenanceToggleCard />
+      </div>
+
       {/* Admin Header Banner */}
       <div style={{
-        background: 'linear-gradient(135deg, #1A2B4A 0%, #0F1F36 100%)',
+        background: 'linear-gradient(135deg, #111111 0%, #000000 100%)',
         borderRadius: '14px', padding: '18px 24px', marginBottom: '22px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ background: '#E8632A', borderRadius: '8px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🛠</div>
+          <div style={{ background: '#7C3AED', borderRadius: '8px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🛠</div>
           <div>
             <div style={{ color: '#fff', fontWeight: 900, fontSize: '16px' }}>IT Admin — Kanban Board</div>
             <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', marginTop: '2px' }}>Drag cards between columns to update status · Click a card to view details</div>
@@ -2743,7 +4425,7 @@ function AdminPage() {
         </div>
         <div style={{ display: 'flex', gap: '16px' }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ color: '#E8632A', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{totalOpen}</div>
+            <div style={{ color: '#7C3AED', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{totalOpen}</div>
             <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>Open</div>
           </div>
           <div style={{ textAlign: 'center' }}>
@@ -2764,9 +4446,9 @@ function AdminPage() {
           {['All', 'Critical', 'High', 'Medium', 'Low'].map(p => (
             <button key={p} onClick={() => setFilterPriority(p)} style={{
               padding: '5px 12px', borderRadius: '100px', border: '1.5px solid',
-              borderColor: filterPriority === p ? (PRIORITY_COLORS[p] || '#1A2B4A') : '#E2E8F0',
-              background: filterPriority === p ? ((PRIORITY_COLORS[p] || '#1A2B4A') + '15') : '#fff',
-              color: filterPriority === p ? (PRIORITY_COLORS[p] || '#1A2B4A') : '#64748B',
+              borderColor: filterPriority === p ? (PRIORITY_COLORS[p] || '#111111') : '#E2E8F0',
+              background: filterPriority === p ? ((PRIORITY_COLORS[p] || '#111111') + '15') : '#fff',
+              color: filterPriority === p ? (PRIORITY_COLORS[p] || '#111111') : '#64748B',
               fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700, cursor: 'pointer',
             }}>{p}</button>
           ))}
@@ -2776,9 +4458,9 @@ function AdminPage() {
           {['All', ...agentOptions, 'Unassigned'].map(a => (
             <button key={a} onClick={() => setFilterAssignee(a)} style={{
               padding: '5px 12px', borderRadius: '100px', border: '1.5px solid',
-              borderColor: filterAssignee === a ? '#1A2B4A' : '#E2E8F0',
+              borderColor: filterAssignee === a ? '#111111' : '#E2E8F0',
               background: filterAssignee === a ? '#EFF2F7' : '#fff',
-              color: filterAssignee === a ? '#1A2B4A' : '#64748B',
+              color: filterAssignee === a ? '#111111' : '#64748B',
               fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700, cursor: 'pointer',
             }}>{a}</button>
           ))}
@@ -2787,7 +4469,7 @@ function AdminPage() {
 
       {/* Kanban Board */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', alignItems: 'start' }}>
-        {KANBAN_COLUMNS.map(col => {
+        {kanbanColumns.map(col => {
           const colTickets = columnTickets(col.id);
           const isDragTarget = dragOver === col.id;
           return (
@@ -2807,7 +4489,7 @@ function AdminPage() {
               <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                   <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: col.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#1A2B4A' }}>{col.label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>{col.label}</span>
                 </div>
                 <span style={{
                   background: col.color + '20', color: col.color,
@@ -2850,7 +4532,7 @@ function AdminPage() {
                     </div>
 
                     {/* Title */}
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#1A2B4A', lineHeight: 1.4, marginBottom: '8px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111', lineHeight: 1.4, marginBottom: '8px' }}>
                       {t.title}
                     </div>
 
@@ -2869,7 +4551,7 @@ function AdminPage() {
                         <>
                           <div style={{
                             width: '20px', height: '20px', borderRadius: '50%',
-                            background: '#1A2B4A', display: 'flex', alignItems: 'center',
+                            background: '#111111', display: 'flex', alignItems: 'center',
                             justifyContent: 'center', color: '#fff', fontSize: '9px', fontWeight: 700, flexShrink: 0,
                           }}>
                             {t.assignee.split(' ').map(n => n[0]).join('')}
@@ -2904,13 +4586,13 @@ function AdminPage() {
                             width: '100%', textAlign: 'left', padding: '8px 12px',
                             background: t.assignee === a ? '#F0F4FF' : 'transparent',
                             border: 'none', cursor: 'pointer', fontFamily: "'Lato', sans-serif",
-                            fontSize: '12px', color: a ? '#1A2B4A' : '#94A3B8',
+                            fontSize: '12px', color: a ? '#111111' : '#94A3B8',
                             fontWeight: t.assignee === a ? 700 : 400,
                             display: 'flex', alignItems: 'center', gap: '7px',
                           }}>
                             <div style={{
                               width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
-                              background: a ? '#1A2B4A' : '#F1F5F9',
+                              background: a ? '#111111' : '#F1F5F9',
                               border: a ? 'none' : '1.5px dashed #CBD5E1',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                               color: a ? '#fff' : '#94A3B8', fontSize: '8px', fontWeight: 700,
@@ -2946,7 +4628,7 @@ function AdminPage() {
             overflow: 'hidden',
           }}>
             {/* Modal header */}
-            <div style={{ background: '#1A2B4A', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ background: '#111111', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginBottom: '3px', fontWeight: 700 }}>{detailTicket.id}</div>
                 <div style={{ fontSize: '15px', fontWeight: 900, color: '#fff', lineHeight: 1.3 }}>{detailTicket.title}</div>
@@ -2975,7 +4657,7 @@ function AdminPage() {
                 ].map(([k, v]) => (
                   <div key={k}>
                     <div style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>{k}</div>
-                    <div style={{ fontSize: '13px', color: '#1A2B4A', fontWeight: 700 }}>{v}</div>
+                    <div style={{ fontSize: '13px', color: '#111111', fontWeight: 700 }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -2984,7 +4666,7 @@ function AdminPage() {
               <div style={{ marginBottom: '4px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Move to</div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {KANBAN_COLUMNS.map(col => (
+                  {kanbanColumns.map(col => (
                     <button
                       key={col.id}
                       onClick={() => {
@@ -3014,8 +4696,1298 @@ function AdminPage() {
   );
 }
 
-// ─── Main App ─────────────────────────────────────────────────────────────────
-export default function PomeloTechOpsPortal() {
+// ─── Users panel (admin only) ─────────────────────────────────────────────────
+function UsersPanelPage({ currentUserEmail }) {
+  const [version, setVersion] = useState(0);
+  useEffect(() => subscribeUsers(setVersion), []);
+
+  const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [editing, setEditing] = useState(null); // user object being edited
+  const [creating, setCreating] = useState(false);
+  const [resetting, setResetting] = useState(null); // user object whose password is being reset
+  const [confirm, setConfirm] = useState(null); // { action, user, message }
+
+  const users = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return listUsers().filter(u => {
+      if (q && !u.name.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) return false;
+      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+      if (statusFilter === 'active' && !u.active) return false;
+      if (statusFilter === 'deactivated' && u.active) return false;
+      if (statusFilter === 'never-logged-in' && u.lastLoginAt) return false;
+      return true;
+    });
+  }, [query, roleFilter, statusFilter, version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openTicketCount = (name) =>
+    MOCK_TICKETS.filter(t => t.assignee === name && (t.status === 'Open' || t.status === 'In Progress')).length;
+
+  const fmtLogin = (iso) => {
+    if (!iso) return 'Never';
+    const d = new Date(iso);
+    const diff = Date.now() - d.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    return d.toISOString().slice(0, 10);
+  };
+
+  const StatusChip = ({ user }) => {
+    if (!user.active) return <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: '#FEE2E2', color: '#B91C1C', fontWeight: 700 }}>Deactivated</span>;
+    if (!user.lastLoginAt) return <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', fontWeight: 700 }}>Never logged in</span>;
+    return <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: '#DCFCE7', color: '#15803D', fontWeight: 700 }}>Active</span>;
+  };
+
+  const handleConfirmed = () => {
+    if (!confirm) return;
+    const { action, user } = confirm;
+    if (action === 'promote') setUserRole(user.id, 'superadmin');
+    else if (action === 'demote') setUserRole(user.id, 'user');
+    else if (action === 'deactivate') setUserActive(user.id, false);
+    else if (action === 'reactivate') setUserActive(user.id, true);
+    else if (action === 'forceOtp') forceUserReOtp(user.id);
+    setConfirm(null);
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#111111', margin: 0 }}>Users</h1>
+          <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>Manage portal accounts, roles, and access.</div>
+        </div>
+        <button
+          onClick={() => setCreating(true)}
+          style={{ background: '#7C3AED', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 18px', fontFamily: "'Lato', sans-serif", fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+        >
+          + New user
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <input
+          type="search"
+          placeholder="Search by name or email…"
+          aria-label="Search users"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          style={{ flex: '1 1 240px', minWidth: '200px', padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontFamily: "'Lato', sans-serif", outline: 'none' }}
+        />
+        <select aria-label="Filter by role" value={roleFilter} onChange={e => setRoleFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontFamily: "'Lato', sans-serif" }}>
+          <option value="all">All roles</option>
+          <option value="superadmin">Superadmin</option>
+          <option value="user">User</option>
+        </select>
+        <select aria-label="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontFamily: "'Lato', sans-serif" }}>
+          <option value="all">All status</option>
+          <option value="active">Active</option>
+          <option value="deactivated">Deactivated</option>
+          <option value="never-logged-in">Never logged in</option>
+        </select>
+      </div>
+
+      {/* Table */}
+      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden', border: '1px solid #E2E8F0' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC', textAlign: 'left' }}>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>User</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Role</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Department</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Last login</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Open tickets</th>
+                <th style={{ padding: '12px 16px', fontWeight: 700, color: '#475569', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => {
+                const isSelf = u.email === currentUserEmail;
+                return (
+                  <tr key={u.id} style={{ borderTop: '1px solid #F1F5F9' }}>
+                    <td style={{ padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: u.role === 'superadmin' ? '#7C3AED' : '#94A3B8', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px' }}>
+                          {u.name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2)}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, color: '#1E293B' }}>{u.name} {isSelf && <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 500 }}>(you)</span>}</div>
+                          <div style={{ fontSize: '12px', color: '#64748B' }}>{u.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <span style={{ fontSize: '12px', padding: '3px 8px', borderRadius: '4px', background: u.role === 'superadmin' ? '#F5F3FF' : '#F1F5F9', color: u.role === 'superadmin' ? '#7C3AED' : '#475569', fontWeight: 700 }}>
+                        {u.role === 'superadmin' ? '⭐ Superadmin' : '👤 User'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '14px 16px', color: '#475569' }}>{u.department}</td>
+                    <td style={{ padding: '14px 16px', color: '#475569', fontSize: '12px' }}>{fmtLogin(u.lastLoginAt)}</td>
+                    <td style={{ padding: '14px 16px' }}><StatusChip user={u} /></td>
+                    <td style={{ padding: '14px 16px', textAlign: 'right', color: '#475569' }}>{openTicketCount(u.name)}</td>
+                    <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                      <UserRowActions
+                        user={u}
+                        isSelf={isSelf}
+                        onEdit={() => setEditing(u)}
+                        onResetPassword={() => setResetting(u)}
+                        onConfirm={(action, message) => setConfirm({ action, user: u, message })}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+              {users.length === 0 && (
+                <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: '#94A3B8' }}>No users match the current filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modals */}
+      {creating && <UserCreateModal onClose={() => setCreating(false)} />}
+      {editing && <UserEditModal user={editing} onClose={() => setEditing(null)} />}
+      {resetting && <UserResetPasswordModal user={resetting} onClose={() => setResetting(null)} />}
+      {confirm && (
+        <ConfirmDialog
+          title={confirm.message.title}
+          body={confirm.message.body}
+          confirmLabel={confirm.message.confirmLabel}
+          confirmStyle={confirm.message.danger ? 'danger' : 'primary'}
+          onConfirm={handleConfirmed}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const onDown = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, []);
+
+  const item = (label, onClick, danger = false) => (
+    <button
+      key={label}
+      role="menuitem"
+      onClick={() => { setOpen(false); onClick(); }}
+      style={{ width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'none', color: danger ? '#B91C1C' : '#1E293B', cursor: 'pointer', fontSize: '13px', borderRadius: '6px' }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-label={`Actions for ${user.name}`}
+        aria-expanded={open}
+        style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #E2E8F0', background: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: '#475569' }}
+      >
+        Actions ▾
+      </button>
+      {open && (
+        <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, minWidth: '200px', background: '#fff', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', padding: '4px', zIndex: 100, textAlign: 'left' }}>
+          {item('Edit details', onEdit)}
+          {item(user.role === 'superadmin' ? 'Demote to user' : 'Promote to superadmin', () =>
+            onConfirm(user.role === 'superadmin' ? 'demote' : 'promote', {
+              title: user.role === 'superadmin' ? 'Demote to regular user?' : 'Promote to superadmin?',
+              body: user.role === 'superadmin'
+                ? `${user.name} will lose admin powers immediately.`
+                : `${user.name} will gain admin powers including the Users panel.`,
+              confirmLabel: user.role === 'superadmin' ? 'Demote' : 'Promote',
+              danger: user.role === 'superadmin',
+            })
+          )}
+          {item('Reset password', onResetPassword)}
+          {item('Force re-OTP on next login', () =>
+            onConfirm('forceOtp', {
+              title: 'Force re-OTP?',
+              body: `${user.name} will be required to re-verify via OTP on their next login.`,
+              confirmLabel: 'Force re-OTP',
+            })
+          )}
+          {!isSelf && item(
+            user.active ? 'Deactivate account' : 'Reactivate account',
+            () => onConfirm(user.active ? 'deactivate' : 'reactivate', {
+              title: user.active ? 'Deactivate this account?' : 'Reactivate this account?',
+              body: user.active
+                ? `${user.name} will be blocked from logging in until reactivated.`
+                : `${user.name} will be able to log in again.`,
+              confirmLabel: user.active ? 'Deactivate' : 'Reactivate',
+              danger: user.active,
+            }),
+            user.active
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UserCreateModal({ onClose }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [department, setDepartment] = useState('IT & Technology');
+  const [role, setRole] = useState('user');
+  const [tempPassword, setTempPassword] = useState('');
+  const [error, setError] = useState('');
+  const panelRef = useRef(null);
+  useModalFocusTrap(panelRef);
+
+  useEffect(() => {
+    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  const submit = async e => {
+    e.preventDefault();
+    const res = await adminCreateUser({ name, email, role, department, tempPassword });
+    if (res.error) { setError(res.error); return; }
+    onClose();
+  };
+
+  return (
+    <>
+      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 500 }} />
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Create user" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: '#fff', borderRadius: '14px', zIndex: 501, width: '480px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden', outline: 'none' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#111111' }}>Create user</h2>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: '20px', color: '#94A3B8', cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+        <form onSubmit={submit} style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <FormField label="Full name"><input aria-label="Full name" value={name} onChange={e => setName(e.target.value)} style={inputStyle} /></FormField>
+          <FormField label="Email"><input aria-label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} /></FormField>
+          <FormField label="Department"><input aria-label="Department" value={department} onChange={e => setDepartment(e.target.value)} style={inputStyle} /></FormField>
+          <FormField label="Role">
+            <select aria-label="Role" value={role} onChange={e => setRole(e.target.value)} style={inputStyle}>
+              <option value="user">User</option>
+              <option value="superadmin">Superadmin</option>
+            </select>
+          </FormField>
+          <FormField label="Temporary password" hint="At least 8 characters. User must change it on first login."><input aria-label="Temporary password" type="text" value={tempPassword} onChange={e => setTempPassword(e.target.value)} style={inputStyle} /></FormField>
+          {error && <div style={{ padding: '10px 12px', background: '#FEF2F2', color: '#B91C1C', borderRadius: '8px', fontSize: '13px', fontWeight: 700 }}>{error}</div>}
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+            <button type="button" onClick={onClose} style={ghostBtn}>Cancel</button>
+            <button type="submit" style={primaryBtn}>Create</button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
+
+function UserEditModal({ user, onClose }) {
+  const [name, setName] = useState(user.name);
+  const [email, setEmail] = useState(user.email);
+  const [department, setDepartment] = useState(user.department);
+  const panelRef = useRef(null);
+  useModalFocusTrap(panelRef);
+
+  useEffect(() => {
+    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  const submit = e => {
+    e.preventDefault();
+    updateUser(user.id, { name: name.trim(), email: email.trim().toLowerCase(), department: department.trim() });
+    onClose();
+  };
+
+  return (
+    <>
+      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 500 }} />
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Edit ${user.name}`} style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: '#fff', borderRadius: '14px', zIndex: 501, width: '440px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden', outline: 'none' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#111111' }}>Edit user</h2>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: '20px', color: '#94A3B8', cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+        <form onSubmit={submit} style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <FormField label="Full name"><input aria-label="Full name" value={name} onChange={e => setName(e.target.value)} style={inputStyle} /></FormField>
+          <FormField label="Email"><input aria-label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} /></FormField>
+          <FormField label="Department"><input aria-label="Department" value={department} onChange={e => setDepartment(e.target.value)} style={inputStyle} /></FormField>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose} style={ghostBtn}>Cancel</button>
+            <button type="submit" style={primaryBtn}>Save</button>
+          </div>
+        </form>
+      </div>
+    </>
+  );
+}
+
+function UserResetPasswordModal({ user, onClose }) {
+  const [pw, setPw] = useState('');
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+  const panelRef = useRef(null);
+  useModalFocusTrap(panelRef);
+
+  useEffect(() => {
+    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  const submit = async e => {
+    e.preventDefault();
+    if (pw.length < 8) { setError('Temp password must be at least 8 characters.'); return; }
+    await resetUserPassword(user.id, pw);
+    setDone(true);
+  };
+
+  return (
+    <>
+      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 500 }} />
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Reset password for ${user.name}`} style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: '#fff', borderRadius: '14px', zIndex: 501, width: '440px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden', outline: 'none' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid #E2E8F0' }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#111111' }}>Reset password — {user.name}</h2>
+        </div>
+        {done ? (
+          <div style={{ padding: '20px 22px' }}>
+            <div style={{ padding: '12px 14px', background: '#ECFDF5', color: '#065F46', borderRadius: '8px', fontSize: '13px', marginBottom: '12px' }}>
+              ✓ Password reset. Share this temp password with {user.name} via a secure channel. They will be prompted to re-verify via OTP on next login.
+            </div>
+            <div style={{ background: '#F8FAFC', padding: '12px 14px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '14px', color: '#1E293B', wordBreak: 'break-all' }}>{pw}</div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
+              <button onClick={onClose} style={primaryBtn}>Done</button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={submit} style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <FormField label="New temporary password" hint="At least 8 characters. User must change on next login.">
+              <input aria-label="Temporary password" type="text" value={pw} onChange={e => setPw(e.target.value)} style={inputStyle} autoFocus />
+            </FormField>
+            {error && <div style={{ padding: '10px 12px', background: '#FEF2F2', color: '#B91C1C', borderRadius: '8px', fontSize: '13px', fontWeight: 700 }}>{error}</div>}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={onClose} style={ghostBtn}>Cancel</button>
+              <button type="submit" style={primaryBtn}>Reset</button>
+            </div>
+          </form>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ConfirmDialog({ title, body, confirmLabel, confirmStyle, onConfirm, onCancel }) {
+  const panelRef = useRef(null);
+  useModalFocusTrap(panelRef);
+  useEffect(() => {
+    const handleKey = e => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onCancel]);
+  const confirmBg = confirmStyle === 'danger' ? '#B91C1C' : '#7C3AED';
+  return (
+    <>
+      <div onClick={onCancel} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 600 }} />
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title} style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: '#fff', borderRadius: '14px', zIndex: 601, width: '420px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden', outline: 'none' }}>
+        <div style={{ padding: '20px 22px' }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#111111' }}>{title}</h2>
+          <div style={{ marginTop: '8px', color: '#475569', fontSize: '13px', lineHeight: 1.5 }}>{body}</div>
+        </div>
+        <div style={{ padding: '12px 22px 18px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={ghostBtn}>Cancel</button>
+          <button onClick={onConfirm} style={{ ...primaryBtn, background: confirmBg }}>{confirmLabel}</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+const FormField = ({ label, hint, children }) => (
+  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+    {children}
+    {hint && <span style={{ fontSize: '12px', color: '#94A3B8' }}>{hint}</span>}
+  </label>
+);
+
+const inputStyle = { padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontFamily: "'Lato', sans-serif", outline: 'none', background: '#fff' };
+const ghostBtn = { padding: '8px 14px', background: '#F1F5F9', color: '#475569', border: 'none', borderRadius: '7px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' };
+const primaryBtn = { padding: '8px 16px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' };
+
+// ─── System health card (admin only) ──────────────────────────────────────────
+function SystemHealthCard() {
+  const [state, setState] = useState({ loading: true, ok: false, jira: false, anthropic: false, ts: null });
+  const webhook = useWebhookState();
+  const workflow = useJiraWorkflow();
+  const assignable = useAssignableUsers();
+
+  const refresh = async () => {
+    try {
+      const res = await fetch('/api/v1/admin-status');
+      if (!res.ok) throw new Error('http ' + res.status);
+      const d = await res.json();
+      setState({ loading: false, ok: true, jira: d.jira, anthropic: d.anthropic, ts: d.ts });
+    } catch {
+      setState({ loading: false, ok: false, jira: false, anthropic: false, ts: null });
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    const id = setInterval(refresh, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const dot = (active) => ({ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: active ? '#16A34A' : '#DC2626', marginRight: '8px' });
+  const amber = { display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#F59E0B', marginRight: '8px' };
+  const webhookFresh = webhook.lastWebhookAt && (Date.now() - new Date(webhook.lastWebhookAt).getTime()) < 5 * 60_000;
+
+  return (
+    <div style={{ background: '#fff', borderRadius: '12px', padding: '16px 18px', border: '1px solid #E2E8F0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>System health</div>
+        <button onClick={refresh} aria-label="Refresh system health" style={{ fontSize: '11px', padding: '4px 10px', background: '#F1F5F9', color: '#475569', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 700 }}>↻ Refresh</button>
+      </div>
+      {state.loading ? (
+        <div style={{ fontSize: '13px', color: '#94A3B8' }}>Checking…</div>
+      ) : (
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <li style={{ fontSize: '13px', color: '#1E293B' }}><span style={dot(state.ok)} />BFF proxy {state.ok ? 'reachable' : 'unreachable'}</li>
+          <li style={{ fontSize: '13px', color: '#1E293B' }}><span style={dot(state.ok && state.jira)} />Jira integration {state.ok && state.jira ? 'configured' : 'not configured'}</li>
+          <li style={{ fontSize: '13px', color: '#1E293B' }}><span style={dot(state.ok && state.anthropic)} />Anthropic API {state.ok && state.anthropic ? 'configured' : 'not configured'}</li>
+          <li style={{ fontSize: '13px', color: '#1E293B' }}>
+            <span style={webhook.lastWebhookAt ? (webhookFresh ? dot(true) : amber) : dot(false)} />
+            Webhooks {webhook.lastWebhookAt ? `(last ${new Date(webhook.lastWebhookAt).toLocaleTimeString()})` : 'never received'}
+          </li>
+          <li style={{ fontSize: '13px', color: '#1E293B' }}><span style={dot(workflow.source !== 'fallback')} />Workflow {workflow.source === 'fallback' ? 'using fallback' : `live (${workflow.statuses.length} statuses)`}</li>
+          <li style={{ fontSize: '13px', color: '#1E293B' }}><span style={dot(assignable.source !== 'fallback' && assignable.users.length > 0)} />Assignable users {assignable.users.length > 0 ? `(${assignable.users.length} from Jira)` : 'using seed list'}</li>
+        </ul>
+      )}
+      {state.ts && <div style={{ marginTop: '10px', fontSize: '11px', color: '#94A3B8' }}>Last checked {new Date(state.ts).toLocaleTimeString()}</div>}
+    </div>
+  );
+}
+
+// ─── Maintenance mode toggle (admin only) ─────────────────────────────────────
+function MaintenanceToggleCard() {
+  const [m, setM] = useState(getMaintenanceMode());
+  const [draft, setDraft] = useState(m.message || 'Scheduled maintenance in progress.');
+  useEffect(() => subscribeMaintenance(setM), []);
+
+  const toggle = () => {
+    if (m.active) {
+      setMaintenanceMode(false, '', _currentActor);
+    } else {
+      setMaintenanceMode(true, draft, _currentActor);
+    }
+  };
+
+  return (
+    <div style={{ background: '#fff', borderRadius: '12px', padding: '16px 18px', border: '1px solid #E2E8F0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>Maintenance mode</div>
+        <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: m.active ? '#FEE2E2' : '#DCFCE7', color: m.active ? '#B91C1C' : '#15803D', fontWeight: 700 }}>
+          {m.active ? 'ON' : 'OFF'}
+        </span>
+      </div>
+      <textarea
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        disabled={m.active}
+        aria-label="Maintenance message"
+        rows={2}
+        placeholder="Banner message users will see…"
+        style={{ width: '100%', padding: '8px 10px', border: '1.5px solid #E2E8F0', borderRadius: '7px', fontSize: '12px', fontFamily: "'Lato', sans-serif", resize: 'vertical', outline: 'none', background: m.active ? '#F1F5F9' : '#fff', color: m.active ? '#94A3B8' : '#1E293B' }}
+      />
+      <button
+        onClick={toggle}
+        style={{ marginTop: '10px', width: '100%', padding: '9px', background: m.active ? '#DC2626' : '#111111', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+      >
+        {m.active ? 'Disable maintenance mode' : 'Enable maintenance mode'}
+      </button>
+      {m.active && m.enabledBy && <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '8px' }}>Enabled by {m.enabledBy} at {new Date(m.enabledAt).toLocaleTimeString()}</div>}
+    </div>
+  );
+}
+
+// ─── Global search palette (Cmd/Ctrl+K) ───────────────────────────────────────
+function GlobalSearchPalette({ open, onClose, onNavigate, role }) {
+  const [q, setQ] = useState('');
+  const [, _setVer] = useState(0);
+  useEffect(() => subscribeTickets(_setVer), []);
+  useEffect(() => subscribeUsers(_setVer), []);
+
+  useEffect(() => {
+    if (open) setQ('');
+    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    if (open) window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [open, onClose]);
+
+  const results = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return { docs: [], tickets: [], users: [] };
+    const isAdmin = role === 'superadmin';
+
+    const docs = listDocSummaries()
+      .filter(d => d.title.toLowerCase().includes(query) || d.description.toLowerCase().includes(query) || d.category.toLowerCase().includes(query))
+      .slice(0, 5);
+
+    const tickets = MOCK_TICKETS
+      .filter(t => t.id.toLowerCase().includes(query) || t.title.toLowerCase().includes(query) || (t.description || '').toLowerCase().includes(query))
+      .slice(0, 5);
+
+    const users = isAdmin
+      ? listUsers()
+          .filter(u => u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query))
+          .slice(0, 5)
+      : [];
+
+    return { docs, tickets, users };
+  }, [q, role]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!open) return null;
+  const totalCount = results.docs.length + results.tickets.length + results.users.length;
+
+  return (
+    <>
+      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(15,31,54,0.55)', zIndex: 700 }} />
+      <div role="dialog" aria-modal="true" aria-label="Search portal" style={{
+        position: 'fixed', top: '12vh', left: '50%', transform: 'translateX(-50%)',
+        width: '600px', maxWidth: '94vw', background: '#fff', borderRadius: '14px',
+        boxShadow: '0 24px 72px rgba(0,0,0,0.28)', zIndex: 701,
+        display: 'flex', flexDirection: 'column', maxHeight: '70vh', overflow: 'hidden',
+        fontFamily: "'Lato', sans-serif",
+      }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '18px' }}>🔍</span>
+          <input
+            autoFocus
+            type="search"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Search docs, tickets, users…"
+            aria-label="Global search"
+            style={{ flex: 1, border: 'none', outline: 'none', fontSize: '15px', fontFamily: "'Lato', sans-serif", color: '#1E293B' }}
+          />
+          <span style={{ fontSize: '11px', color: '#94A3B8', padding: '2px 6px', background: '#F1F5F9', borderRadius: '4px', fontWeight: 700 }}>ESC</span>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {q.trim() === '' ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+              Start typing to search across the portal. <br />Tip: use <strong>⌘K</strong> / <strong>Ctrl+K</strong> from anywhere.
+            </div>
+          ) : totalCount === 0 ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>No matches for "{q}".</div>
+          ) : (
+            <>
+              {results.docs.length > 0 && (
+                <ResultsGroup
+                  label="Documents"
+                  icon="📚"
+                  items={results.docs.map(d => ({ key: d.title, title: d.title, sub: `${d.category} · ${d.description.slice(0, 80)}` }))}
+                  onPick={() => { onNavigate('docs'); onClose(); }}
+                />
+              )}
+              {results.tickets.length > 0 && (
+                <ResultsGroup
+                  label="Tickets"
+                  icon="🎟️"
+                  items={results.tickets.map(t => ({ key: t.id, title: t.title, sub: `${t.id} · ${t.priority} · ${t.status}` }))}
+                  onPick={() => { onNavigate('mytickets'); onClose(); }}
+                />
+              )}
+              {results.users.length > 0 && (
+                <ResultsGroup
+                  label="Users"
+                  icon="👥"
+                  items={results.users.map(u => ({ key: u.id, title: u.name, sub: `${u.email} · ${u.role}` }))}
+                  onPick={() => { onNavigate('users'); onClose(); }}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ResultsGroup({ label, icon, items, onPick }) {
+  return (
+    <div style={{ padding: '6px 8px' }}>
+      <div style={{ padding: '8px 10px', fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        {icon} {label}
+      </div>
+      {items.map(it => (
+        <button
+          key={it.key}
+          onClick={onPick}
+          style={{ width: '100%', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: '8px 12px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '2px', fontFamily: "'Lato', sans-serif" }}
+          onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        >
+          <span style={{ fontSize: '13px', fontWeight: 700, color: '#1E293B' }}>{it.title}</span>
+          <span style={{ fontSize: '12px', color: '#64748B' }}>{it.sub}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Chat assistant widget (all authenticated users) ─────────────────────────
+function ChatAssistantWidget({ effectiveUser, effectiveRole }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState([]); // {role:'user'|'assistant', content}
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const sessionIdRef = useRef(null);
+  const scrollRef = useRef(null);
+
+  // Reset conversation when the effective user changes (login / view-as switch)
+  useEffect(() => {
+    setMessages([]);
+    setError('');
+    sessionIdRef.current = null;
+  }, [effectiveUser?.email, effectiveRole]);
+
+  useEffect(() => {
+    if (open) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, open]);
+
+  const buildUserContext = () => {
+    if (!effectiveUser) return undefined;
+    const openTickets = MOCK_TICKETS
+      .filter(t => t.assignee === effectiveUser.name && (t.status === 'Open' || t.status === 'In Progress'))
+      .slice(0, 10)
+      .map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority }));
+    return {
+      name: effectiveUser.name,
+      role: effectiveRole === 'superadmin' ? 'superadmin' : 'user',
+      openTickets,
+    };
+  };
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setError('');
+    const userMsg = { role: 'user', content: text };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
+    setDraft('');
+    setBusy(true);
+
+    // Start a chat session lazily on first message
+    if (!sessionIdRef.current) {
+      sessionIdRef.current = startChatSession({
+        userName: effectiveUser?.name,
+        userEmail: effectiveUser?.email,
+        userRole: effectiveRole,
+      });
+    }
+    appendChatMessage(sessionIdRef.current, 'user', text);
+
+    try {
+      const res = await fetch('/api/v1/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: nextMessages,
+          userContext: buildUserContext(),
+          portalContext: { docs: listDocSummaries() },
+        }),
+      });
+      if (res.status === 503) {
+        setError('The chat assistant is not configured on the server.');
+        setBusy(false);
+        return;
+      }
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e?.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const reply = (data.reply || '').trim() || '(no reply)';
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      appendChatMessage(sessionIdRef.current, 'assistant', reply);
+    } catch (e) {
+      setError(e.message || 'Could not reach the chat assistant.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onKeyDown = e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
+  return (
+    <>
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Open chat assistant"
+          style={{
+            position: 'fixed', bottom: '24px', right: '24px', zIndex: 950,
+            width: '56px', height: '56px', borderRadius: '50%',
+            background: '#7C3AED', color: '#fff', border: 'none',
+            boxShadow: '0 8px 24px rgba(124,58,237,0.4)',
+            cursor: 'pointer', fontSize: '24px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          💬
+        </button>
+      )}
+      {open && (
+        <div
+          role="dialog"
+          aria-modal="false"
+          aria-label="TechOps assistant"
+          style={{
+            position: 'fixed', bottom: '24px', right: '24px', zIndex: 950,
+            width: '380px', maxWidth: 'calc(100vw - 32px)',
+            height: '540px', maxHeight: 'calc(100vh - 80px)',
+            background: '#fff', borderRadius: '14px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            fontFamily: "'Lato', sans-serif",
+          }}
+        >
+          <div style={{ background: '#111111', color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px' }}>💬</div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '14px' }}>TechOps Assistant</div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>Ask anything about the portal or IT</div>
+              </div>
+            </div>
+            <button onClick={() => setOpen(false)} aria-label="Close chat" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '22px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+          </div>
+
+          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px', background: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {messages.length === 0 && (
+              <div style={{ textAlign: 'center', color: '#64748B', fontSize: '13px', padding: '24px 16px' }}>
+                Hi{effectiveUser?.name ? ` ${effectiveUser.name.split(' ')[0]}` : ''} 👋<br />
+                Ask me how the portal works, where to find a doc, or anything IT-related.
+              </div>
+            )}
+            {messages.map((m, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                <div style={{
+                  maxWidth: '85%', padding: '9px 13px', borderRadius: '12px',
+                  background: m.role === 'user' ? '#7C3AED' : '#fff',
+                  color: m.role === 'user' ? '#fff' : '#1E293B',
+                  fontSize: '13px', lineHeight: 1.5, whiteSpace: 'pre-wrap',
+                  border: m.role === 'assistant' ? '1px solid #E2E8F0' : 'none',
+                  boxShadow: m.role === 'assistant' ? '0 1px 2px rgba(0,0,0,0.04)' : 'none',
+                }}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {busy && (
+              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                <div style={{ padding: '9px 13px', borderRadius: '12px', background: '#fff', border: '1px solid #E2E8F0', color: '#94A3B8', fontSize: '13px' }}>
+                  Thinking…
+                </div>
+              </div>
+            )}
+            {error && (
+              <div role="alert" style={{ background: '#FEF2F2', color: '#B91C1C', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700 }}>
+                ⚠ {error}
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: '10px 12px', background: '#fff', borderTop: '1px solid #E2E8F0', display: 'flex', gap: '8px' }}>
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="Type a question…"
+              aria-label="Type a question"
+              rows={1}
+              style={{ flex: 1, padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontFamily: "'Lato', sans-serif", outline: 'none', resize: 'none', maxHeight: '120px' }}
+            />
+            <button
+              onClick={send}
+              disabled={!draft.trim() || busy}
+              aria-label="Send message"
+              style={{ padding: '9px 14px', background: !draft.trim() || busy ? '#CBD5E1' : '#7C3AED', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: !draft.trim() || busy ? 'not-allowed' : 'pointer' }}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Maintenance banner — fixed top of app when active ────────────────────────
+function MaintenanceBanner() {
+  const [m, setM] = useState(getMaintenanceMode());
+  useEffect(() => subscribeMaintenance(setM), []);
+  if (!m.active) return null;
+  return (
+    <div role="status" style={{ background: '#FEF3C7', borderBottom: '2px solid #FDE68A', padding: '10px 28px', display: 'flex', alignItems: 'center', gap: '10px', fontFamily: "'Lato', sans-serif" }}>
+      <span style={{ fontSize: '16px' }}>🛠</span>
+      <div style={{ flex: 1, fontSize: '13px', color: '#92400E', fontWeight: 700 }}>
+        {m.message}
+        {m.enabledBy && <span style={{ marginLeft: '8px', fontWeight: 400 }}>— posted by {m.enabledBy}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Chat logs page (admin only) ──────────────────────────────────────────────
+function ChatLogsPage() {
+  const [version, setVersion] = useState(0);
+  useEffect(() => subscribeChat(() => setVersion(v => v + 1)), []);
+  const [active, setActive] = useState(null);
+
+  const sessions = useMemo(() => listChatSessions(), [version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fmtTs = iso => new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+
+  return (
+    <div>
+      <div style={{ marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#111111', margin: 0 }}>Chat logs</h1>
+        <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>Every user conversation with the TechOps assistant. Used to tune the bot and decide future caps.</div>
+      </div>
+
+      {sessions.length === 0 ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#94A3B8', background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+          📭 No chat sessions yet. They'll appear here as users start chatting.
+        </div>
+      ) : (
+        <div className="pomelo-audit-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 320px) 1fr', gap: '16px', alignItems: 'flex-start' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden', maxHeight: '70vh', overflowY: 'auto' }}>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {sessions.map(s => {
+                const isActive = active?.id === s.id;
+                return (
+                  <li key={s.id}>
+                    <button
+                      onClick={() => setActive(s)}
+                      style={{ width: '100%', textAlign: 'left', border: 'none', borderTop: '1px solid #F1F5F9', background: isActive ? '#F5F3FF' : '#fff', padding: '12px 16px', cursor: 'pointer', fontFamily: "'Lato', sans-serif" }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
+                        <span style={{ fontWeight: 700, fontSize: '13px', color: '#1E293B' }}>{s.userName}</span>
+                        <span style={{ fontSize: '11px', color: '#94A3B8' }}>{fmtTs(s.startedAt)}</span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                        {s.messages.length} message{s.messages.length === 1 ? '' : 's'}{s.userRole === 'superadmin' ? ' · admin' : ''}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', padding: '18px', minHeight: '320px' }}>
+            {active ? (
+              <>
+                <div style={{ marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid #F1F5F9' }}>
+                  <div style={{ fontWeight: 800, color: '#111111' }}>{active.userName} <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 400 }}>· {active.userEmail || 'no email'}</span></div>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>Started {fmtTs(active.startedAt)} · {active.messages.length} messages</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {active.messages.map((m, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                      <div style={{
+                        maxWidth: '85%', padding: '9px 13px', borderRadius: '12px',
+                        background: m.role === 'user' ? '#7C3AED' : '#F1F5F9',
+                        color: m.role === 'user' ? '#fff' : '#1E293B',
+                        fontSize: '13px', whiteSpace: 'pre-wrap', lineHeight: 1.5,
+                      }}>
+                        {m.content}
+                        <div style={{ fontSize: '10px', color: m.role === 'user' ? 'rgba(255,255,255,0.7)' : '#94A3B8', marginTop: '4px' }}>{fmtTs(m.ts)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', color: '#94A3B8', padding: '40px 0' }}>Select a session on the left to read the conversation.</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Audit log page (admin only) ──────────────────────────────────────────────
+function AuditLogPage() {
+  const [version, setVersion] = useState(0);
+  useEffect(() => subscribeAudit(setVersion), []);
+  const [actionFilter, setActionFilter] = useState('all');
+  const [actorFilter, setActorFilter] = useState('all');
+  const [query, setQuery] = useState('');
+
+  const entries = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return listAudit().filter(e => {
+      if (actionFilter !== 'all' && !e.action.startsWith(actionFilter)) return false;
+      if (actorFilter !== 'all' && e.actorEmail !== actorFilter) return false;
+      if (q) {
+        const hay = `${e.action} ${e.actorName} ${e.targetLabel || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [actionFilter, actorFilter, query, version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const uniqueActors = useMemo(() => {
+    const m = new Map();
+    listAudit().forEach(e => m.set(e.actorEmail, e.actorName));
+    return Array.from(m.entries());
+  }, [version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fmtTs = iso => {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
+  };
+
+  const actionLabel = a => {
+    const map = {
+      'user.create': '➕ User created',
+      'user.update': '✏️ User edited',
+      'user.promote': '⬆️ Promoted to superadmin',
+      'user.demote': '⬇️ Demoted to user',
+      'user.deactivate': '🚫 User deactivated',
+      'user.reactivate': '✅ User reactivated',
+      'user.force_re_otp': '🔁 Force re-OTP',
+      'user.reset_password': '🔑 Password reset',
+      'admin.view_as': '👁 View-as switched',
+      'session.login': '🔓 Admin login',
+      'session.logout': '🔒 Admin logout',
+    };
+    return map[a] || a;
+  };
+
+  const renderDetails = e => {
+    if (!e.details) return null;
+    if (e.action === 'admin.view_as') {
+      return e.details.mode === 'user'
+        ? <span>switched to <strong>regular-user view</strong></span>
+        : <span>impersonating <strong>{e.details.targetName}</strong></span>;
+    }
+    if (e.action === 'user.promote' || e.action === 'user.demote') {
+      return <span>{e.details.from} → <strong>{e.details.to}</strong></span>;
+    }
+    if (e.action === 'user.update' && Array.isArray(e.details.changedKeys)) {
+      return <span>changed {e.details.changedKeys.join(', ')}</span>;
+    }
+    if (e.action === 'user.create' && e.details.role) {
+      return <span>as <strong>{e.details.role}</strong> in {e.details.department}</span>;
+    }
+    return null;
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#111111', margin: 0 }}>Audit log</h1>
+        <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>Append-only record of admin actions. Entries are immutable (charter R-10).</div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <input
+          type="search"
+          placeholder="Search action / actor / target…"
+          aria-label="Search audit log"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          style={{ flex: '1 1 240px', minWidth: '200px', padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontFamily: "'Lato', sans-serif", outline: 'none' }}
+        />
+        <select aria-label="Filter by category" value={actionFilter} onChange={e => setActionFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontFamily: "'Lato', sans-serif" }}>
+          <option value="all">All categories</option>
+          <option value="user">User actions</option>
+          <option value="admin">Admin/view-as</option>
+          <option value="session">Sessions</option>
+        </select>
+        <select aria-label="Filter by actor" value={actorFilter} onChange={e => setActorFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontFamily: "'Lato', sans-serif" }}>
+          <option value="all">All actors</option>
+          {uniqueActors.map(([email, name]) => <option key={email} value={email}>{name}</option>)}
+        </select>
+      </div>
+
+      <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden', border: '1px solid #E2E8F0' }}>
+        {entries.length === 0 ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: '#94A3B8' }}>
+            No audit entries yet. Mutations from the Users panel will appear here.
+          </div>
+        ) : (
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {entries.map(e => (
+              <li key={e.id} style={{ padding: '12px 18px', borderTop: '1px solid #F1F5F9', display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                <div style={{ fontSize: '12px', color: '#94A3B8', minWidth: '150px', fontFamily: 'monospace' }}>{fmtTs(e.ts)}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '13px' }}>{actionLabel(e.action)}</div>
+                  <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+                    <strong>{e.actorName}</strong>
+                    {e.targetLabel && <> · target: <strong>{e.targetLabel}</strong></>}
+                    {renderDetails(e) && <> · {renderDetails(e)}</>}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Resources dropdown (groups reference pages) ─────────────────────────────
+const RESOURCE_ITEMS = [
+  { id: 'docs',     icon: '📚', label: 'Documentation',   hint: 'IT guides and how-tos' },
+  { id: 'priority', icon: '🎯', label: 'Priority Guide',  hint: 'P0–P3 definitions' },
+  { id: 'sla',      icon: '📋', label: 'SLA & Standards', hint: 'Response and resolution targets' },
+];
+
+function ResourcesDropdown({ section, onPick }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const onDown = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, []);
+  const active = RESOURCE_ITEMS.find(r => r.id === section);
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-label="Resources"
+        aria-expanded={open}
+        title={active ? `Resources · ${active.label}` : 'Resources'}
+        style={{
+          ...S.navTab(Boolean(active)),
+          display: 'flex', alignItems: 'center', gap: '5px',
+        }}
+      >
+        📚 <span className="pomelo-btn-label">{active ? active.label : 'Resources'}</span> ▾
+      </button>
+      {open && (
+        <div role="menu" style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0,
+          minWidth: '260px', background: '#fff', borderRadius: '10px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.2)', padding: '6px',
+          zIndex: 1000, animation: 'fadeIn 0.12s ease',
+        }}>
+          {RESOURCE_ITEMS.map(r => {
+            const isActive = section === r.id;
+            return (
+              <button
+                key={r.id}
+                role="menuitem"
+                onClick={() => { onPick(r.id); setOpen(false); }}
+                style={{
+                  width: '100%', textAlign: 'left', border: 'none',
+                  background: isActive ? '#F5F3FF' : 'none',
+                  color: '#1E293B', padding: '8px 10px', borderRadius: '6px',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
+                  fontFamily: "'Lato', sans-serif", fontSize: '13px',
+                }}
+              >
+                <span style={{ fontSize: '15px', width: '20px', textAlign: 'center' }}>{r.icon}</span>
+                <span style={{ flex: 1 }}>
+                  <span style={{ fontWeight: isActive ? 700 : 500, color: '#1E293B' }}>{r.label}</span>
+                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>{r.hint}</div>
+                </span>
+                {isActive && <span style={{ color: '#7C3AED', fontWeight: 700 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Admin tools dropdown ────────────────────────────────────────────────────
+// Groups the four admin-only destinations behind a single nav button to
+// reclaim space and keep related actions together.
+const ADMIN_TOOLS = [
+  { id: 'admin',    icon: '🛠', label: 'Admin Console',  hint: 'Kanban + system controls' },
+  { id: 'users',    icon: '👥', label: 'Users',           hint: 'Manage portal accounts' },
+  { id: 'audit',    icon: '📜', label: 'Audit log',       hint: 'Immutable action history' },
+  { id: 'chatlogs', icon: '💬', label: 'Chat logs',       hint: 'AI assistant conversations' },
+];
+
+function AdminToolsDropdown({ section, onPick }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const onDown = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, []);
+  const active = ADMIN_TOOLS.find(t => t.id === section);
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-label="Admin tools"
+        aria-expanded={open}
+        title={active ? `Admin · ${active.label}` : 'Admin tools'}
+        className="pomelo-icon-btn"
+        style={{
+          padding: '6px 13px', borderRadius: '7px', border: 'none', cursor: 'pointer',
+          background: active ? '#7C3AED' : 'rgba(124,58,237,0.15)',
+          color: active ? '#fff' : '#7C3AED',
+          fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700,
+          display: 'flex', alignItems: 'center', gap: '5px',
+        }}
+      >
+        🛠 <span className="pomelo-btn-label">{active ? active.label : 'Admin'}</span> ▾
+      </button>
+      {open && (
+        <div role="menu" style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          minWidth: '240px', background: '#fff', borderRadius: '10px',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.2)', padding: '6px',
+          zIndex: 1000, animation: 'fadeIn 0.12s ease',
+        }}>
+          {ADMIN_TOOLS.map(t => {
+            const isActive = section === t.id;
+            return (
+              <button
+                key={t.id}
+                role="menuitem"
+                onClick={() => { onPick(isActive ? 'home' : t.id); setOpen(false); }}
+                style={{
+                  width: '100%', textAlign: 'left', border: 'none',
+                  background: isActive ? '#F5F3FF' : 'none',
+                  color: '#1E293B', padding: '8px 10px', borderRadius: '6px',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px',
+                  fontFamily: "'Lato', sans-serif", fontSize: '13px',
+                }}
+              >
+                <span style={{ fontSize: '15px', width: '20px', textAlign: 'center' }}>{t.icon}</span>
+                <span style={{ flex: 1 }}>
+                  <span style={{ fontWeight: isActive ? 700 : 500, color: '#1E293B' }}>{t.label}</span>
+                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>{t.hint}</div>
+                </span>
+                {isActive && <span style={{ color: '#7C3AED', fontWeight: 700 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Admin View Mode pill ─────────────────────────────────────────────────────
+// Visible only to real superadmins. Lets them downgrade their view to "regular
+// user" or impersonate a specific user without changing the underlying session.
+function AdminViewModePill({ viewAs, onSet, allUsers, currentUserName }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onDown = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, []);
+
+  const labelIcon = viewAs === null ? '⭐' : viewAs === 'user' ? '👤' : '👁';
+  const labelTextOnly =
+    viewAs === null ? 'Admin Mode'
+    : viewAs === 'user' ? 'User View'
+    : `Viewing as ${viewAs.name.split(' ')[0]}`;
+  const labelColor = viewAs === null ? '#7C3AED' : '#FBBF24';
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        aria-label="Switch admin view mode"
+        aria-expanded={open}
+        title={labelTextOnly}
+        className="pomelo-icon-btn"
+        style={{
+          padding: '6px 12px', borderRadius: '7px', border: `1.5px solid ${labelColor}`,
+          background: '#FFFFFF', color: labelColor,
+          cursor: 'pointer', fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700,
+          display: 'flex', alignItems: 'center', gap: '5px',
+        }}
+      >
+        {labelIcon} <span className="pomelo-btn-label">{labelTextOnly}</span> ▾
+      </button>
+      {open && (
+        <div
+          role="menu"
+          style={{
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+            minWidth: '240px', background: '#fff', borderRadius: '10px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.2)', padding: '6px',
+            zIndex: 1000, animation: 'fadeIn 0.12s ease',
+          }}
+        >
+          <div style={{ padding: '6px 10px', fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>View Mode</div>
+          <button
+            role="menuitem"
+            onClick={() => { onSet(null); setOpen(false); }}
+            style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: viewAs === null ? '#F5F3FF' : 'none', color: '#1E293B', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: viewAs === null ? 700 : 500 }}
+          >
+            ⭐ Admin (default) {viewAs === null ? '✓' : ''}
+          </button>
+          <button
+            role="menuitem"
+            onClick={() => { onSet('user'); setOpen(false); }}
+            style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: viewAs === 'user' ? '#F5F3FF' : 'none', color: '#1E293B', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: viewAs === 'user' ? 700 : 500 }}
+          >
+            👤 View as regular user {viewAs === 'user' ? '✓' : ''}
+          </button>
+          <div style={{ padding: '8px 10px 4px', fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', borderTop: '1px solid #F1F5F9', marginTop: '4px' }}>Impersonate user</div>
+          {allUsers.filter(u => u.name !== currentUserName).map(u => {
+            const active = viewAs && typeof viewAs === 'object' && viewAs.email === u.email;
+            return (
+              <button
+                key={u.email}
+                role="menuitem"
+                onClick={() => { onSet({ name: u.name, email: u.email, department: u.department, role: u.role }); setOpen(false); }}
+                style={{ width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: active ? '#F5F3FF' : 'none', color: '#1E293B', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: active ? 700 : 500, display: 'flex', justifyContent: 'space-between', gap: '8px' }}
+              >
+                <span>{u.name}</span>
+                <span style={{ color: '#94A3B8', fontSize: '11px' }}>{u.role === 'superadmin' ? 'admin' : u.role}{active ? ' ✓' : ''}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main App (inner) ─────────────────────────────────────────────────────────
+function AppContent() {
+  const { seedNotifications, addNotification } = useNotifications();
   const [section, setSection] = useState('home');
   const [toast, setToast] = useState(null);
   const [role, setRole] = useState('user');
@@ -3024,6 +5996,26 @@ export default function PomeloTechOpsPortal() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [docs, setDocs] = useState(DOCS);
   const [suggestions, setSuggestions] = useState([]);
+  // viewAs: null = see as self (real role); 'user' = downgrade self to user view;
+  // {user object} = impersonate that specific user. Session-only — resets on refresh.
+  const [viewAs, setViewAs] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Global ⌘K / Ctrl+K → open palette
+  useEffect(() => {
+    const onKey = e => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(o => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const effectiveRole = viewAs === 'user' ? 'user' : (viewAs && typeof viewAs === 'object' ? viewAs.role : role);
+  const effectiveUser = viewAs && typeof viewAs === 'object' ? viewAs : currentUser;
+  const isImpersonating = viewAs !== null;
 
   useEffect(() => {
     const session = getSession();
@@ -3031,45 +6023,105 @@ export default function PomeloTechOpsPortal() {
       setCurrentUser({ name: session.name, email: session.email, department: session.department });
       setRole(session.role);
       setIsAuthenticated(true);
+      setAuditActor({ name: session.name, email: session.email });
+      seedNotifications(buildSeedNotifications(session.name));
     }
-  }, []);
+    // Load the live Jira project metadata on boot — all fall back silently.
+    loadJiraWorkflow();
+    loadAssignableUsers();
+    loadIssueTypes();
+    loadComponents();
+  }, [seedNotifications]);
+
+  // Background Jira poll — runs while authenticated. Reconciles linked tickets
+  // every 60s; harmless when Jira is unreachable (BFF returns unavailable:true).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    pollJira('PESD1');
+    const id = setInterval(() => pollJira('PESD1'), 60_000);
+    return () => clearInterval(id);
+  }, [isAuthenticated]);
+
+  // Webhook event polling — every 5s. Cheap because BFF buffers in memory and
+  // only returns events newer than `since`.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const id = setInterval(() => pollWebhookEvents(), 5_000);
+    return () => clearInterval(id);
+  }, [isAuthenticated]);
 
   const handleLogin = (user) => {
     setCurrentUser({ name: user.name, email: user.email, department: user.department });
     setRole(user.role);
     setIsAuthenticated(true);
+    setViewAs(null);
+    setAuditActor({ name: user.name, email: user.email });
+    if (user.role === 'superadmin') recordAudit('session.login', { name: user.name, email: user.email });
+    seedNotifications(buildSeedNotifications(user.name));
   };
 
   const handleLogout = () => {
+    if (role === 'superadmin' && currentUser) {
+      recordAudit('session.logout', { name: currentUser.name, email: currentUser.email });
+    }
     clearSession();
     setIsAuthenticated(false);
     setCurrentUser(null);
     setRole('user');
+    setViewAs(null);
+    setAuditActor(null);
     setSection('home');
   };
 
-  const initials = currentUser?.name?.split(' ').map(n => n[0]).join('').toUpperCase() ?? '?';
+  // Record view-mode changes (impersonation is a sensitive admin action — R-10).
+  useEffect(() => {
+    if (!isAuthenticated || role !== 'superadmin' || !currentUser) return;
+    if (viewAs === null) return; // skip the initial null on login
+    const detail =
+      viewAs === 'user' ? { mode: 'user' }
+      : { mode: 'impersonate', targetEmail: viewAs.email, targetName: viewAs.name };
+    recordAudit('admin.view_as', { name: currentUser.name, email: currentUser.email }, null, detail);
+  }, [viewAs, isAuthenticated, role, currentUser]);
 
+  const initials = effectiveUser?.name?.split(' ').map(n => n[0]).join('').toUpperCase() ?? '?';
+
+  // Most-used destinations stay as direct buttons; the three reference pages
+  // are grouped under a Resources dropdown below.
   const NAV_ITEMS = [
     { id: 'home', label: '🏠 Home' },
     { id: 'submit', label: '+ Submit Ticket' },
-    { id: 'docs', label: '📚 Documentation' },
-    { id: 'priority', label: '🎯 Priority Guide' },
-    { id: 'sla', label: '📋 SLA & Standards' },
     { id: 'mytickets', label: '🎟️ My Tickets' },
   ];
+  const RESOURCE_IDS = new Set(['docs', 'priority', 'sla']);
+
+  // If the impersonated/effective view drops below admin while sitting on an
+  // admin-only section, bounce back home — the viewed user wouldn't see it.
+  useEffect(() => {
+    if ((section === 'admin' || section === 'users' || section === 'audit' || section === 'chatlogs') && effectiveRole !== 'superadmin') setSection('home');
+  }, [section, effectiveRole]);
+
+  // Re-seed notifications when the view flips so the impersonated/downgraded
+  // view shows that user's notification history rather than the real session's.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const viewName = viewAs && typeof viewAs === 'object' ? viewAs.name : currentUser?.name;
+    if (viewName) seedNotifications(buildSeedNotifications(viewName));
+  }, [viewAs, isAuthenticated, currentUser?.name, seedNotifications]);
 
   const renderPage = () => {
     let page;
     switch (section) {
-      case 'home':      page = <HomePage setSection={setSection} role={role} currentUser={currentUser} />; break;
-      case 'submit':    page = <SubmitPage setSection={setSection} showToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} />; break;
-      case 'docs':      page = <DocImportExportPage role={role} suggestions={suggestions} setSuggestions={setSuggestions} currentUser={currentUser} />; break;
+      case 'home':      page = <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'submit':    page = <SubmitPage setSection={setSection} showToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} currentUser={effectiveUser} />; break;
+      case 'docs':      page = <DocImportExportPage role={effectiveRole} suggestions={suggestions} setSuggestions={setSuggestions} currentUser={effectiveUser} onDocEdit={(doc) => addNotification({ type: 'doc_edit', title: `Document updated: ${doc.title}`, body: `${effectiveUser?.name || 'You'} made changes to ${doc.title}.`, actorName: effectiveUser?.name || 'You', docId: doc.id })} />; break;
       case 'priority':  page = <PriorityGuidePage />; break;
       case 'sla':       page = <SLAPage />; break;
-      case 'mytickets': page = <MyTicketsPage role={role} />; break;
-      case 'admin':     page = role === 'superadmin' ? <AdminPage /> : <HomePage setSection={setSection} role={role} currentUser={currentUser} />; break;
-      default:          page = <HomePage setSection={setSection} role={role} currentUser={currentUser} />;
+      case 'mytickets': page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'admin':     page = effectiveRole === 'superadmin' ? <AdminPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'users':     page = effectiveRole === 'superadmin' ? <UsersPanelPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'audit':     page = effectiveRole === 'superadmin' ? <AuditLogPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'chatlogs':  page = effectiveRole === 'superadmin' ? <ChatLogsPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      default:          page = <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />;
     }
     return <ErrorBoundary key={section}>{page}</ErrorBoundary>;
   };
@@ -3090,10 +6142,50 @@ export default function PomeloTechOpsPortal() {
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
         * { box-sizing: border-box; }
-        button:focus-visible { outline: 2px solid #E8632A; outline-offset: 2px; }
+        button:focus-visible { outline: 2px solid #7C3AED; outline-offset: 2px; }
+        /* ── Responsive tiers ─────────────────────────────────────────────
+           XL  (>= 1440px) — everything visible, full labels
+           LG  (1200-1439) — hide "⌘K" hint + nav button shorter labels
+           MD  (900-1199)  — admin button labels hidden, icon-only; avatar shows initials only
+           SM  (768-899)   — central nav tabs collapse; search becomes icon
+           XS  (< 768)     — phone layout, stack grids
+        ────────────────────────────────────────────────────────────────── */
+        .pomelo-nav-right { flex-wrap: nowrap; gap: 8px; }
+        @media (max-width: 1439px) {
+          .pomelo-btn-shortcut { display: none !important; }
+        }
+        @media (max-width: 1199px) {
+          /* Hide admin button labels — keep only icons. aria-label provides screen-reader text */
+          .pomelo-btn-label { display: none !important; }
+          /* Shrink avatar name to initials at mid widths */
+          .pomelo-avatar-name { display: none !important; }
+          /* Tighter button padding so icons sit closer */
+          .pomelo-icon-btn { padding: 6px 10px !important; }
+        }
+        @media (max-width: 899px) {
+          /* Hide search label too */
+          .pomelo-search-label { display: none !important; }
+          /* Narrow gap between nav-right items */
+          .pomelo-nav-right { gap: 5px !important; }
+        }
+        @media (max-width: 768px) {
+          /* Stack any two-column admin grids to a single column */
+          .pomelo-stack-on-mobile { display: flex !important; flex-direction: column !important; }
+          /* Allow nav right to wrap on phones */
+          .pomelo-nav-right { flex-wrap: wrap !important; justify-content: flex-end; gap: 6px !important; }
+          /* Hide the central nav tabs on phones — users navigate via search */
+          .pomelo-nav-tabs { display: none !important; }
+          /* Tighter main padding */
+          .pomelo-main { padding: 16px 12px !important; }
+          /* Audit log split-view stacks */
+          .pomelo-audit-grid { grid-template-columns: 1fr !important; }
+          /* Even tighter nav padding on phones */
+          .pomelo-nav { padding: 0 14px !important; }
+        }
       `}</style>
 
-      <nav style={S.nav}>
+      <MaintenanceBanner />
+      <nav className="pomelo-nav" style={S.nav}>
         <div style={S.navLogo}>
           <div>
             <div style={S.navLogoText}>Pomelo</div>
@@ -3101,44 +6193,69 @@ export default function PomeloTechOpsPortal() {
           </div>
         </div>
 
-        <div style={S.navTabs}>
+        <div className="pomelo-nav-tabs" style={S.navTabs}>
           {NAV_ITEMS.map(item => (
             <button key={item.id} onClick={() => setSection(item.id)} style={S.navTab(section === item.id)}>
               {item.label}
             </button>
           ))}
+          <ResourcesDropdown section={RESOURCE_IDS.has(section) ? section : null} onPick={setSection} />
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Admin button — super admin only */}
+        <div className="pomelo-nav-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Global search trigger */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search (Cmd+K)"
+            title="Search (⌘K / Ctrl+K)"
+            className="pomelo-icon-btn"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '7px',
+              padding: '6px 12px', borderRadius: '7px',
+              background: '#F4F4F5', color: '#52525B',
+              border: '1px solid #E4E4E7', cursor: 'pointer',
+              fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            🔍 <span className="pomelo-search-label">Search</span> <span className="pomelo-btn-shortcut" style={{ marginLeft: '4px', padding: '1px 5px', background: '#E4E4E7', color: '#52525B', borderRadius: '3px', fontSize: '10px' }}>⌘K</span>
+          </button>
+
+          {/* View-mode pill — real superadmin only, always visible as an escape hatch */}
           {role === 'superadmin' && (
-            <button
-              onClick={() => setSection(section === 'admin' ? 'home' : 'admin')}
-              style={{
-                padding: '6px 13px', borderRadius: '7px', border: 'none', cursor: 'pointer',
-                background: section === 'admin' ? '#E8632A' : 'rgba(232,99,42,0.15)',
-                color: section === 'admin' ? '#fff' : '#E8632A',
-                fontFamily: "'Lato', sans-serif", fontSize: '12px', fontWeight: 700,
-                display: 'flex', alignItems: 'center', gap: '5px',
-                transition: 'all 0.15s',
-              }}
-            >
-              🛠 {section === 'admin' ? 'Exit Admin' : 'IT Admin'}
-            </button>
+            <AdminViewModePill
+              viewAs={viewAs}
+              onSet={setViewAs}
+              allUsers={MOCK_USERS}
+              currentUserName={currentUser?.name}
+            />
           )}
+
+          {/* Admin tools — single dropdown grouping Users / Audit / Chat Logs / Admin Console */}
+          {effectiveRole === 'superadmin' && (
+            <AdminToolsDropdown section={section} onPick={setSection} />
+          )}
+
+          {/* Notification bell */}
+          <NotificationBell onNavigate={(target) => setSection(target)} />
 
           {/* Avatar — clickable to open profile */}
           <button
             onClick={() => setProfileOpen(true)}
-            style={{ ...S.navUser, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            aria-label={`Open profile for ${effectiveUser?.name || 'user'}`}
+            title={effectiveUser?.name}
+            style={{ ...S.navUser, background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
           >
             <div style={S.avatar}>{initials}</div>
-            <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)' }}>{currentUser.name}</span>
+            <span className="pomelo-avatar-name" style={{ fontSize: '13px', color: '#374151', fontWeight: 600 }}>{effectiveUser?.name}</span>
+            {isImpersonating && (
+              <span style={{ marginLeft: '6px', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', fontWeight: 700, letterSpacing: '0.04em' }}>VIEWING</span>
+            )}
           </button>
         </div>
       </nav>
 
-      <main style={{ ...S.main, maxWidth: section === 'admin' ? '1400px' : '1100px', padding: section === 'admin' ? '32px 28px' : undefined }}>
+      <main className="pomelo-main" style={{ ...S.main, maxWidth: (section === 'admin' || section === 'users' || section === 'audit' || section === 'chatlogs') ? '1400px' : '1100px', padding: (section === 'admin' || section === 'users' || section === 'audit' || section === 'chatlogs') ? '32px 28px' : undefined }}>
         {renderPage()}
       </main>
 
@@ -3147,7 +6264,23 @@ export default function PomeloTechOpsPortal() {
       </footer>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
-      {profileOpen && <ProfileModal currentUser={currentUser} setCurrentUser={setCurrentUser} role={role} onClose={() => setProfileOpen(false)} onLogout={handleLogout} />}
+      {profileOpen && <ProfileModal currentUser={effectiveUser} setCurrentUser={setCurrentUser} role={effectiveRole} onClose={() => setProfileOpen(false)} onLogout={handleLogout} />}
+      <ChatAssistantWidget effectiveUser={effectiveUser} effectiveRole={effectiveRole} />
+      <GlobalSearchPalette
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onNavigate={target => setSection(target)}
+        role={effectiveRole}
+      />
     </div>
+  );
+}
+
+// ─── Root export — wraps AppContent in NotificationProvider ──────────────────
+export default function PomeloTechOpsPortal() {
+  return (
+    <NotificationProvider>
+      <AppContent />
+    </NotificationProvider>
   );
 }

@@ -1,0 +1,325 @@
+// src/components/NotificationBell.jsx
+// Bell icon button with unread badge + dropdown notification panel.
+// Consumes NotificationContext — must be rendered inside NotificationProvider.
+
+import { useState, useRef, useEffect } from 'react';
+import { useNotifications, relativeTime } from '../context/NotificationContext.jsx';
+
+const TYPE_META = {
+  ticket_message: { icon: '💬', color: '#7C3AED', bg: '#FFF4EF' },
+  doc_edit: { icon: '✏️', color: '#111111', bg: '#EFF6FF' },
+  doc_upload: { icon: '📤', color: '#0EA5E9', bg: '#F0F9FF' },
+  status_change: { icon: '🔄', color: '#16A34A', bg: '#F0FDF4' },
+};
+
+export default function NotificationBell({ onNavigate }) {
+  const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotifications();
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef(null);
+  const btnRef = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = e => {
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(e.target) &&
+        btnRef.current &&
+        !btnRef.current.contains(e.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const handleItemClick = n => {
+    markRead(n.id);
+    setOpen(false);
+    if (n.ticketId && onNavigate) onNavigate('mytickets', n.ticketId);
+    else if (n.docId && onNavigate) onNavigate('docs', n.docId);
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {/* Bell button */}
+      <button
+        ref={btnRef}
+        onClick={() => setOpen(v => !v)}
+        title="Notifications"
+        aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+        style={{
+          position: 'relative',
+          background: open ? '#F4F4F5' : 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '7px',
+          borderRadius: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'background 0.15s',
+          lineHeight: 1,
+        }}
+      >
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#4B5563"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+
+        {/* Unread badge */}
+        {unreadCount > 0 && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '3px',
+              right: '3px',
+              minWidth: '16px',
+              height: '16px',
+              borderRadius: '8px',
+              background: '#7C3AED',
+              color: '#fff',
+              fontSize: '10px',
+              fontWeight: 800,
+              fontFamily: "'Lato', sans-serif",
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 3px',
+              lineHeight: 1,
+              border: '2px solid #111111',
+            }}
+          >
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div
+          ref={panelRef}
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 10px)',
+            right: 0,
+            width: '360px',
+            maxHeight: '480px',
+            background: '#fff',
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(26,43,74,0.18), 0 2px 8px rgba(0,0,0,0.08)',
+            border: '1px solid #E2E8F0',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            zIndex: 1000,
+            fontFamily: "'Lato', sans-serif",
+          }}
+        >
+          {/* Header */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '14px 16px 12px',
+              borderBottom: '1px solid #F1F5F9',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '15px', fontWeight: 800, color: '#111111' }}>
+                Notifications
+              </span>
+              {unreadCount > 0 && (
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    background: '#7C3AED',
+                    color: '#fff',
+                    borderRadius: '100px',
+                    padding: '2px 7px',
+                  }}
+                >
+                  {unreadCount} new
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllRead}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#7C3AED',
+                    fontFamily: "'Lato', sans-serif",
+                    padding: '3px 6px',
+                    borderRadius: '5px',
+                  }}
+                >
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={clearAll}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#94A3B8',
+                    fontFamily: "'Lato', sans-serif",
+                    padding: '3px 6px',
+                    borderRadius: '5px',
+                  }}
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Notification list */}
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {notifications.length === 0 ? (
+              <div
+                style={{
+                  padding: '40px 20px',
+                  textAlign: 'center',
+                  color: '#94A3B8',
+                  fontSize: '13px',
+                }}
+              >
+                <div style={{ fontSize: '28px', marginBottom: '10px' }}>🔔</div>
+                You&apos;re all caught up!
+              </div>
+            ) : (
+              notifications.map(n => {
+                const meta = TYPE_META[n.type] || TYPE_META.ticket_message;
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => handleItemClick(n)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '11px',
+                      width: '100%',
+                      padding: '12px 16px',
+                      background: n.read ? '#fff' : '#FAFBFF',
+                      border: 'none',
+                      borderBottom: '1px solid #F8FAFC',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontFamily: "'Lato', sans-serif",
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#F8F9FB')}
+                    onMouseLeave={e =>
+                      (e.currentTarget.style.background = n.read ? '#fff' : '#FAFBFF')
+                    }
+                  >
+                    {/* Type icon */}
+                    <div
+                      style={{
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '8px',
+                        background: meta.bg,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '16px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {meta.icon}
+                    </div>
+
+                    {/* Content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: n.read ? 600 : 800,
+                          color: '#111111',
+                          lineHeight: 1.35,
+                          marginBottom: '3px',
+                        }}
+                      >
+                        {n.title}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '11.5px',
+                          color: '#64748B',
+                          lineHeight: 1.4,
+                          overflow: 'hidden',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        {n.body}
+                      </div>
+                      <div style={{ fontSize: '10.5px', color: '#94A3B8', fontWeight: 600 }}>
+                        {relativeTime(n.createdAt)}
+                      </div>
+                    </div>
+
+                    {/* Unread dot */}
+                    {!n.read && (
+                      <div
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#7C3AED',
+                          flexShrink: 0,
+                          marginTop: '4px',
+                        }}
+                      />
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer */}
+          {notifications.length > 0 && (
+            <div
+              style={{
+                padding: '10px 16px',
+                borderTop: '1px solid #F1F5F9',
+                textAlign: 'center',
+              }}
+            >
+              <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                Showing {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

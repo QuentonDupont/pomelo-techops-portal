@@ -4,7 +4,7 @@
 
 import axios from 'axios';
 import { MOCK_DOCS } from '../mocks/docsMockData.js';
-import { extractDocumentContent, isClaudeConfigured } from './claudeApi.js';
+import { extractDocumentContent } from './claudeApi.js';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const USE_MOCK = !BASE_URL;
@@ -145,14 +145,45 @@ export const getDoc = async id => {
 // @param {FormData} formData — contains files[] + metadata
 // @param {(progress: number) => void} onProgress
 // ─────────────────────────────────────────────────────────────────────────────
+const SOURCE_FILE_LIMIT = 1_048_576; // 1 MB — files larger keep metadata only
+
+const fileToSource = file =>
+  new Promise(resolve => {
+    const meta = {
+      name: file.name,
+      type: file.type || 'application/octet-stream',
+      size: file.size,
+      capturedAt: new Date().toISOString(),
+    };
+    if (file.size > SOURCE_FILE_LIMIT) {
+      resolve({ ...meta, dataUrl: null });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve({ ...meta, dataUrl: String(reader.result || '') });
+    reader.onerror = () => resolve({ ...meta, dataUrl: null });
+    reader.readAsDataURL(file);
+  });
+
 export const uploadDocs = async (fileMetaList, onProgress) => {
   return wrap(async () => {
     if (USE_MOCK) {
+      const IMAGE_EXTS = new Set(['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP']);
       const results = [];
       for (let i = 0; i < fileMetaList.length; i++) {
         const item = fileMetaList[i];
         const format = item.file.name.split('.').pop().toUpperCase();
         const title = item.title || item.file.name.replace(/\.[^.]+$/, '');
+        const isImageFormat = IMAGE_EXTS.has(format);
+
+        // For image files, create a blob URL for reliable in-memory display.
+        // This avoids embedding multi-megabyte base64 data in the content field.
+        const imageUrl = isImageFormat ? URL.createObjectURL(item.file) : null;
+
+        // Capture the original file (as a data URL, capped at 1 MB) so the doc
+        // page can offer a download/preview of the source — not just the
+        // AI-extracted markdown.
+        const sourceFile = await fileToSource(item.file);
 
         // Read text content for plain-text formats; show rich placeholder for binary formats
         // Try Claude-powered content extraction first
@@ -164,36 +195,41 @@ export const uploadDocs = async (fileMetaList, onProgress) => {
         });
 
         if (!content) {
-          // Fallback: read raw text for text-based formats
-          const rawText = await readFileAsText(item.file);
-          if (rawText) {
-            content = rawText;
+          if (isImageFormat) {
+            // Image docs: content is the AI caption. Show a neutral placeholder if unavailable.
+            content = item.description || 'No description available.';
           } else {
-            // Could not extract content — show placeholder with actionable hint
-            const uploadedDate = new Date().toLocaleDateString('en-GB', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            });
-            let claudeNote;
-            if (extractionError?.code === 'KEY_MISSING') {
-              claudeNote = `\n> 💡 **AI formatting unavailable.** Add \`ANTHROPIC_API_KEY=sk-ant-...\` to \`.env.local\` for better extraction. Raw text shown above.`;
-            } else if (extractionError?.code === 'BFF_DOWN') {
-              claudeNote = `\n> 💡 **BFF proxy is not running.** Start both servers with \`npm run dev:all\` for AI-enhanced extraction.`;
+            // Fallback: read raw text for text-based formats
+            const rawText = await readFileAsText(item.file);
+            if (rawText) {
+              content = rawText;
             } else {
-              claudeNote = `\n> ⚠️ Content extraction was attempted but did not succeed for this file. Download to view the original.`;
+              // Could not extract content — show placeholder with actionable hint
+              const uploadedDate = new Date().toLocaleDateString('en-GB', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              });
+              let claudeNote;
+              if (extractionError?.code === 'KEY_MISSING') {
+                claudeNote = `\n> 💡 **AI formatting unavailable.** Add \`ANTHROPIC_API_KEY=sk-ant-...\` to \`.env.local\` for better extraction. Raw text shown above.`;
+              } else if (extractionError?.code === 'BFF_DOWN') {
+                claudeNote = `\n> 💡 **BFF proxy is not running.** Start both servers with \`npm run dev:all\` for AI-enhanced extraction.`;
+              } else {
+                claudeNote = `\n> ⚠️ Content extraction was attempted but did not succeed for this file. Download to view the original.`;
+              }
+              content =
+                `# ${title}\n\n` +
+                claudeNote +
+                '\n\n' +
+                `## File Details\n\n` +
+                `- **File name:** ${item.file.name}\n` +
+                `- **File size:** ${fmtBytes(item.file.size)}\n` +
+                `- **Format:** ${format}\n` +
+                `- **Category:** ${item.category || 'Other'}\n` +
+                `- **Uploaded:** ${uploadedDate}\n` +
+                (item.description ? `\n## Description\n\n${item.description}\n` : '');
             }
-            content =
-              `# ${title}\n\n` +
-              claudeNote +
-              '\n\n' +
-              `## File Details\n\n` +
-              `- **File name:** ${item.file.name}\n` +
-              `- **File size:** ${fmtBytes(item.file.size)}\n` +
-              `- **Format:** ${format}\n` +
-              `- **Category:** ${item.category || 'Other'}\n` +
-              `- **Uploaded:** ${uploadedDate}\n` +
-              (item.description ? `\n## Description\n\n${item.description}\n` : '');
           }
         }
 
@@ -243,6 +279,8 @@ export const uploadDocs = async (fileMetaList, onProgress) => {
           visibility: item.visibility || 'Public',
           status: 'Active',
           content,
+          imageUrl,
+          sourceFile,
         };
         mockStore.unshift(newDoc);
         results.push(newDoc);
@@ -342,6 +380,28 @@ export const bulkExportDocs = async ids => {
 // @param {string} id
 // ─────────────────────────────────────────────────────────────────────────────
 export const restoreDoc = async id => updateDoc(id, { status: 'Active' });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pin / unpin a doc to Home (admin feature). Caps featured count at 3.
+// ─────────────────────────────────────────────────────────────────────────────
+export const pinDoc = async (id, featured) => updateDoc(id, { featured: Boolean(featured) });
+
+export const listFeaturedDocs = () => mockStore.filter(d => d.featured && d.status === 'Active');
+
+// Lightweight summary list used by the chat assistant to ground responses.
+export const listDocSummaries = () =>
+  mockStore
+    .filter(d => d.status === 'Active')
+    .map(d => ({ title: d.title, description: d.description, category: d.category }));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mark / clear a doc as "needs review" (admin feature).
+// review payload: { reviewerName, dueDate, flaggedBy, flaggedAt }
+// ─────────────────────────────────────────────────────────────────────────────
+export const markNeedsReview = async (id, payload) =>
+  updateDoc(id, { review: { ...payload, completed: false, flaggedAt: new Date().toISOString() } });
+
+export const clearReview = async id => updateDoc(id, { review: null });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bulk archive

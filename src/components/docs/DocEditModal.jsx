@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { updateDoc } from '../../api/docsApi.js';
-import { DOC_CATEGORIES, FORMAT_COLORS } from '../../mocks/docsMockData.js';
+import { DOC_CATEGORIES } from '../../mocks/docsMockData.js';
 
 const ICON_OPTIONS = [
   '📄',
@@ -124,7 +124,7 @@ function PreviewPane({ content }) {
       elements.push(
         <h3
           key={i}
-          style={{ fontSize: '14px', fontWeight: 700, color: '#1A2B4A', margin: '16px 0 4px' }}
+          style={{ fontSize: '14px', fontWeight: 700, color: '#111111', margin: '16px 0 4px' }}
         >
           {renderInline(line.replace(/^###\s/, ''))}
         </h3>
@@ -139,9 +139,9 @@ function PreviewPane({ content }) {
           style={{
             fontSize: '17px',
             fontWeight: 900,
-            color: '#1A2B4A',
+            color: '#111111',
             margin: '22px 0 8px',
-            borderBottom: '2px solid #E8632A',
+            borderBottom: '2px solid #7C3AED',
             paddingBottom: '4px',
           }}
         >
@@ -155,7 +155,7 @@ function PreviewPane({ content }) {
       elements.push(
         <h1
           key={i}
-          style={{ fontSize: '21px', fontWeight: 900, color: '#1A2B4A', margin: '0 0 14px' }}
+          style={{ fontSize: '21px', fontWeight: 900, color: '#111111', margin: '0 0 14px' }}
         >
           {renderInline(line.replace(/^#\s/, ''))}
         </h1>
@@ -168,7 +168,7 @@ function PreviewPane({ content }) {
         <blockquote
           key={i}
           style={{
-            borderLeft: '3px solid #E8632A',
+            borderLeft: '3px solid #7C3AED',
             paddingLeft: '12px',
             margin: '8px 0',
             color: '#64748B',
@@ -307,9 +307,9 @@ export default function DocEditModal({ doc, onSave, onClose }) {
       style={{
         padding: '8px 18px',
         border: 'none',
-        borderBottom: `2px solid ${tab === id ? '#E8632A' : 'transparent'}`,
+        borderBottom: `2px solid ${tab === id ? '#7C3AED' : 'transparent'}`,
         background: 'transparent',
-        color: tab === id ? '#E8632A' : '#64748B',
+        color: tab === id ? '#7C3AED' : '#64748B',
         fontFamily: "'Lato', sans-serif",
         fontWeight: 700,
         fontSize: '13px',
@@ -352,7 +352,7 @@ export default function DocEditModal({ doc, onSave, onClose }) {
         {/* Header */}
         <div
           style={{
-            background: '#1A2B4A',
+            background: '#111111',
             padding: '18px 24px',
             display: 'flex',
             alignItems: 'center',
@@ -414,8 +414,8 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                           fontSize: '22px',
                           padding: '4px 6px',
                           borderRadius: '6px',
-                          border: `2px solid ${form.icon === icon ? '#E8632A' : 'transparent'}`,
-                          background: form.icon === icon ? '#FFF5F0' : 'transparent',
+                          border: `2px solid ${form.icon === icon ? '#7C3AED' : 'transparent'}`,
+                          background: form.icon === icon ? '#F5F3FF' : 'transparent',
                           cursor: 'pointer',
                         }}
                       >
@@ -593,8 +593,8 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                         flex: 1,
                         padding: '12px',
                         borderRadius: '10px',
-                        border: `2px solid ${form.visibility === val ? '#1A2B4A' : '#E2E8F0'}`,
-                        background: form.visibility === val ? '#1A2B4A' : '#F8F9FB',
+                        border: `2px solid ${form.visibility === val ? '#111111' : '#E2E8F0'}`,
+                        background: form.visibility === val ? '#111111' : '#F8F9FB',
                         cursor: 'pointer',
                         textAlign: 'left',
                         transition: 'all 0.15s',
@@ -605,7 +605,7 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                         style={{
                           fontSize: '13px',
                           fontWeight: 700,
-                          color: form.visibility === val ? '#fff' : '#1A2B4A',
+                          color: form.visibility === val ? '#fff' : '#111111',
                           fontFamily: "'Lato', sans-serif",
                         }}
                       >
@@ -676,8 +676,8 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                     onClick={() => setPreview(v => !v)}
                     style={{
                       padding: '4px 12px',
-                      background: preview ? '#1A2B4A' : 'transparent',
-                      color: preview ? '#fff' : '#1A2B4A',
+                      background: preview ? '#111111' : 'transparent',
+                      color: preview ? '#fff' : '#111111',
                       border: '1.5px solid #E2E8F0',
                       borderRadius: '6px',
                       fontFamily: "'Lato', sans-serif",
@@ -777,7 +777,7 @@ export default function DocEditModal({ doc, onSave, onClose }) {
               disabled={saving}
               style={{
                 padding: '10px 28px',
-                background: saving ? '#CBD5E1' : '#E8632A',
+                background: saving ? '#CBD5E1' : '#7C3AED',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',

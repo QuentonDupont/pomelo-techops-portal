@@ -35,17 +35,20 @@ export default function DocCard({
   onToggleSelect,
   searchQuery,
   matchedContent,
+  onTogglePin,
+  onFlagReview,
+  onClearReview,
+  onRestore,
 }) {
   const [hovering, setHovering] = useState(false);
   const [showExporter, setShowExporter] = useState(false);
+  const isAdmin = role === 'superadmin';
+  const isArchived = doc.status === 'Archived';
 
   const fmt = FORMAT_COLORS[doc.format] || FORMAT_COLORS.TXT;
   const catColor = '#64748B';
-  const IMAGE_FORMATS = new Set(['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP']);
-  const isImageDoc = IMAGE_FORMATS.has(doc.format);
-  // Extract data URL from content: ![alt](data:...) or ![alt](https://...)
-  const imgSrcMatch = isImageDoc && doc.content?.match(/!\[[^\]]*\]\(([^)]+)\)/);
-  const thumbnailSrc = imgSrcMatch?.[1] || null;
+  // Use the dedicated imageUrl field set during upload (blob URL — fast and reliable)
+  const thumbnailSrc = doc.imageUrl || null;
 
   const handleClick = () => {
     if (selectionMode) {
@@ -63,7 +66,7 @@ export default function DocCard({
       <>
         {text.slice(0, idx)}
         <mark
-          style={{ background: '#FEF08A', color: '#1A2B4A', borderRadius: '2px', padding: '0 1px' }}
+          style={{ background: '#FEF08A', color: '#111111', borderRadius: '2px', padding: '0 1px' }}
         >
           {text.slice(idx, idx + searchQuery.length)}
         </mark>
@@ -79,8 +82,8 @@ export default function DocCard({
       style={{
         background: isSelected ? '#F0F7FF' : '#fff',
         border: isSelected
-          ? '1.5px solid #1A2B4A'
-          : `1px solid ${hovering && !selectionMode ? '#E8632A' : '#E2E8F0'}`,
+          ? '1.5px solid #111111'
+          : `1px solid ${hovering && !selectionMode ? '#7C3AED' : '#E2E8F0'}`,
         borderRadius: '10px',
         padding: '18px',
         display: 'flex',
@@ -91,7 +94,7 @@ export default function DocCard({
         boxShadow: isSelected
           ? '0 0 0 3px rgba(26,43,74,0.08)'
           : hovering && !selectionMode
-            ? '0 4px 18px rgba(232,99,42,0.10)'
+            ? '0 4px 18px rgba(124,58,237,0.10)'
             : '0 1px 4px rgba(0,0,0,0.04)',
         position: 'relative',
         fontFamily: "'Lato', sans-serif",
@@ -110,8 +113,8 @@ export default function DocCard({
             width: '20px',
             height: '20px',
             borderRadius: '5px',
-            border: `2px solid ${isSelected ? '#1A2B4A' : '#94A3B8'}`,
-            background: isSelected ? '#1A2B4A' : '#fff',
+            border: `2px solid ${isSelected ? '#111111' : '#94A3B8'}`,
+            background: isSelected ? '#111111' : '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -155,7 +158,7 @@ export default function DocCard({
               marginBottom: '4px',
             }}
           >
-            <span style={{ fontSize: '14px', fontWeight: 700, color: '#1A2B4A', lineHeight: 1.3 }}>
+            <span style={{ fontSize: '14px', fontWeight: 700, color: '#111111', lineHeight: 1.3 }}>
               {highlight(doc.title)}
             </span>
             {/* Format badge */}
@@ -236,21 +239,40 @@ export default function DocCard({
           style={{
             borderRadius: '6px',
             overflow: 'hidden',
-            maxHeight: '140px',
+            height: '140px',
             background: '#F1F5F9',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            position: 'relative',
           }}
         >
           <img
             src={thumbnailSrc}
             alt={doc.title}
-            style={{ width: '100%', height: '140px', objectFit: 'cover' }}
+            style={{ width: '100%', height: '140px', objectFit: 'cover', display: 'block' }}
             onError={e => {
-              e.target.parentNode.style.display = 'none';
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'flex';
             }}
           />
+          {/* Shown only when the image fails to load */}
+          <div
+            style={{
+              display: 'none',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '6px',
+              color: '#94A3B8',
+              fontSize: '12px',
+              position: 'absolute',
+              inset: 0,
+              justifyContent: 'center',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>🖼️</span>
+            Image unavailable
+          </div>
         </div>
       ) : (
         <div
@@ -275,7 +297,7 @@ export default function DocCard({
             style={{
               fontSize: '10px',
               fontWeight: 700,
-              color: '#1A2B4A',
+              color: '#111111',
               background: '#EFF6FF',
               border: '1px solid #BFDBFE',
               borderRadius: '4px',
@@ -338,7 +360,7 @@ export default function DocCard({
               padding: '7px 0',
               background: 'none',
               border: 'none',
-              color: '#E8632A',
+              color: '#7C3AED',
               fontFamily: "'Lato', sans-serif",
               fontWeight: 700,
               fontSize: '12px',
@@ -382,29 +404,133 @@ export default function DocCard({
           </div>
 
           {/* Admin actions — visible on hover */}
-          {role === 'superadmin' && hovering && (
+          {isAdmin && hovering && !isArchived && (
+            <>
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  onTogglePin?.(doc);
+                }}
+                title={doc.featured ? 'Unpin from Home' : 'Pin to Home'}
+                aria-label={doc.featured ? 'Unpin doc from Home' : 'Pin doc to Home'}
+                style={{
+                  padding: '6px 10px',
+                  background: doc.featured ? '#FEF3C7' : '#F8F9FB',
+                  border: `1px solid ${doc.featured ? '#FDE68A' : '#E2E8F0'}`,
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  color: doc.featured ? '#92400E' : '#475569',
+                  fontFamily: "'Lato', sans-serif",
+                  fontWeight: 700,
+                }}
+              >
+                📌 {doc.featured ? 'Pinned' : 'Pin'}
+              </button>
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  doc.review ? onClearReview?.(doc) : onFlagReview?.(doc);
+                }}
+                title={doc.review ? 'Mark review complete' : 'Flag for review'}
+                aria-label={doc.review ? 'Mark review complete' : 'Flag doc for review'}
+                style={{
+                  padding: '6px 10px',
+                  background: doc.review ? '#FEE2E2' : '#F8F9FB',
+                  border: `1px solid ${doc.review ? '#FCA5A5' : '#E2E8F0'}`,
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  color: doc.review ? '#B91C1C' : '#475569',
+                  fontFamily: "'Lato', sans-serif",
+                  fontWeight: 700,
+                }}
+              >
+                🔁 {doc.review ? 'In Review' : 'Review'}
+              </button>
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  onEdit?.(doc);
+                }}
+                title="Edit"
+                aria-label="Edit document"
+                style={{
+                  padding: '6px 10px',
+                  background: '#F8F9FB',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  color: '#111111',
+                  fontFamily: "'Lato', sans-serif",
+                  fontWeight: 700,
+                }}
+              >
+                ✎ Edit
+              </button>
+            </>
+          )}
+          {isAdmin && isArchived && (
             <button
               onClick={e => {
                 e.stopPropagation();
-                onEdit?.(doc);
+                onRestore?.(doc);
               }}
-              title="Edit"
-              aria-label="Edit document"
+              title="Restore document"
+              aria-label="Restore document"
               style={{
                 padding: '6px 10px',
-                background: '#F8F9FB',
-                border: '1px solid #E2E8F0',
+                background: '#DCFCE7',
+                border: '1px solid #86EFAC',
                 borderRadius: '6px',
                 cursor: 'pointer',
                 fontSize: '12px',
-                color: '#1A2B4A',
+                color: '#15803D',
                 fontFamily: "'Lato', sans-serif",
                 fontWeight: 700,
               }}
             >
-              ✎ Edit
+              ↺ Restore
             </button>
           )}
+        </div>
+      )}
+
+      {/* Review banner — visible above selection-mode hint */}
+      {doc.review && !selectionMode && (
+        <div
+          style={{
+            marginTop: '8px',
+            padding: '6px 10px',
+            background: '#FEF2F2',
+            border: '1px solid #FCA5A5',
+            borderRadius: '6px',
+            fontSize: '11px',
+            color: '#B91C1C',
+            fontWeight: 600,
+          }}
+        >
+          🔁 Needs review by <strong>{doc.review.reviewerName}</strong>
+          {doc.review.dueDate ? <> · due {doc.review.dueDate}</> : null}
+        </div>
+      )}
+      {doc.featured && !selectionMode && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            padding: '3px 8px',
+            background: '#FEF3C7',
+            color: '#92400E',
+            borderRadius: '100px',
+            fontSize: '10px',
+            fontWeight: 700,
+            border: '1px solid #FDE68A',
+          }}
+        >
+          📌 Featured
         </div>
       )}
 
@@ -427,7 +553,7 @@ export default function DocCard({
         <div
           style={{
             fontSize: '11px',
-            color: '#1A2B4A',
+            color: '#111111',
             fontWeight: 700,
             textAlign: 'center',
             marginTop: 'auto',

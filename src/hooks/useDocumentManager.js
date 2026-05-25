@@ -182,7 +182,7 @@ export default function useDocumentManager(role = 'user') {
           prev.map(q => (q.id === item.id ? { ...q, status: 'uploading', progress: 0 } : q))
         );
 
-        const { data, error } = await uploadDocs([item], p => {
+        const { error } = await uploadDocs([item], p => {
           setQueue(prev => prev.map(q => (q.id === item.id ? { ...q, progress: p } : q)));
           setUploadProgress(Math.round(((i + p / 100) / pending.length) * 100));
         });

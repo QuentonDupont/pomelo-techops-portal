@@ -49,7 +49,7 @@ function ConfirmModal({ count, onConfirm, onCancel }) {
         }}
       >
         <div style={{ fontSize: '24px', marginBottom: '12px' }}>🗑️</div>
-        <div style={{ fontWeight: 900, fontSize: '17px', color: '#1A2B4A', marginBottom: '8px' }}>
+        <div style={{ fontWeight: 900, fontSize: '17px', color: '#111111', marginBottom: '8px' }}>
           Archive {count} document{count !== 1 ? 's' : ''}?
         </div>
         <div style={{ fontSize: '13px', color: '#64748B', marginBottom: '24px', lineHeight: 1.6 }}>
@@ -228,7 +228,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
     fontSize: '12px',
     background: '#F8F9FB',
     outline: 'none',
-    color: '#1A2B4A',
+    color: '#111111',
   };
   const thSt = {
     padding: '10px 12px',
@@ -335,7 +335,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
           style={{
             background: 'none',
             border: 'none',
-            color: '#E8632A',
+            color: '#7C3AED',
             fontWeight: 700,
             fontSize: '12px',
             cursor: 'pointer',
@@ -397,7 +397,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ fontSize: '12px', fontWeight: 700, color: '#1A2B4A' }}>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#111111' }}>
             {selected.length} selected
           </span>
           <button
@@ -432,7 +432,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
               disabled={working}
               style={{
                 padding: '6px 12px',
-                background: '#1A2B4A',
+                background: '#111111',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '6px',
@@ -454,7 +454,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
               borderRadius: '6px',
               fontSize: '12px',
               cursor: 'pointer',
-              color: '#1A2B4A',
+              color: '#111111',
             }}
           >
             Clear selection
@@ -542,7 +542,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
                     <div
                       style={{
                         fontWeight: 700,
-                        color: '#1A2B4A',
+                        color: '#111111',
                         maxWidth: '220px',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -714,7 +714,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
             disabled={page === 1}
             style={{
               padding: '6px 12px',
-              background: page === 1 ? '#F1F5F9' : '#1A2B4A',
+              background: page === 1 ? '#F1F5F9' : '#111111',
               color: page === 1 ? '#94A3B8' : '#fff',
               border: 'none',
               borderRadius: '6px',
@@ -737,9 +737,9 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
                   onClick={() => setPage(p)}
                   style={{
                     padding: '6px 10px',
-                    background: p === page ? '#E8632A' : 'transparent',
-                    color: p === page ? '#fff' : '#1A2B4A',
-                    border: `1.5px solid ${p === page ? '#E8632A' : '#E2E8F0'}`,
+                    background: p === page ? '#7C3AED' : 'transparent',
+                    color: p === page ? '#fff' : '#111111',
+                    border: `1.5px solid ${p === page ? '#7C3AED' : '#E2E8F0'}`,
                     borderRadius: '6px',
                     cursor: 'pointer',
                     fontFamily: "'Lato', sans-serif",
@@ -756,7 +756,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
             disabled={page === pages}
             style={{
               padding: '6px 12px',
-              background: page === pages ? '#F1F5F9' : '#1A2B4A',
+              background: page === pages ? '#F1F5F9' : '#111111',
               color: page === pages ? '#94A3B8' : '#fff',
               border: 'none',
               borderRadius: '6px',

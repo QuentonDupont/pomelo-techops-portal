@@ -2,9 +2,8 @@
 // Full-featured mass document upload component with drag-and-drop, auto-categorization,
 // metadata editing, bulk actions, and upload queue table.
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { autoDetectCategory } from '../../hooks/useDocumentManager.js';
 import { DOC_CATEGORIES } from '../../mocks/docsMockData.js';
 
 const ACCEPT_TYPES = {
@@ -128,7 +127,7 @@ function MetadataModal({ item, onSave, onClose }) {
       >
         <div
           style={{
-            background: '#1A2B4A',
+            background: '#111111',
             padding: '18px 22px',
             display: 'flex',
             alignItems: 'center',
@@ -222,8 +221,8 @@ function MetadataModal({ item, onSave, onClose }) {
                     flex: 1,
                     padding: '9px',
                     borderRadius: '8px',
-                    border: `1.5px solid ${form.visibility === v ? '#1A2B4A' : '#E2E8F0'}`,
-                    background: form.visibility === v ? '#1A2B4A' : 'transparent',
+                    border: `1.5px solid ${form.visibility === v ? '#111111' : '#E2E8F0'}`,
+                    background: form.visibility === v ? '#111111' : 'transparent',
                     color: form.visibility === v ? '#fff' : '#64748B',
                     fontFamily: "'Lato', sans-serif",
                     fontWeight: 700,
@@ -267,7 +266,7 @@ function MetadataModal({ item, onSave, onClose }) {
             }}
             style={{
               padding: '9px 22px',
-              background: '#E8632A',
+              background: '#7C3AED',
               color: '#fff',
               border: 'none',
               borderRadius: '8px',
@@ -326,7 +325,7 @@ export default function DocUploader({
     fontSize: '12px',
     background: '#F8F9FB',
     outline: 'none',
-    color: '#1A2B4A',
+    color: '#111111',
   };
 
   return (
@@ -337,9 +336,9 @@ export default function DocUploader({
         aria-label="Drop files here or click to browse"
         style={{
           minHeight: '200px',
-          border: `2px dashed ${isDragActive ? '#E8632A' : '#CBD5E1'}`,
+          border: `2px dashed ${isDragActive ? '#7C3AED' : '#CBD5E1'}`,
           borderRadius: '12px',
-          background: isDragActive ? '#FFF5F0' : '#F8F9FB',
+          background: isDragActive ? '#F5F3FF' : '#F8F9FB',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -354,7 +353,7 @@ export default function DocUploader({
         <input {...getInputProps()} />
         <div style={{ fontSize: '36px' }}>{isDragActive ? '📂' : '☁️'}</div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 900, fontSize: '15px', color: '#1A2B4A', marginBottom: '4px' }}>
+          <div style={{ fontWeight: 900, fontSize: '15px', color: '#111111', marginBottom: '4px' }}>
             {isDragActive ? 'Drop files here' : 'Drag & drop files, or click to browse'}
           </div>
           <div style={{ fontSize: '12px', color: '#94A3B8' }}>
@@ -393,7 +392,7 @@ export default function DocUploader({
               gap: '10px',
             }}
           >
-            <div style={{ fontSize: '13px', fontWeight: 700, color: '#1A2B4A' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>
               {queue.length} file{queue.length !== 1 ? 's' : ''} · {totalSize(queue)} total
             </div>
 
@@ -412,7 +411,7 @@ export default function DocUploader({
                   onClick={() => setBulkCategory(bulkCatValue)}
                   style={{
                     padding: '6px 12px',
-                    background: '#1A2B4A',
+                    background: '#111111',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '7px',
@@ -519,7 +518,7 @@ export default function DocUploader({
                           <div
                             style={{
                               fontWeight: 700,
-                              color: '#1A2B4A',
+                              color: '#111111',
                               fontSize: '12px',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
@@ -734,7 +733,7 @@ export default function DocUploader({
                 <div
                   style={{
                     height: '100%',
-                    background: '#E8632A',
+                    background: '#7C3AED',
                     width: `${uploadProgress}%`,
                     transition: 'width 0.3s',
                     borderRadius: '3px',
@@ -773,7 +772,7 @@ export default function DocUploader({
               aria-label="Upload all queued files"
               style={{
                 padding: '11px 24px',
-                background: uploading ? '#CBD5E1' : '#E8632A',
+                background: uploading ? '#CBD5E1' : '#7C3AED',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
