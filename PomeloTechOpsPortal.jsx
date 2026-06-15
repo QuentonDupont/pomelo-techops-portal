@@ -275,6 +275,10 @@ const addTicket = (ticket) => {
   bumpTickets();
 };
 
+// Legacy fallback list. Live ticket UIs derive their options from
+// listAssignableUsers() (role-registry-driven); ALL_AGENTS is only used by
+// older code paths that haven't been ported. Kept so those paths stay
+// functional, but they should be ported off this constant.
 const ALL_AGENTS = ['Kai Nguyen', 'Prim Srisawat', 'Unassigned'];
 
 const DOCS = [
@@ -594,7 +598,10 @@ const pollWebhookEvents = async () => {
       if (!relevant) return t;
       const next = { ...t };
       if (relevant.issueStatus && relevant.issueStatus !== t.status) next.status = relevant.issueStatus;
-      if (relevant.issueAssignee !== undefined && relevant.issueAssignee !== t.assignee) next.assignee = relevant.issueAssignee;
+      if (relevant.issueAssignee !== undefined && relevant.issueAssignee !== t.assignee) {
+        next.assignee = relevant.issueAssignee;
+        next.assigneeEmail = emailForAssignee(relevant.issueAssignee);
+      }
       next.jiraSyncedAt = data.fetchedAt;
       next.jiraSyncState = 'synced';
       if (next.status !== t.status || next.assignee !== t.assignee) touched++;
@@ -1079,6 +1086,25 @@ const setSettings = (next) => {
   bumpSettings();
 };
 const countUsersInRole = (roleId) => MOCK_USERS.reduce((n, u) => n + (u.roleId === roleId ? 1 : 0), 0);
+
+// Users eligible to be picked as a ticket assignee: anyone whose role grants
+// tickets.view_assigned (developers, admins, superadmins by default).
+// Returns display names sorted alphabetically.
+const listAssignableUsers = () => {
+  const eligibleRoleIds = new Set(ROLES_REGISTRY.filter(r => r.capabilities.includes('tickets.view_assigned')).map(r => r.id));
+  return MOCK_USERS
+    .filter(u => u.active !== false && eligibleRoleIds.has(u.roleId))
+    .map(u => ({ name: u.name, email: u.email }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+};
+
+// Look up the email for a display name. Used when we have a name string
+// (legacy callers, Jira sync) but want to write the canonical assigneeEmail.
+const emailForAssignee = (name) => {
+  if (!name) return null;
+  const match = MOCK_USERS.find(u => u.name === name);
+  return match?.email || null;
+};
 
 // ─── Role mutation API ────────────────────────────────────────────────────────
 // All mutations bump the registry, persist to localStorage, and emit a
@@ -2852,7 +2878,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
                     style={{ ...S.select, width: 'auto', padding: '3px 24px 3px 8px', fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}
                   >
                     <option value="">Unassigned</option>
-                    {ALL_AGENTS.filter(a => a !== 'Unassigned').map(a => <option key={a} value={a}>{a}</option>)}
+                    {listAssignableUsers().map(a => <option key={a.email} value={a.name}>{a.name}</option>)}
                   </select>
                 </div>
               ) : (
@@ -3806,6 +3832,7 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
 
   const buildLocalTicket = (id) => {
     const today = new Date().toISOString().slice(0, 10);
+    const defaults = getSettings();
     return {
       id,
       title: form.title.trim(),
@@ -3817,7 +3844,11 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
       description: form.description.trim(),
       currentResult: form.currentResult.trim(),
       expectedResult: form.expectedResult.trim(),
-      assignee: null,
+      // Every new ticket lands with the configured default assignee
+      // (typically the admin who triages incoming requests) so nothing
+      // sits unassigned. Admin re-routes from the Kanban inline dropdown.
+      assignee: defaults.defaultAssigneeName,
+      assigneeEmail: defaults.defaultAssigneeEmail,
       department: form.department,
       shop: form.shop,
       platforms: [...form.platforms],
@@ -4448,8 +4479,9 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
 
   const bulkReassign = (assignee) => {
     if (bulkIds.size === 0) return;
-    updateTickets(ts => ts.map(t => bulkIds.has(t.id) ? { ...t, assignee } : t));
-    recordAudit('ticket.bulk_reassign', _currentActor, null, { count: bulkIds.size, assignee });
+    const assigneeEmail = emailForAssignee(assignee);
+    updateTickets(ts => ts.map(t => bulkIds.has(t.id) ? { ...t, assignee, assigneeEmail } : t));
+    recordAudit('ticket.bulk_reassign', _currentActor, null, { count: bulkIds.size, assignee, assigneeEmail });
     setBulkIds(new Set());
   };
 
@@ -4739,7 +4771,8 @@ function AdminPage() {
   };
 
   const assignTicket = (id, assignee) => {
-    updateTickets(ts => ts.map(t => t.id === id ? { ...t, assignee: assignee || null } : t));
+    const assigneeEmail = assignee ? emailForAssignee(assignee) : null;
+    updateTickets(ts => ts.map(t => t.id === id ? { ...t, assignee: assignee || null, assigneeEmail } : t));
     setEditingAssignee(null);
   };
 
@@ -4763,7 +4796,13 @@ function AdminPage() {
 
   const onDragEnd = () => { setDragId(null); setDragOver(null); };
 
-  const agentOptions = ['Kai Nguyen', 'Prim Srisawat'];
+  // Derived from the role registry — anyone whose role grants
+  // tickets.view_assigned is pickable here, so adding a new Developer
+  // through Roles & Access immediately shows up in the dropdown. The
+  // tickets-version state already triggers re-render on most relevant
+  // changes; users/roles edits also bump the registry so this is
+  // computed fresh on every render (cheap — small list).
+  const agentOptions = listAssignableUsers().map(u => u.name);
 
   const totalOpen = tickets.filter(t => t.status === 'Open').length;
   const totalCritical = tickets.filter(t => t.priority === 'Critical' && (t.status === 'Open' || t.status === 'In Progress')).length;
