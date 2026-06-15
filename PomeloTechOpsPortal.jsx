@@ -958,6 +958,35 @@ const getMaintenanceMode = () => MAINTENANCE;
 // ─── Audit log (in-memory append-only) ────────────────────────────────────────
 // Charter R-10: every admin action is recorded immutably. Entries cannot be
 // edited or deleted once written.
+// Shared label map — both the Home page activity card and the full Audit
+// Log page consume this so a new action code only needs to be added in one
+// place. Keys must match the `action` strings passed into recordAudit().
+const AUDIT_ACTION_LABELS = {
+  'user.create':           '➕ User created',
+  'user.update':           '✏️ User edited',
+  'user.promote':          '⬆️ Promoted to superadmin',
+  'user.demote':           '⬇️ Demoted to user',
+  'user.role_change':      '🎚 Role changed',
+  'user.deactivate':       '🚫 User deactivated',
+  'user.reactivate':       '✅ User reactivated',
+  'user.force_re_otp':     '🔁 Force re-OTP',
+  'user.reset_password':   '🔑 Password reset',
+  'role.create':           '🎭 Role created',
+  'role.update':           '🎭 Role updated',
+  'role.delete':           '🗑 Role deleted',
+  'capability.toggle':     '🔧 Capability toggled',
+  'admin.view_as':         '👁 View-as switched',
+  'session.login':         '🔓 Login',
+  'session.logout':        '🔒 Logout',
+  'system.maintenance_on':  '🛠 Maintenance ON',
+  'system.maintenance_off': '🛠 Maintenance OFF',
+  'system.rbac_migrated':   '⚙️ RBAC migration ran',
+  'system.settings_update': '⚙️ Settings updated',
+  'ticket.bulk_status':    '📋 Bulk status change',
+  'ticket.bulk_reassign':  '📋 Bulk reassign',
+  'ticket.status_change':  '📋 Status change',
+  'ticket.internal_note':  '📝 Internal note',
+};
 const AUDIT_LOG = [];
 let _auditVersion = 0;
 const _auditListeners = new Set();
@@ -1267,6 +1296,7 @@ const updateSettings = (patch) => {
 
   if (touched) bumpUsers();
   saveStore('userRolesV', RBAC_SCHEMA_VERSION);
+  recordAudit('system.rbac_migrated', { name: 'System', email: 'system@pomelo.local' }, { type: 'system', id: 'rbac', label: 'RBAC schema' }, { from: storedVersion, to: RBAC_SCHEMA_VERSION });
 })();
 
 const sanitiseUser = ({ passwordHash: _, ...u }) => u;
@@ -3053,24 +3083,7 @@ function RecentActivityFeed({ role, onTicket, setSection }) {
     return listAudit().slice(0, 3);
   }, [canSeeAudit]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const auditLabel = a => ({
-    'user.create': '➕ User created',
-    'user.update': '✏️ User edited',
-    'user.promote': '⬆️ Promoted to superadmin',
-    'user.demote': '⬇️ Demoted to user',
-    'user.deactivate': '🚫 User deactivated',
-    'user.reactivate': '✅ User reactivated',
-    'user.force_re_otp': '🔁 Force re-OTP',
-    'user.reset_password': '🔑 Password reset',
-    'admin.view_as': '👁 View-as switched',
-    'session.login': '🔓 Admin login',
-    'session.logout': '🔒 Admin logout',
-    'system.maintenance_on': '🛠 Maintenance ON',
-    'system.maintenance_off': '🛠 Maintenance OFF',
-    'ticket.bulk_status': '📋 Bulk status change',
-    'ticket.bulk_reassign': '📋 Bulk reassign',
-    'ticket.internal_note': '📝 Internal note',
-  })[a] || a;
+  const auditLabel = a => AUDIT_ACTION_LABELS[a] || a;
 
   const fmtAgo = iso => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -6645,22 +6658,9 @@ function AuditLogPage() {
     return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
   };
 
-  const actionLabel = a => {
-    const map = {
-      'user.create': '➕ User created',
-      'user.update': '✏️ User edited',
-      'user.promote': '⬆️ Promoted to superadmin',
-      'user.demote': '⬇️ Demoted to user',
-      'user.deactivate': '🚫 User deactivated',
-      'user.reactivate': '✅ User reactivated',
-      'user.force_re_otp': '🔁 Force re-OTP',
-      'user.reset_password': '🔑 Password reset',
-      'admin.view_as': '👁 View-as switched',
-      'session.login': '🔓 Admin login',
-      'session.logout': '🔒 Admin logout',
-    };
-    return map[a] || a;
-  };
+  const actionLabel = a => AUDIT_ACTION_LABELS[a] || a;
+
+  const labelForRoleId = (roleId) => findRole(roleId)?.label || roleId || '—';
 
   const renderDetails = e => {
     if (!e.details) return null;
@@ -6672,11 +6672,36 @@ function AuditLogPage() {
     if (e.action === 'user.promote' || e.action === 'user.demote') {
       return <span>{e.details.from} → <strong>{e.details.to}</strong></span>;
     }
+    if (e.action === 'user.role_change') {
+      return <span>{labelForRoleId(e.details.from)} → <strong>{labelForRoleId(e.details.to)}</strong></span>;
+    }
     if (e.action === 'user.update' && Array.isArray(e.details.changedKeys)) {
       return <span>changed {e.details.changedKeys.join(', ')}</span>;
     }
-    if (e.action === 'user.create' && e.details.role) {
-      return <span>as <strong>{e.details.role}</strong> in {e.details.department}</span>;
+    if (e.action === 'user.create' && (e.details.roleId || e.details.role)) {
+      const roleLabel = e.details.roleId ? labelForRoleId(e.details.roleId) : e.details.role;
+      return <span>as <strong>{roleLabel}</strong> in {e.details.department}</span>;
+    }
+    if (e.action === 'role.create' || e.action === 'role.delete') {
+      const caps = e.details.capabilities;
+      return Array.isArray(caps) && caps.length
+        ? <span>{caps.length} capabilit{caps.length === 1 ? 'y' : 'ies'}</span>
+        : null;
+    }
+    if (e.action === 'capability.toggle') {
+      const added = e.details.added?.length || 0;
+      const removed = e.details.removed?.length || 0;
+      return <span>+{added} / -{removed}</span>;
+    }
+    if (e.action === 'role.update' && Array.isArray(e.details.changedKeys)) {
+      return <span>changed {e.details.changedKeys.join(', ')}</span>;
+    }
+    if (e.action === 'system.settings_update') {
+      const keys = Object.keys(e.details);
+      return <span>updated {keys.join(', ')}</span>;
+    }
+    if (e.action === 'ticket.status_change') {
+      return <span>{e.details.from} → <strong>{e.details.to}</strong></span>;
     }
     return null;
   };
