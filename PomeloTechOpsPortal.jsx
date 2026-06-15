@@ -4573,6 +4573,133 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
   );
 }
 
+// ─── Developer Portal ─────────────────────────────────────────────────────────
+// What an engineer sees when they log in: the tickets *assigned to them*,
+// ordered by oldest-touched so SLA-at-risk items surface first. Status can be
+// changed inline only on tickets where the user is the assignee — gated by
+// tickets.status_change_own.
+function DeveloperPortalPage({ currentUser }) {
+  const can = useCan();
+  const [, _setTicketsVersion] = useState(0);
+  useEffect(() => subscribeTickets(_setTicketsVersion), []);
+  const [selectedId, setSelectedId] = useState(null);
+  const { addNotification } = useNotifications();
+
+  const tickets = MOCK_TICKETS;
+  // Match by assigneeEmail when present (more reliable post-step-5), otherwise
+  // fall back to name. Both filters are case-insensitive defensively.
+  const mine = useMemo(() => {
+    const email = currentUser?.email?.toLowerCase() || '';
+    const name = currentUser?.name?.toLowerCase() || '';
+    return tickets.filter(t => {
+      if (t.assigneeEmail) return t.assigneeEmail.toLowerCase() === email;
+      return t.assignee && t.assignee.toLowerCase() === name;
+    });
+  }, [tickets, currentUser?.email, currentUser?.name]);
+
+  const stats = useMemo(() => {
+    const open = mine.filter(t => !DONE_STATUSES.has(t.status));
+    const inProgress = mine.filter(t => t.status === 'In Progress').length;
+    const ages = open.map(t => Math.max(0, (Date.now() - new Date(t.updated || t.created).getTime()) / 86400000));
+    const avgAge = ages.length ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0;
+    return { assigned: mine.length, openCount: open.length, inProgress, avgAge };
+  }, [mine]);
+
+  const selected = selectedId ? tickets.find(t => t.id === selectedId) : null;
+  const canChangeOwnStatus = can('tickets.status_change_own') || can('tickets.status_change_any');
+
+  const handleStatusChange = (id, newStatus) => {
+    const t = MOCK_TICKETS.find(x => x.id === id);
+    if (!t) return;
+    const prev = t.status;
+    t.status = newStatus;
+    t.updated = new Date().toISOString().slice(0, 10);
+    bumpTickets();
+    recordAudit('ticket.status_change', _currentActor, { type: 'ticket', id: t.id, label: t.title }, { from: prev, to: newStatus });
+    if (t.jiraKey) pushJiraTransition(t, newStatus).catch(() => {});
+    addNotification({ type: 'ticket_status', title: `Status updated: ${t.id}`, body: `${prev} → ${newStatus}`, ticketId: t.id });
+  };
+
+  const handleAssigneeChange = () => {
+    // Developers can't reassign — guard at the call site too.
+  };
+
+  if (selected) {
+    return <TicketDetail ticket={selected} onBack={() => setSelectedId(null)} currentUser={currentUser} role="user" onStatusChange={handleStatusChange} onAssigneeChange={handleAssigneeChange} onAddNotification={addNotification} />;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div>
+        <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Developer Portal</div>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Tickets assigned to you, ordered by oldest activity.</div>
+      </div>
+
+      {/* Stats strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+        {[
+          { label: 'Assigned to me', value: stats.assigned, color: 'var(--accent-primary)' },
+          { label: 'Currently open', value: stats.openCount, color: '#F59E0B' },
+          { label: 'In progress', value: stats.inProgress, color: '#3B82F6' },
+          { label: 'Avg age (days)', value: stats.avgAge, color: '#16A34A' },
+        ].map(s => (
+          <div key={s.label} style={{ ...S.card, padding: '16px 18px', borderLeft: `4px solid ${s.color}` }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* List */}
+      {mine.length === 0 ? (
+        <div style={{ ...S.card, padding: '60px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: '40px', marginBottom: '8px' }}>🎉</div>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>Nothing assigned to you</div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>When tickets are routed to {currentUser?.name || 'you'}, they'll appear here.</div>
+        </div>
+      ) : (
+        <div style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
+          {/* Header row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 200px 110px 140px 80px', padding: '10px 14px', background: 'var(--bg-page)', borderBottom: '1px solid var(--border-default)', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <span>Ticket</span><span>Title</span><span>Requester</span><span>Priority</span><span>Status</span><span style={{ textAlign: 'right' }}>Age</span>
+          </div>
+          {[...mine]
+            .sort((a, b) => (a.updated || '').localeCompare(b.updated || ''))
+            .map(t => {
+              const ageDays = Math.floor((Date.now() - new Date(t.updated || t.created).getTime()) / 86400000);
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setSelectedId(t.id)}
+                  style={{
+                    width: '100%', display: 'grid', gridTemplateColumns: '110px 1fr 200px 110px 140px 80px',
+                    alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-surface)', textAlign: 'left', cursor: 'pointer', border: 'none',
+                    fontFamily: "'Inter', sans-serif",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-surface)'}
+                >
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>{t.id}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px' }}>{t.title}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px' }}>{t.requester?.name || '—'}</span>
+                  <span style={{ ...S.badge(PRIORITY_COLORS[t.priority] || '#64748B'), fontSize: '11px' }}>{t.priority}</span>
+                  <span style={{ ...S.badge(statusColorFor(t.status)), background: statusColorFor(t.status) + '18', color: statusColorFor(t.status), fontSize: '11px' }}>{t.status}</span>
+                  <span style={{ fontSize: '11px', color: ageDays > 7 ? '#DC2626' : 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>{ageDays}d</span>
+                </button>
+              );
+            })}
+          {!canChangeOwnStatus && (
+            <div style={{ padding: '10px 14px', background: 'var(--bg-page)', borderTop: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
+              Status changes are managed by the IT team — open a ticket to view its detail.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Admin Kanban ─────────────────────────────────────────────────────────────
 function AdminPage() {
   const [, _setTicketsVersion] = useState(0);
@@ -6969,11 +7096,19 @@ function AppContent() {
 
   // Most-used destinations stay as direct buttons; the three reference pages
   // are grouped under a Resources dropdown below.
-  const NAV_ITEMS = [
-    { id: 'home', label: 'Home', icon: Home },
-    { id: 'submit', label: 'Submit Ticket', icon: PlusCircle },
-    { id: 'mytickets', label: 'My Tickets', icon: Ticket },
-  ];
+  // Developer Portal only appears for users with tickets.view_assigned —
+  // typically Developers, Admins, Superadmins.
+  const NAV_ITEMS = useMemo(() => {
+    const items = [
+      { id: 'home', label: 'Home', icon: Home },
+      { id: 'submit', label: 'Submit Ticket', icon: PlusCircle },
+      { id: 'mytickets', label: 'My Tickets', icon: Ticket },
+    ];
+    if (can('tickets.view_assigned')) {
+      items.push({ id: 'devportal', label: 'Developer Portal', icon: Briefcase });
+    }
+    return items;
+  }, [can]);
   const RESOURCE_IDS = new Set(['docs', 'priority', 'sla']);
 
   // Per-section capability requirements. A section without an entry is
@@ -7010,6 +7145,7 @@ function AppContent() {
       case 'priority':  page = <PriorityGuidePage />; break;
       case 'sla':       page = <SLAPage />; break;
       case 'mytickets': page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'devportal': page = can('tickets.view_assigned') ? <DeveloperPortalPage currentUser={effectiveUser} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'admin':     page = can('admin.kanban_view') ? <AdminPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'roles':     page = can('roles.edit') ? <RolesAccessPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'users':     page = can('users.edit') ? <UsersPanelPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
