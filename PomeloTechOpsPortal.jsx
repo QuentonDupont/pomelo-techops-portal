@@ -14,7 +14,7 @@ import {
 import {
   Search, Wrench, Users as UsersIcon, ScrollText, MessageCircle, BookOpen,
   Target, ClipboardList, Ticket, Home, PlusCircle, Moon, Sun, ChevronDown,
-  Star, User, Eye, Sparkles, X, Bell as BellIcon, Check,
+  Star, User, Eye, Sparkles, X, Bell as BellIcon, Check, Shield, Briefcase,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
@@ -1080,6 +1080,118 @@ const setSettings = (next) => {
 };
 const countUsersInRole = (roleId) => MOCK_USERS.reduce((n, u) => n + (u.roleId === roleId ? 1 : 0), 0);
 
+// ─── Role mutation API ────────────────────────────────────────────────────────
+// All mutations bump the registry, persist to localStorage, and emit a
+// recordAudit entry. Safety rules live here (not in the page) so any caller —
+// including future scripts or tests — gets the same guarantees:
+//   * superadmin can never lose capabilities (lockout protection)
+//   * isSystem roles cannot be deleted
+//   * a role with users cannot be deleted (caller must reassign first)
+//   * the current actor cannot demote themselves below `roles.edit` if doing
+//     so would leave nobody able to manage roles (last-admin guard).
+const slugify = (s) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'role';
+
+const createRole = ({ name, label, description, color, capabilities }) => {
+  const trimmedLabel = String(label || '').trim();
+  const machineName = slugify(name || trimmedLabel);
+  if (!trimmedLabel) return { error: 'Role label is required.' };
+  if (ROLES_REGISTRY.some(r => r.name === machineName)) return { error: `A role named "${machineName}" already exists.` };
+  const id = 'role_' + machineName + '_' + Date.now().toString(36);
+  const caps = Array.isArray(capabilities) ? capabilities.filter(c => CAPABILITIES.some(cap => cap.id === c)) : [];
+  const role = {
+    id,
+    name: machineName,
+    label: trimmedLabel,
+    description: description || '',
+    color: color || '#6366F1',
+    isSystem: false,
+    isDefault: false,
+    capabilities: caps,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: _currentActor?.email || null,
+  };
+  ROLES_REGISTRY = [...ROLES_REGISTRY, role];
+  bumpRoles();
+  recordAudit('role.create', _currentActor, { type: 'role', id: role.id, label: role.label }, { capabilities: caps });
+  return role;
+};
+
+const isFullCapabilitySet = (caps) => Array.isArray(caps) && CAPABILITIES.every(c => caps.includes(c.id));
+
+const updateRole = (id, updates) => {
+  const role = findRole(id);
+  if (!role) return { error: 'Role not found.' };
+  // Lockout protection: superadmin must keep every capability.
+  if (role.id === 'role_superadmin' && updates.capabilities && !isFullCapabilitySet(updates.capabilities)) {
+    return { error: 'Superadmin must retain every capability.' };
+  }
+  const next = { ...role, ...updates, updatedAt: new Date().toISOString() };
+  // System roles keep their machine `name` even if the label is renamed.
+  if (role.isSystem) next.name = role.name;
+  ROLES_REGISTRY = ROLES_REGISTRY.map(r => r.id === id ? next : r);
+  bumpRoles();
+  const capChange = updates.capabilities
+    ? {
+        added: updates.capabilities.filter(c => !role.capabilities.includes(c)),
+        removed: role.capabilities.filter(c => !updates.capabilities.includes(c)),
+      }
+    : null;
+  recordAudit('role.update', _currentActor, { type: 'role', id, label: next.label },
+    { changedKeys: Object.keys(updates), ...(capChange ? { capabilities: capChange } : {}) });
+  if (capChange && (capChange.added.length || capChange.removed.length)) {
+    recordAudit('capability.toggle', _currentActor, { type: 'role', id, label: next.label }, capChange);
+  }
+  return next;
+};
+
+const deleteRole = (id) => {
+  const role = findRole(id);
+  if (!role) return { error: 'Role not found.' };
+  if (role.isSystem) return { error: 'System roles cannot be deleted.' };
+  if (countUsersInRole(id) > 0) return { error: 'Reassign users in this role before deleting it.' };
+  ROLES_REGISTRY = ROLES_REGISTRY.filter(r => r.id !== id);
+  bumpRoles();
+  recordAudit('role.delete', _currentActor, { type: 'role', id, label: role.label });
+  return { ok: true };
+};
+
+// Move a user to a different role. The plan calls this `roles.assign`.
+// Last-admin guard: if the actor would lose `roles.edit` by reassigning
+// themselves AND no other user holds it, the call is rejected.
+const setUserRoleId = (userId, nextRoleId) => {
+  const u = findUserById(userId);
+  if (!u) return { error: 'User not found.' };
+  const targetRole = findRole(nextRoleId);
+  if (!targetRole) return { error: 'Target role not found.' };
+  if (u.roleId === nextRoleId) return sanitiseUser(u);
+
+  // Last-admin guard
+  if (_currentActor && u.email === _currentActor.email && !targetRole.capabilities.includes('roles.edit')) {
+    const othersCanEditRoles = MOCK_USERS.some(other => {
+      if (other.id === u.id) return false;
+      const r = findRole(other.roleId);
+      return r && r.capabilities.includes('roles.edit');
+    });
+    if (!othersCanEditRoles) return { error: 'Cannot demote yourself — nobody else can manage roles.' };
+  }
+
+  const prev = u.roleId;
+  u.roleId = nextRoleId;
+  // Keep the legacy role string in step for components that still read it.
+  if (targetRole.name === 'superadmin' || targetRole.name === 'user') u.role = targetRole.name;
+  else u.role = targetRole.name;
+  bumpUsers();
+  recordAudit('user.role_change', _currentActor, { type: 'user', id: u.id, label: u.name }, { from: prev, to: nextRoleId });
+  return sanitiseUser(u);
+};
+
+const updateSettings = (patch) => {
+  setSettings(patch);
+  recordAudit('system.settings_update', _currentActor, { type: 'system', id: 'settings', label: 'Portal settings' }, patch);
+  return getSettings();
+};
+
 // ─── One-shot RBAC migration ──────────────────────────────────────────────────
 // Runs at boot when the persisted schema version is older than the current.
 // Idempotent: rerunning is a no-op. Handles three jobs:
@@ -1186,23 +1298,29 @@ const resetUserPassword = async (id, tempPassword) => {
   return sanitiseUser(u);
 };
 
-const adminCreateUser = async ({ name, email, role = 'user', department = 'IT & Technology', tempPassword }) => {
+const adminCreateUser = async ({ name, email, role, roleId, department = 'IT & Technology', tempPassword }) => {
   const sanitisedEmail = String(email || '').trim().toLowerCase();
   if (!sanitisedEmail || !name) return { error: 'Name and email are required.' };
   if (MOCK_USERS.some(u => u.email === sanitisedEmail)) return { error: 'Email already in use.' };
   if (!tempPassword || tempPassword.length < 8) return { error: 'Temp password must be at least 8 characters.' };
+  // Resolve the target role. Callers can pass roleId directly (new API used
+  // by Roles & Access page) or the legacy `role` string (existing Users
+  // panel CreateUserModal). Falls back to the registry's default role.
+  const resolvedRoleId = roleId || (role ? (LEGACY_ROLE_TO_ROLE_ID[role] || getDefaultRoleId()) : getDefaultRoleId());
+  const targetRole = findRole(resolvedRoleId);
+  const legacyRoleStr = targetRole?.name || role || 'user';
   const id = 'u' + Date.now();
   const u = {
     id, name: name.trim(), email: sanitisedEmail,
     passwordHash: '', passwordSalt: '',
-    role, department,
+    role: legacyRoleStr, roleId: resolvedRoleId, department,
     active: true, lastLoginAt: null, forceReOtp: true,
     createdAt: new Date().toISOString().slice(0, 10),
   };
   await setPassword(u, tempPassword);
   MOCK_USERS.push(u);
   bumpUsers();
-  recordAudit('user.create', _currentActor, { type: 'user', id, label: u.name }, { role, department });
+  recordAudit('user.create', _currentActor, { type: 'user', id, label: u.name }, { role: legacyRoleStr, roleId: resolvedRoleId, department });
   return { user: sanitiseUser(u) };
 };
 
@@ -4817,6 +4935,567 @@ function AdminPage() {
   );
 }
 
+// ─── Roles & Access page (admin only) ────────────────────────────────────────
+// One page that owns everything role-related: settings strip, the role
+// registry CRUD, the capability matrix, bulk role reassignment, and user
+// creation. Mutations route through the role API helpers so the same safety
+// rules apply whether they're triggered from this UI, a future settings page,
+// or a script.
+function RolesAccessPage({ currentUserEmail }) {
+  const can = useCan();
+  const roles = useRoles();
+  const { settings } = useRbacCtx();
+  const [, _setUsersVersion] = useState(0);
+  useEffect(() => subscribeUsers(_setUsersVersion), []);
+  const allUsers = listUsers();
+
+  // Selected role on the right pane. Defaults to first non-system or, if all
+  // roles are system, the first system role.
+  const [selectedId, setSelectedId] = useState(() => roles[0]?.id || null);
+  useEffect(() => {
+    if (!selectedId || !roles.find(r => r.id === selectedId)) setSelectedId(roles[0]?.id || null);
+  }, [roles, selectedId]);
+  const selected = roles.find(r => r.id === selectedId) || null;
+
+  // Buffered edits to the selected role. We commit on Save so a partial edit
+  // doesn't trip the lockout guard mid-toggle.
+  const [draft, setDraft] = useState(null);
+  useEffect(() => {
+    setDraft(selected ? { label: selected.label, description: selected.description || '', color: selected.color || '#6366F1', capabilities: selected.capabilities.slice() } : null);
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dirty = !!(selected && draft && (
+    draft.label !== selected.label ||
+    draft.description !== (selected.description || '') ||
+    draft.color !== (selected.color || '#6366F1') ||
+    draft.capabilities.length !== selected.capabilities.length ||
+    draft.capabilities.some(c => !selected.capabilities.includes(c))
+  ));
+
+  // Modal state
+  const [createRoleOpen, setCreateRoleOpen] = useState(false);
+  const [deleteRoleConfirm, setDeleteRoleConfirm] = useState(null); // role object
+  const [toast, setToast] = useState(null);
+  const showToast = (msg, type = 'success') => setToast({ message: msg, type });
+
+  // ─── Settings strip — default assignee ──────────────────────────────────────
+  const [settingsDraft, setSettingsDraft] = useState({
+    defaultAssigneeName: settings.defaultAssigneeName,
+    defaultAssigneeEmail: settings.defaultAssigneeEmail,
+  });
+  useEffect(() => {
+    setSettingsDraft({
+      defaultAssigneeName: settings.defaultAssigneeName,
+      defaultAssigneeEmail: settings.defaultAssigneeEmail,
+    });
+  }, [settings.defaultAssigneeName, settings.defaultAssigneeEmail]);
+  const settingsDirty =
+    settingsDraft.defaultAssigneeName !== settings.defaultAssigneeName ||
+    settingsDraft.defaultAssigneeEmail !== settings.defaultAssigneeEmail;
+  const saveSettings = () => {
+    const email = settingsDraft.defaultAssigneeEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) { showToast('Default assignee email looks invalid.', 'error'); return; }
+    updateSettings({
+      defaultAssigneeName: settingsDraft.defaultAssigneeName.trim(),
+      defaultAssigneeEmail: email,
+    });
+    showToast('Default assignee updated.');
+  };
+
+  // ─── Save role edits ────────────────────────────────────────────────────────
+  const saveRole = () => {
+    if (!selected || !draft) return;
+    const res = updateRole(selected.id, draft);
+    if (res?.error) { showToast(res.error, 'error'); return; }
+    showToast(`Role "${draft.label}" saved.`);
+  };
+
+  // ─── Capability toggle (in the draft, not committed) ────────────────────────
+  const toggleCap = (capId) => {
+    if (!draft) return;
+    // Superadmin is locked — every capability stays on.
+    if (selected?.id === 'role_superadmin') { showToast('Superadmin must retain every capability.', 'error'); return; }
+    setDraft(d => ({
+      ...d,
+      capabilities: d.capabilities.includes(capId)
+        ? d.capabilities.filter(c => c !== capId)
+        : [...d.capabilities, capId],
+    }));
+  };
+
+  // ─── Delete role ────────────────────────────────────────────────────────────
+  const doDeleteRole = () => {
+    if (!deleteRoleConfirm) return;
+    const res = deleteRole(deleteRoleConfirm.id);
+    setDeleteRoleConfirm(null);
+    if (res?.error) { showToast(res.error, 'error'); return; }
+    showToast(`Role "${deleteRoleConfirm.label}" deleted.`);
+  };
+
+  const groupedCaps = useMemo(() => {
+    const groups = {};
+    for (const c of CAPABILITIES) {
+      (groups[c.group] = groups[c.group] || []).push(c);
+    }
+    return groups;
+  }, []);
+
+  // Capabilities matrix needs roles.edit; users-in-role table needs
+  // roles.assign; create user needs users.create. Page itself is already
+  // gated by roles.edit at the route level.
+  const canEditRoles  = can('roles.edit');
+  const canCreateRole = can('roles.create');
+  const canDeleteRole = can('roles.delete');
+  const canAssignRole = can('roles.assign');
+  const canCreateUser = can('users.create');
+  const canEditSettings = can('system.settings_edit');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div>
+        <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Roles & Access</div>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Define what each role can do, assign users, and create new portal accounts.</div>
+      </div>
+
+      {/* Settings strip — default assignee */}
+      <div style={{ ...S.card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', borderLeft: '4px solid var(--accent-primary)' }}>
+        <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: '4px', marginRight: '8px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Default ticket assignee</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Every new ticket lands here for triage before admin re-routes.</div>
+        </div>
+        <input
+          type="text" value={settingsDraft.defaultAssigneeName}
+          onChange={e => setSettingsDraft(d => ({ ...d, defaultAssigneeName: e.target.value }))}
+          placeholder="Display name" disabled={!canEditSettings}
+          style={{ ...S.input, flex: '1 1 180px', minWidth: '160px', maxWidth: '260px' }}
+        />
+        <input
+          type="email" value={settingsDraft.defaultAssigneeEmail}
+          onChange={e => setSettingsDraft(d => ({ ...d, defaultAssigneeEmail: e.target.value }))}
+          placeholder="email@pomelofashion.com" disabled={!canEditSettings}
+          style={{ ...S.input, flex: '1 1 260px', minWidth: '220px', maxWidth: '360px' }}
+        />
+        <button
+          onClick={saveSettings}
+          disabled={!canEditSettings || !settingsDirty}
+          style={{ ...S.orangeBtn, opacity: (canEditSettings && settingsDirty) ? 1 : 0.45, cursor: (canEditSettings && settingsDirty) ? 'pointer' : 'not-allowed' }}
+        >
+          Save
+        </button>
+      </div>
+
+      {/* Two-column body: roles list (left) + role detail (right) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 320px) 1fr', gap: '18px', alignItems: 'start' }}>
+        {/* Left rail — role list */}
+        <div style={{ ...S.card, padding: '14px 14px 18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Roles</div>
+            <button
+              onClick={() => setCreateRoleOpen(true)}
+              disabled={!canCreateRole}
+              style={{ padding: '5px 10px', background: 'var(--accent-soft)', color: 'var(--accent-primary)', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 700, cursor: canCreateRole ? 'pointer' : 'not-allowed', opacity: canCreateRole ? 1 : 0.45 }}
+              title={canCreateRole ? 'Define a new role' : 'You do not have permission to create roles.'}
+            >+ New role</button>
+          </div>
+          {roles.map(r => {
+            const count = countUsersInRole(r.id);
+            const isActive = selectedId === r.id;
+            return (
+              <button
+                key={r.id}
+                onClick={() => setSelectedId(r.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 12px', borderRadius: '8px', cursor: 'pointer',
+                  background: isActive ? 'var(--accent-soft)' : 'transparent',
+                  border: `1px solid ${isActive ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
+                  textAlign: 'left',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: r.color || 'var(--accent-primary)', flexShrink: 0 }} />
+                  <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{r.capabilities.length} caps · {count} {count === 1 ? 'user' : 'users'}</span>
+                  </span>
+                </span>
+                {r.isSystem && <span title="System role (cannot be deleted)" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>🔒</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right pane — selected role detail */}
+        {!selected ? (
+          <div style={{ ...S.card, padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Select a role to view or edit its capabilities.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Role header */}
+            <div style={S.card}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: draft?.color || selected.color, flexShrink: 0 }} />
+                <input
+                  type="text" value={draft?.label || ''}
+                  onChange={e => setDraft(d => ({ ...d, label: e.target.value }))}
+                  disabled={!canEditRoles}
+                  style={{ ...S.input, fontSize: '16px', fontWeight: 700, flex: 1 }}
+                  placeholder="Role label"
+                />
+                <input
+                  type="color" value={draft?.color || '#6366F1'}
+                  onChange={e => setDraft(d => ({ ...d, color: e.target.value }))}
+                  disabled={!canEditRoles}
+                  title="Role color"
+                  style={{ width: '40px', height: '40px', border: '1px solid var(--border-default)', borderRadius: '6px', cursor: canEditRoles ? 'pointer' : 'not-allowed', background: 'var(--bg-input)' }}
+                />
+                {selected.isSystem && (
+                  <span style={{ fontSize: '10px', padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>System</span>
+                )}
+              </div>
+              <textarea
+                value={draft?.description || ''}
+                onChange={e => setDraft(d => ({ ...d, description: e.target.value }))}
+                disabled={!canEditRoles}
+                rows={2}
+                placeholder="Short description shown to admins managing this role."
+                style={{ ...S.textarea, minHeight: '54px', fontSize: '13px' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {selected.isSystem ? 'Machine name locked for system roles.' : `Machine name: ${selected.name}`}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {!selected.isSystem && (
+                    <button
+                      onClick={() => setDeleteRoleConfirm(selected)}
+                      disabled={!canDeleteRole}
+                      style={{ padding: '8px 14px', background: 'transparent', color: '#DC2626', border: '1px solid #FCA5A5', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: canDeleteRole ? 'pointer' : 'not-allowed', opacity: canDeleteRole ? 1 : 0.45 }}
+                    >Delete role</button>
+                  )}
+                  <button
+                    onClick={saveRole}
+                    disabled={!canEditRoles || !dirty}
+                    style={{ ...S.orangeBtn, opacity: (canEditRoles && dirty) ? 1 : 0.45, cursor: (canEditRoles && dirty) ? 'pointer' : 'not-allowed' }}
+                  >Save changes</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Capability matrix */}
+            <div style={S.card}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Capabilities</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{draft?.capabilities.length || 0} of {CAPABILITIES.length} granted</div>
+              </div>
+              {Object.entries(groupedCaps).map(([group, caps]) => (
+                <div key={group} style={{ marginBottom: '14px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{group}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '6px' }}>
+                    {caps.map(c => {
+                      const checked = draft?.capabilities.includes(c.id) || false;
+                      const lockedSuperadmin = selected.id === 'role_superadmin';
+                      const disabled = !canEditRoles || lockedSuperadmin;
+                      return (
+                        <label key={c.id} title={c.description} style={{
+                          display: 'flex', alignItems: 'flex-start', gap: '8px',
+                          padding: '8px 10px', borderRadius: '6px',
+                          background: checked ? 'var(--accent-soft)' : 'var(--bg-page)',
+                          border: `1px solid ${checked ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          opacity: disabled && !lockedSuperadmin ? 0.6 : 1,
+                        }}>
+                          <input
+                            type="checkbox" checked={checked} disabled={disabled}
+                            onChange={() => toggleCap(c.id)}
+                            style={{ marginTop: '2px', accentColor: 'var(--accent-primary)', flexShrink: 0 }}
+                          />
+                          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{c.label}</span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{c.id}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              {selected.id === 'role_superadmin' && (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '4px' }}>Superadmin is locked to every capability to prevent admin lockout.</div>
+              )}
+            </div>
+
+            {/* Users in this role */}
+            <UsersInRoleSection
+              role={selected}
+              users={allUsers.filter(u => u.roleId === selected.id)}
+              allRoles={roles}
+              canAssign={canAssignRole}
+              currentUserEmail={currentUserEmail}
+              onToast={showToast}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Create user card */}
+      <CreateUserOnRolesPage
+        roles={roles}
+        canCreate={canCreateUser}
+        onToast={showToast}
+      />
+
+      {createRoleOpen && (
+        <CreateRoleModal
+          groupedCaps={groupedCaps}
+          onClose={() => setCreateRoleOpen(false)}
+          onCreated={(role) => { setCreateRoleOpen(false); setSelectedId(role.id); showToast(`Role "${role.label}" created.`); }}
+          onToast={showToast}
+        />
+      )}
+
+      {deleteRoleConfirm && (
+        <ConfirmRoleDeleteModal
+          role={deleteRoleConfirm}
+          userCount={countUsersInRole(deleteRoleConfirm.id)}
+          onCancel={() => setDeleteRoleConfirm(null)}
+          onConfirm={doDeleteRole}
+        />
+      )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
+    </div>
+  );
+}
+
+// ─── Roles & Access sub-components ───────────────────────────────────────────
+
+function UsersInRoleSection({ role, users, allRoles, canAssign, currentUserEmail, onToast }) {
+  const [bulkIds, setBulkIds] = useState(new Set());
+  const [targetRoleId, setTargetRoleId] = useState('');
+  useEffect(() => setBulkIds(new Set()), [role.id]);
+  const toggleBulk = (id) => setBulkIds(s => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const otherRoles = allRoles.filter(r => r.id !== role.id);
+
+  const doBulkReassign = () => {
+    if (!targetRoleId || bulkIds.size === 0) return;
+    let failed = 0;
+    let succeeded = 0;
+    for (const userId of bulkIds) {
+      const res = setUserRoleId(userId, targetRoleId);
+      if (res?.error) { failed++; onToast(res.error, 'error'); }
+      else succeeded++;
+    }
+    if (succeeded) onToast(`Reassigned ${succeeded} ${succeeded === 1 ? 'user' : 'users'}.`);
+    if (!failed) { setBulkIds(new Set()); setTargetRoleId(''); }
+  };
+
+  return (
+    <div style={S.card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Users in this role ({users.length})
+        </div>
+        {bulkIds.size > 0 && canAssign && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{bulkIds.size} selected →</span>
+            <select
+              value={targetRoleId} onChange={e => setTargetRoleId(e.target.value)}
+              style={{ ...S.select, width: 'auto', padding: '6px 10px', fontSize: '12px' }}
+            >
+              <option value="">Reassign to…</option>
+              {otherRoles.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+            <button
+              onClick={doBulkReassign} disabled={!targetRoleId}
+              style={{ padding: '6px 12px', background: 'var(--accent-primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: targetRoleId ? 'pointer' : 'not-allowed', opacity: targetRoleId ? 1 : 0.45 }}
+            >Apply</button>
+          </div>
+        )}
+      </div>
+      {users.length === 0 ? (
+        <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>No users hold this role yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {users.map(u => {
+            const isSelf = u.email === currentUserEmail;
+            return (
+              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 4px', borderTop: '1px solid var(--border-subtle)' }}>
+                {canAssign ? (
+                  <input
+                    type="checkbox" checked={bulkIds.has(u.id)} onChange={() => toggleBulk(u.id)}
+                    style={{ accentColor: 'var(--accent-primary)' }}
+                  />
+                ) : <span style={{ width: '14px' }} />}
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: role.color || 'var(--accent-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px', flexShrink: 0 }}>
+                  {u.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {u.name}{isSelf && <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 6px', borderRadius: '4px', background: 'var(--accent-soft)', color: 'var(--accent-primary)', fontWeight: 700 }}>YOU</span>}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{u.email} · {u.department}</div>
+                </div>
+                <span style={{ fontSize: '11px', color: u.active ? 'var(--text-secondary)' : '#DC2626', fontWeight: 700 }}>
+                  {u.active ? 'Active' : 'Deactivated'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CreateUserOnRolesPage({ roles, canCreate, onToast }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [department, setDepartment] = useState('IT & Technology');
+  const [roleId, setRoleId] = useState(roles.find(r => r.isDefault)?.id || roles[0]?.id || '');
+  const [tempPassword, setTempPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    // If the previously-selected role disappears (admin deleted it), fall
+    // back to the registry's default role.
+    if (!roles.find(r => r.id === roleId)) {
+      setRoleId(roles.find(r => r.isDefault)?.id || roles[0]?.id || '');
+    }
+  }, [roles, roleId]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    const res = await adminCreateUser({ name, email, roleId, department, tempPassword });
+    setBusy(false);
+    if (res.error) { onToast(res.error, 'error'); return; }
+    onToast(`Created user ${res.user.name}.`);
+    setName(''); setEmail(''); setTempPassword('');
+  };
+
+  return (
+    <form onSubmit={submit} style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div>
+        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Create user</div>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>The user receives the temp password and is asked to change it on first login.</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+        <div>
+          <label style={S.label}>Full name</label>
+          <input value={name} onChange={e => setName(e.target.value)} disabled={!canCreate} required style={S.input} placeholder="Jane Doe" />
+        </div>
+        <div>
+          <label style={S.label}>Email</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={!canCreate} required style={S.input} placeholder="jane.doe@pomelo.com" />
+        </div>
+        <div>
+          <label style={S.label}>Department</label>
+          <input value={department} onChange={e => setDepartment(e.target.value)} disabled={!canCreate} style={S.input} />
+        </div>
+        <div>
+          <label style={S.label}>Role</label>
+          <select value={roleId} onChange={e => setRoleId(e.target.value)} disabled={!canCreate} style={S.select}>
+            {roles.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={S.label}>Temp password</label>
+          <input type="text" value={tempPassword} onChange={e => setTempPassword(e.target.value)} disabled={!canCreate} required minLength={8} style={S.input} placeholder="At least 8 characters" />
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button type="submit" disabled={!canCreate || busy} style={{ ...S.orangeBtn, opacity: (canCreate && !busy) ? 1 : 0.45, cursor: (canCreate && !busy) ? 'pointer' : 'not-allowed' }}>
+          {busy ? 'Creating…' : 'Create user'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function CreateRoleModal({ groupedCaps, onClose, onCreated, onToast }) {
+  const [label, setLabel] = useState('');
+  const [description, setDescription] = useState('');
+  const [color, setColor] = useState('#6366F1');
+  const [capabilities, setCapabilities] = useState([]);
+  const toggleCap = (id) => setCapabilities(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+
+  const submit = (e) => {
+    e.preventDefault();
+    const res = createRole({ name: label, label, description, color, capabilities });
+    if (res?.error) { onToast(res.error, 'error'); return; }
+    onCreated(res);
+  };
+
+  return (
+    <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
+      <form onSubmit={submit} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Create role" style={{ width: '640px', maxWidth: '95vw', maxHeight: '90vh', background: 'var(--bg-surface)', borderRadius: '14px', boxShadow: 'var(--shadow-modal)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>New role</div>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={18} /></button>
+        </div>
+        <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <label style={S.label}>Role label</label>
+              <input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. QA Engineer" required style={S.input} />
+            </div>
+            <div>
+              <label style={S.label}>Color</label>
+              <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ width: '46px', height: '38px', border: '1px solid var(--border-default)', borderRadius: '6px', cursor: 'pointer', background: 'var(--bg-input)' }} />
+            </div>
+          </div>
+          <div>
+            <label style={S.label}>Description</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Short description shown to admins managing this role." style={{ ...S.textarea, minHeight: '54px', fontSize: '13px' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Capabilities ({capabilities.length} selected)</div>
+            {Object.entries(groupedCaps).map(([group, caps]) => (
+              <div key={group} style={{ marginBottom: '10px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>{group}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '4px' }}>
+                  {caps.map(c => (
+                    <label key={c.id} title={c.description} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)' }}>
+                      <input type="checkbox" checked={capabilities.includes(c.id)} onChange={() => toggleCap(c.id)} style={{ accentColor: 'var(--accent-primary)' }} />
+                      <span style={{ minWidth: 0 }}>{c.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: '14px 22px', borderTop: '1px solid var(--border-default)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button type="button" onClick={onClose} style={S.ghostBtn}>Cancel</button>
+          <button type="submit" style={S.orangeBtn}>Create role</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ConfirmRoleDeleteModal({ role, userCount, onCancel, onConfirm }) {
+  const blocked = userCount > 0;
+  return (
+    <div onClick={onCancel} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ width: '440px', maxWidth: '95vw', background: 'var(--bg-surface)', borderRadius: '14px', boxShadow: 'var(--shadow-modal)', padding: '22px' }}>
+        <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>Delete role "{role.label}"?</div>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '18px' }}>
+          {blocked
+            ? `This role still has ${userCount} ${userCount === 1 ? 'user' : 'users'}. Reassign them first.`
+            : 'This cannot be undone. Capability assignments on this role will be lost.'}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <button onClick={onCancel} style={S.ghostBtn}>Cancel</button>
+          <button onClick={onConfirm} disabled={blocked} style={{ padding: '9px 18px', background: '#DC2626', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: blocked ? 'not-allowed' : 'pointer', opacity: blocked ? 0.5 : 1 }}>
+            Delete role
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Users panel (admin only) ─────────────────────────────────────────────────
 function UsersPanelPage({ currentUserEmail }) {
   const [version, setVersion] = useState(0);
@@ -6017,11 +6696,15 @@ const tooltipContentStyle = {
 // ─── Admin tools dropdown ────────────────────────────────────────────────────
 // Groups the four admin-only destinations behind a single nav button to
 // reclaim space and keep related actions together.
+// Sections that benefit from the wider main column (tables, kanban, matrices).
+const WIDE_SECTIONS = new Set(['admin', 'users', 'audit', 'chatlogs', 'roles', 'devportal']);
+
 const ADMIN_TOOLS = [
-  { id: 'admin',    Icon: Wrench,        label: 'Admin Console',  hint: 'Kanban + system controls',   cap: 'admin.kanban_view' },
-  { id: 'users',    Icon: UsersIcon,     label: 'Users',           hint: 'Manage portal accounts',     cap: 'users.edit' },
-  { id: 'audit',    Icon: ScrollText,    label: 'Audit log',       hint: 'Immutable action history',   cap: 'audit.view' },
-  { id: 'chatlogs', Icon: MessageCircle, label: 'Chat logs',       hint: 'AI assistant conversations', cap: 'chatlogs.view' },
+  { id: 'admin',    Icon: Wrench,        label: 'Admin Console',   hint: 'Kanban + system controls',           cap: 'admin.kanban_view' },
+  { id: 'roles',    Icon: Shield,        label: 'Roles & Access',  hint: 'Roles, capabilities, user creation', cap: 'roles.edit' },
+  { id: 'users',    Icon: UsersIcon,     label: 'Users',            hint: 'Manage portal accounts',            cap: 'users.edit' },
+  { id: 'audit',    Icon: ScrollText,    label: 'Audit log',        hint: 'Immutable action history',          cap: 'audit.view' },
+  { id: 'chatlogs', Icon: MessageCircle, label: 'Chat logs',        hint: 'AI assistant conversations',        cap: 'chatlogs.view' },
 ];
 
 function AdminToolsDropdown({ section, onPick }) {
@@ -6328,6 +7011,7 @@ function AppContent() {
       case 'sla':       page = <SLAPage />; break;
       case 'mytickets': page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'admin':     page = can('admin.kanban_view') ? <AdminPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'roles':     page = can('roles.edit') ? <RolesAccessPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'users':     page = can('users.edit') ? <UsersPanelPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'audit':     page = can('audit.view') ? <AuditLogPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'chatlogs':  page = can('chatlogs.view') ? <ChatLogsPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
@@ -6574,7 +7258,7 @@ function AppContent() {
       </nav>
       </Tooltip.Provider>
 
-      <main className="pomelo-main" style={{ ...S.main, maxWidth: (section === 'admin' || section === 'users' || section === 'audit' || section === 'chatlogs') ? '1400px' : '1100px', padding: (section === 'admin' || section === 'users' || section === 'audit' || section === 'chatlogs') ? '32px 28px' : undefined }}>
+      <main className="pomelo-main" style={{ ...S.main, maxWidth: WIDE_SECTIONS.has(section) ? '1400px' : '1100px', padding: WIDE_SECTIONS.has(section) ? '32px 28px' : undefined }}>
         {renderPage()}
       </main>
 
