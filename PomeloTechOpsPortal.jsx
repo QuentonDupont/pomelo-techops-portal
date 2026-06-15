@@ -2374,7 +2374,12 @@ function DocMarkdown({ content }) {
 }
 
 // ─── Ticket Detail ────────────────────────────────────────────────────────────
-function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, onAddNotification }) {
+function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, onAddNotification, currentUser }) {
+  const can = useCan();
+  const isAssignedToMe = !!currentUser?.email && !!ticket.assigneeEmail && ticket.assigneeEmail === currentUser.email;
+  const canViewAll = can('tickets.view_all');
+  const canSeeAudit = can('audit.view');
+  const canChangeStatus = can('tickets.status_change_any') || (isAssignedToMe && can('tickets.status_change_own'));
   const [newMsg, setNewMsg] = useState('');
   const [messages, setMessages] = useState(ticket.messages);
   const [internalNotes, setInternalNotes] = useState(ticket.internalNotes || []);
@@ -2391,14 +2396,15 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
   const statusOrder = workflow.statuses.map(s => s.name);
   const currentIdx = statusOrder.indexOf(ticket.status);
 
-  // Admin-only context about the assignee: department + their own ticket count
+  // Context about the assignee (department + workload) — shown to anyone with
+  // full ticket visibility, not just superadmins.
   const assigneeContext = useMemo(() => {
-    if (role !== 'superadmin' || !ticket.assignee) return null;
+    if (!canViewAll || !ticket.assignee) return null;
     const u = MOCK_USERS.find(u => u.name === ticket.assignee);
     const open = MOCK_TICKETS.filter(t => t.assignee === ticket.assignee && (t.status === 'Open' || t.status === 'In Progress')).length;
     const total = MOCK_TICKETS.filter(t => t.assignee === ticket.assignee).length;
     return { dept: u?.department || 'Unknown', email: u?.email || null, open, total };
-  }, [role, ticket.assignee]);
+  }, [canViewAll, ticket.assignee]);
 
   const addInternalNote = () => {
     const text = newNote.trim();
@@ -2499,7 +2505,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
           <div style={{ fontSize: '22px', fontWeight: 900, color: 'var(--text-primary)' }}>{ticket.title}</div>
           {(assigneeContext || ticket.requester) && (
             <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {role === 'superadmin' && ticket.requester && (
+              {canViewAll && ticket.requester && (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: '#EFF6FF', borderRadius: '100px', border: '1px solid #BFDBFE', fontSize: '11px', color: '#1E3A8A', fontWeight: 600 }}>
                   🙋 Submitted by <strong>{ticket.requester.name}</strong>{ticket.requester.email ? <> · {ticket.requester.email}</> : null}
                 </div>
@@ -2576,7 +2582,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
       )}
 
       {/* Worklog summary */}
-      {jiraWorklog && jiraWorklog.totalSeconds > 0 && role === 'superadmin' && (
+      {jiraWorklog && jiraWorklog.totalSeconds > 0 && canViewAll && (
         <div style={{ ...S.card, marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>⏱ Time logged ({Math.round(jiraWorklog.totalSeconds / 360) / 10}h total)</span>
@@ -2620,7 +2626,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
           preview) and Jira-side attachments (linked at their Jira content URLs). */}
       <TicketAttachments local={ticket.attachments} jira={jiraDetail?.attachments} />
 
-      {role === 'superadmin' && (
+      {canViewAll && (
         <div style={{ ...S.card, marginBottom: '20px', borderLeft: '4px solid #FBBF24' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
             <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>Internal notes</span>
@@ -2720,7 +2726,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Assignee</span>
-              {(role === 'superadmin' || role === 'admin') ? (
+              {can('tickets.assign') ? (
                 <div style={{ position: 'relative' }}>
                   <select
                     value={ticket.assignee || ''}
@@ -2768,7 +2774,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
           )}
           {/* Attachment summary line is replaced by the dedicated preview card above. */}
           <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }}>
-            {(role === 'superadmin' || role === 'admin') ? (
+            {canChangeStatus ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flexShrink: 0 }}>Change Status</span>
                 <div style={{ position: 'relative', flex: 1 }}>
@@ -2895,13 +2901,13 @@ function RecentActivityFeed({ role, onTicket, setSection }) {
     return MOCK_TICKETS
       .slice()
       .sort((a, b) => (b.updated || '').localeCompare(a.updated || ''))
-      .slice(0, role === 'superadmin' ? 3 : 5);
-  }, [role]); // eslint-disable-line react-hooks/exhaustive-deps
+      .slice(0, canSeeAudit ? 3 : 5);
+  }, [canSeeAudit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const recentAudit = useMemo(() => {
-    if (role !== 'superadmin') return [];
+    if (!canSeeAudit) return [];
     return listAudit().slice(0, 3);
-  }, [role]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canSeeAudit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const auditLabel = a => ({
     'user.create': '➕ User created',
@@ -2937,7 +2943,7 @@ function RecentActivityFeed({ role, onTicket, setSection }) {
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
         <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>Recent Activity</div>
-        {role === 'superadmin' && (
+        {canSeeAudit && (
           <button onClick={() => setSection('audit')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}>
             View full audit log →
           </button>
@@ -3079,7 +3085,9 @@ function TicketPopupModal({ ticket, onClose }) {
 }
 
 // ─── Profile Modal ────────────────────────────────────────────────────────────
-function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) {
+function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) { // eslint-disable-line no-unused-vars
+  const { can, currentRole } = useRbacCtx();
+  const canEditOwnProfile = can('users.edit');
   const [form, setForm] = useState({ ...currentUser });
   const initials = form.name.split(' ').map(n => n[0]).join('').toUpperCase();
 
@@ -3118,15 +3126,16 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
           }}>{initials}</div>
         </div>
 
-        {/* Role badge */}
+        {/* Role badge — sourced from the role registry so custom roles
+            (Developer, Admin, ...) render correctly, not just superadmin/user. */}
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           <span style={{
             display: 'inline-block', padding: '4px 14px', borderRadius: '100px',
-            background: role === 'superadmin' ? '#7C3AED18' : '#11111118',
-            color: role === 'superadmin' ? 'var(--accent-primary)' : 'var(--text-primary)',
+            background: (currentRole?.color || 'var(--text-primary)') + '18',
+            color: currentRole?.color || 'var(--text-primary)',
             fontSize: '12px', fontWeight: 700,
           }}>
-            {role === 'superadmin' ? '⭐ Super Admin' : '👤 User'}
+            {currentRole?.label || 'User'}
           </span>
         </div>
 
@@ -3139,7 +3148,7 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
           ].map(({ key, label }) => (
             <div key={key}>
               <label style={S.label}>{label}</label>
-              {role === 'superadmin' ? (
+              {canEditOwnProfile ? (
                 <input
                   value={form[key]}
                   onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
@@ -3151,7 +3160,7 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
             </div>
           ))}
 
-          {role === 'superadmin' && (
+          {canEditOwnProfile && (
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
               <button onClick={onClose} style={S.ghostBtn}>Cancel</button>
               <button onClick={save} style={S.orangeBtn}>Save Changes</button>
@@ -3306,10 +3315,11 @@ function EditSuggestionModal({ suggestion, onSave, onClose }) {
   );
 }
 
-function SuggestionCard({ suggestion, currentUser, role, onEdit, onDelete }) {
+function SuggestionCard({ suggestion, currentUser, role, onEdit, onDelete }) { // eslint-disable-line no-unused-vars
+  const can = useCan();
   const isOwn = suggestion.author === currentUser.name;
   const canEdit = isOwn;
-  const canDelete = isOwn || role === 'superadmin';
+  const canDelete = isOwn || can('tickets.delete');
   const initials = suggestion.author.split(' ').map(n => n[0]).join('').toUpperCase();
   const timeAgo = (() => {
     const diff = Date.now() - new Date(suggestion.timestamp).getTime();
@@ -3386,7 +3396,9 @@ function NewSuggestionForm({ currentUser, onSubmit }) {
 }
 
 // ─── Pages ────────────────────────────────────────────────────────────────────
-function HomePage({ setSection, role, currentUser }) {
+function HomePage({ setSection, role, currentUser }) { // eslint-disable-line no-unused-vars
+  const can = useCan();
+  const canViewAll = can('tickets.view_all');
   const open = MOCK_TICKETS.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
   const resolved = MOCK_TICKETS.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
   const [activeTicket, setActiveTicket] = useState(null);
@@ -3394,7 +3406,7 @@ function HomePage({ setSection, role, currentUser }) {
 
   // Admin-only stats: critical open, oldest unresolved age, p50 resolution time, SLA breaches
   const adminStats = useMemo(() => {
-    if (role !== 'superadmin') return null;
+    if (!canViewAll) return null;
     const now = Date.now();
     const isOpen = t => !DONE_STATUSES.has(t.status);
     const critical = MOCK_TICKETS.filter(t => t.priority === 'Critical' && isOpen(t)).length;
@@ -3406,7 +3418,7 @@ function HomePage({ setSection, role, currentUser }) {
     const slaBreached = MOCK_TICKETS.filter(t => slaStateFor(t) === 'breached').length;
     const slaAtRisk = MOCK_TICKETS.filter(t => slaStateFor(t) === 'at-risk').length;
     return { critical, oldestAgeDays, avgResolutionDays, unresolvedCount: unresolved.length, slaBreached, slaAtRisk };
-  }, [role]);
+  }, [canViewAll]);
 
   return (
     <div>
@@ -4232,7 +4244,8 @@ function SLAPage() {
   );
 }
 
-function MyTicketsPage({ role, currentUser }) {
+function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused-vars
+  const can = useCan();
   const [, _setTicketsVersion] = useState(0);
   useEffect(() => subscribeTickets(_setTicketsVersion), []);
   const tickets = MOCK_TICKETS;
@@ -4246,7 +4259,10 @@ function MyTicketsPage({ role, currentUser }) {
   const [refreshMsg, setRefreshMsg] = useState('');
   const { addNotification } = useNotifications();
 
-  const isAdmin = role === 'superadmin';
+  // "Admin view" of My Tickets — full visibility, priority/stale filters,
+  // bulk actions. Anyone with view_all capability gets it; per the design,
+  // My Tickets always filters by requester for users without view_all.
+  const isAdmin = can('tickets.view_all');
   const workflow = useJiraWorkflow();
   const assignable = useAssignableUsers();
   const STATUS_OPTIONS = workflow.statuses.map(s => s.name);
@@ -4320,7 +4336,7 @@ function MyTicketsPage({ role, currentUser }) {
   };
 
   if (selected) {
-    return <TicketDetail ticket={selected} onBack={() => setSelectedId(null)} role={role} onStatusChange={handleStatusChange} onAssigneeChange={handleAssigneeChange} onAddNotification={addNotification} />;
+    return <TicketDetail ticket={selected} onBack={() => setSelectedId(null)} role={role} currentUser={currentUser} onStatusChange={handleStatusChange} onAssigneeChange={handleAssigneeChange} onAddNotification={addNotification} />;
   }
 
   return (
@@ -5336,7 +5352,8 @@ function MaintenanceToggleCard() {
 }
 
 // ─── Global search palette (Cmd/Ctrl+K) ───────────────────────────────────────
-function GlobalSearchPalette({ open, onClose, onNavigate, role }) {
+function GlobalSearchPalette({ open, onClose, onNavigate, role }) { // eslint-disable-line no-unused-vars
+  const can = useCan();
   const [q, setQ] = useState('');
   const [, _setVer] = useState(0);
   useEffect(() => subscribeTickets(_setVer), []);
@@ -5352,7 +5369,7 @@ function GlobalSearchPalette({ open, onClose, onNavigate, role }) {
   const results = useMemo(() => {
     const query = q.trim().toLowerCase();
     if (!query) return { docs: [], tickets: [], users: [] };
-    const isAdmin = role === 'superadmin';
+    const isAdmin = can('users.edit');
 
     const docs = listDocSummaries()
       .filter(d => d.title.toLowerCase().includes(query) || d.description.toLowerCase().includes(query) || d.category.toLowerCase().includes(query))
@@ -6001,14 +6018,16 @@ const tooltipContentStyle = {
 // Groups the four admin-only destinations behind a single nav button to
 // reclaim space and keep related actions together.
 const ADMIN_TOOLS = [
-  { id: 'admin',    Icon: Wrench,        label: 'Admin Console',  hint: 'Kanban + system controls' },
-  { id: 'users',    Icon: UsersIcon,     label: 'Users',           hint: 'Manage portal accounts' },
-  { id: 'audit',    Icon: ScrollText,    label: 'Audit log',       hint: 'Immutable action history' },
-  { id: 'chatlogs', Icon: MessageCircle, label: 'Chat logs',       hint: 'AI assistant conversations' },
+  { id: 'admin',    Icon: Wrench,        label: 'Admin Console',  hint: 'Kanban + system controls',   cap: 'admin.kanban_view' },
+  { id: 'users',    Icon: UsersIcon,     label: 'Users',           hint: 'Manage portal accounts',     cap: 'users.edit' },
+  { id: 'audit',    Icon: ScrollText,    label: 'Audit log',       hint: 'Immutable action history',   cap: 'audit.view' },
+  { id: 'chatlogs', Icon: MessageCircle, label: 'Chat logs',       hint: 'AI assistant conversations', cap: 'chatlogs.view' },
 ];
 
 function AdminToolsDropdown({ section, onPick }) {
-  const active = ADMIN_TOOLS.find(t => t.id === section);
+  const can = useCan();
+  const items = ADMIN_TOOLS.filter(t => can(t.cap));
+  const active = items.find(t => t.id === section);
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -6031,7 +6050,7 @@ function AdminToolsDropdown({ section, onPick }) {
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content sideOffset={6} align="end" style={radixMenuContentStyle}>
-          {ADMIN_TOOLS.map(t => {
+          {items.map(t => {
             const isActive = section === t.id;
             return (
               <DropdownMenu.Item key={t.id} onSelect={() => onPick(isActive ? 'home' : t.id)} style={radixMenuItemStyle(isActive)}>
@@ -6235,12 +6254,12 @@ function AppContent() {
     setIsAuthenticated(true);
     setViewAs(null);
     setAuditActor({ name: user.name, email: user.email });
-    if (user.role === 'superadmin') recordAudit('session.login', { name: user.name, email: user.email });
+    if (hasPermission({ roleId }, 'audit.view', listRoles())) recordAudit('session.login', { name: user.name, email: user.email });
     seedNotifications(buildSeedNotifications(user.name));
   };
 
   const handleLogout = () => {
-    if (role === 'superadmin' && currentUser) {
+    if (currentUser && hasPermission(currentUser, 'audit.view', listRoles())) {
       recordAudit('session.logout', { name: currentUser.name, email: currentUser.email });
     }
     clearSession();
@@ -6254,13 +6273,14 @@ function AppContent() {
 
   // Record view-mode changes (impersonation is a sensitive admin action — R-10).
   useEffect(() => {
-    if (!isAuthenticated || role !== 'superadmin' || !currentUser) return;
+    if (!isAuthenticated || !currentUser) return;
+    if (!hasPermission(currentUser, 'system.impersonate', listRoles())) return;
     if (viewAs === null) return; // skip the initial null on login
     const detail =
       viewAs === 'user' ? { mode: 'user' }
       : { mode: 'impersonate', targetEmail: viewAs.email, targetName: viewAs.name };
     recordAudit('admin.view_as', { name: currentUser.name, email: currentUser.email }, null, detail);
-  }, [viewAs, isAuthenticated, role, currentUser]);
+  }, [viewAs, isAuthenticated, currentUser]);
 
   const initials = effectiveUser?.name?.split(' ').map(n => n[0]).join('').toUpperCase() ?? '?';
 
@@ -6273,11 +6293,22 @@ function AppContent() {
   ];
   const RESOURCE_IDS = new Set(['docs', 'priority', 'sla']);
 
-  // If the impersonated/effective view drops below admin while sitting on an
-  // admin-only section, bounce back home — the viewed user wouldn't see it.
+  // Per-section capability requirements. A section without an entry is
+  // public. When the effective view's `can` flips below the required
+  // capability (impersonation, role demotion, capability toggle), bounce
+  // back home — the viewed user wouldn't see it.
+  const SECTION_CAPS = useMemo(() => ({
+    admin:    'admin.kanban_view',
+    users:    'users.edit',
+    roles:    'roles.edit',
+    audit:    'audit.view',
+    chatlogs: 'chatlogs.view',
+    devportal:'tickets.view_assigned',
+  }), []);
   useEffect(() => {
-    if ((section === 'admin' || section === 'users' || section === 'audit' || section === 'chatlogs') && effectiveRole !== 'superadmin') setSection('home');
-  }, [section, effectiveRole]);
+    const required = SECTION_CAPS[section];
+    if (required && !can(required)) setSection('home');
+  }, [section, can, SECTION_CAPS]);
 
   // Re-seed notifications when the view flips so the impersonated/downgraded
   // view shows that user's notification history rather than the real session's.
@@ -6296,10 +6327,10 @@ function AppContent() {
       case 'priority':  page = <PriorityGuidePage />; break;
       case 'sla':       page = <SLAPage />; break;
       case 'mytickets': page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'admin':     page = effectiveRole === 'superadmin' ? <AdminPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'users':     page = effectiveRole === 'superadmin' ? <UsersPanelPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'audit':     page = effectiveRole === 'superadmin' ? <AuditLogPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'chatlogs':  page = effectiveRole === 'superadmin' ? <ChatLogsPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'admin':     page = can('admin.kanban_view') ? <AdminPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'users':     page = can('users.edit') ? <UsersPanelPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'audit':     page = can('audit.view') ? <AuditLogPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'chatlogs':  page = can('chatlogs.view') ? <ChatLogsPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       default:          page = <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />;
     }
     return <ErrorBoundary key={section}>{page}</ErrorBoundary>;
@@ -6504,8 +6535,9 @@ function AppContent() {
             </Tooltip.Portal>
           </Tooltip.Root>
 
-          {/* View-mode pill — real superadmin only, always visible as an escape hatch */}
-          {role === 'superadmin' && (
+          {/* View-mode pill — visible to anyone who can impersonate. Stays
+              visible even while impersonating so it's the escape hatch back. */}
+          {hasPermission(currentUser, 'system.impersonate', listRoles()) && (
             <AdminViewModePill
               viewAs={viewAs}
               onSet={setViewAs}
@@ -6514,8 +6546,8 @@ function AppContent() {
             />
           )}
 
-          {/* Admin tools — single dropdown grouping Users / Audit / Chat Logs / Admin Console */}
-          {effectiveRole === 'superadmin' && (
+          {/* Admin tools — single dropdown grouping Users / Roles / Audit / Chat Logs / Admin Console */}
+          {(can('admin.kanban_view') || can('users.edit') || can('roles.edit') || can('audit.view') || can('chatlogs.view')) && (
             <AdminToolsDropdown section={section} onPick={setSection} />
           )}
 
