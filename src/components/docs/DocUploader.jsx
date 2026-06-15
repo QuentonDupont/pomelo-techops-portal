@@ -35,7 +35,7 @@ const FILE_TYPE_ICONS = [
 ];
 
 const STATUS_CONFIG = {
-  queued: { label: 'Queued', color: '#64748B', bg: '#F1F5F9' },
+  queued: { label: 'Queued', color: 'var(--text-secondary)', bg: 'var(--bg-hover)' },
   uploading: { label: 'Uploading', color: '#2563EB', bg: '#EFF6FF' },
   complete: { label: 'Complete', color: '#16A34A', bg: '#F0FDF4' },
   error: { label: 'Error', color: '#DC2626', bg: '#FEF2F2' },
@@ -85,18 +85,18 @@ function MetadataModal({ item, onSave, onClose }) {
     width: '100%',
     padding: '9px 12px',
     borderRadius: '8px',
-    border: '1.5px solid #E2E8F0',
-    fontFamily: "'Lato', sans-serif",
+    border: '1.5px solid var(--border-default)',
+    fontFamily: "'Inter', sans-serif",
     fontSize: '13px',
-    color: '#1E293B',
-    background: '#F8F9FB',
+    color: 'var(--text-primary)',
+    background: 'var(--bg-page)',
     outline: 'none',
     boxSizing: 'border-box',
   };
   const labelStyle = {
     fontSize: '11px',
     fontWeight: 700,
-    color: '#475569',
+    color: 'var(--text-secondary)',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
     display: 'block',
@@ -115,19 +115,19 @@ function MetadataModal({ item, onSave, onClose }) {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%,-50%)',
-          background: '#fff',
+          background: 'var(--bg-elevated)',
           borderRadius: '14px',
           zIndex: 601,
           width: '500px',
           maxWidth: '95vw',
           boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
           overflow: 'hidden',
-          fontFamily: "'Lato', sans-serif",
+          fontFamily: "'Inter', sans-serif",
         }}
       >
         <div
           style={{
-            background: '#111111',
+            background: 'var(--text-primary)',
             padding: '18px 22px',
             display: 'flex',
             alignItems: 'center',
@@ -221,10 +221,10 @@ function MetadataModal({ item, onSave, onClose }) {
                     flex: 1,
                     padding: '9px',
                     borderRadius: '8px',
-                    border: `1.5px solid ${form.visibility === v ? '#111111' : '#E2E8F0'}`,
-                    background: form.visibility === v ? '#111111' : 'transparent',
-                    color: form.visibility === v ? '#fff' : '#64748B',
-                    fontFamily: "'Lato', sans-serif",
+                    border: `1.5px solid ${form.visibility === v ? 'var(--text-primary)' : 'var(--border-default)'}`,
+                    background: form.visibility === v ? 'var(--text-primary)' : 'transparent',
+                    color: form.visibility === v ? '#fff' : 'var(--text-secondary)',
+                    fontFamily: "'Inter', sans-serif",
                     fontWeight: 700,
                     fontSize: '12px',
                     cursor: 'pointer',
@@ -249,12 +249,12 @@ function MetadataModal({ item, onSave, onClose }) {
             style={{
               padding: '9px 18px',
               background: 'transparent',
-              border: '1.5px solid #E2E8F0',
+              border: '1.5px solid var(--border-default)',
               borderRadius: '8px',
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontSize: '13px',
               cursor: 'pointer',
-              color: '#64748B',
+              color: 'var(--text-secondary)',
             }}
           >
             Cancel
@@ -266,11 +266,11 @@ function MetadataModal({ item, onSave, onClose }) {
             }}
             style={{
               padding: '9px 22px',
-              background: '#7C3AED',
+              background: 'var(--accent-primary)',
               color: '#fff',
               border: 'none',
               borderRadius: '8px',
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontWeight: 700,
               fontSize: '13px',
               cursor: 'pointer',
@@ -320,25 +320,25 @@ export default function DocUploader({
   const inputStyle = {
     padding: '6px 10px',
     borderRadius: '7px',
-    border: '1.5px solid #E2E8F0',
-    fontFamily: "'Lato', sans-serif",
+    border: '1.5px solid var(--border-default)',
+    fontFamily: "'Inter', sans-serif",
     fontSize: '12px',
-    background: '#F8F9FB',
+    background: 'var(--bg-page)',
     outline: 'none',
-    color: '#111111',
+    color: 'var(--text-primary)',
   };
 
   return (
-    <div style={{ fontFamily: "'Lato', sans-serif" }}>
+    <div style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* Drop zone */}
       <div
         {...getRootProps()}
         aria-label="Drop files here or click to browse"
         style={{
           minHeight: '200px',
-          border: `2px dashed ${isDragActive ? '#7C3AED' : '#CBD5E1'}`,
+          border: `2px dashed ${isDragActive ? 'var(--accent-primary)' : 'var(--border-strong)'}`,
           borderRadius: '12px',
-          background: isDragActive ? '#F5F3FF' : '#F8F9FB',
+          background: isDragActive ? 'var(--accent-soft)' : 'var(--bg-page)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -353,10 +353,17 @@ export default function DocUploader({
         <input {...getInputProps()} />
         <div style={{ fontSize: '36px' }}>{isDragActive ? '📂' : '☁️'}</div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 900, fontSize: '15px', color: '#111111', marginBottom: '4px' }}>
+          <div
+            style={{
+              fontWeight: 900,
+              fontSize: '15px',
+              color: 'var(--text-primary)',
+              marginBottom: '4px',
+            }}
+          >
             {isDragActive ? 'Drop files here' : 'Drag & drop files, or click to browse'}
           </div>
-          <div style={{ fontSize: '12px', color: '#94A3B8' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             Supports: PDF, DOCX, MD, TXT, CSV, XLSX, PPTX, PNG, JPG, GIF, WEBP
           </div>
         </div>
@@ -366,7 +373,7 @@ export default function DocUploader({
               key={f.ext}
               style={{
                 fontSize: '11px',
-                color: '#64748B',
+                color: 'var(--text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '3px',
@@ -392,7 +399,7 @@ export default function DocUploader({
               gap: '10px',
             }}
           >
-            <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
               {queue.length} file{queue.length !== 1 ? 's' : ''} · {totalSize(queue)} total
             </div>
 
@@ -411,11 +418,11 @@ export default function DocUploader({
                   onClick={() => setBulkCategory(bulkCatValue)}
                   style={{
                     padding: '6px 12px',
-                    background: '#111111',
+                    background: 'var(--text-primary)',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '7px',
-                    fontFamily: "'Lato', sans-serif",
+                    fontFamily: "'Inter', sans-serif",
                     fontSize: '12px',
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -432,7 +439,7 @@ export default function DocUploader({
                       color: '#DC2626',
                       border: '1px solid #FCA5A5',
                       borderRadius: '7px',
-                      fontFamily: "'Lato', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       fontSize: '12px',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -447,10 +454,10 @@ export default function DocUploader({
                   style={{
                     padding: '6px 12px',
                     background: 'transparent',
-                    color: '#64748B',
-                    border: '1.5px solid #E2E8F0',
+                    color: 'var(--text-secondary)',
+                    border: '1.5px solid var(--border-default)',
                     borderRadius: '7px',
-                    fontFamily: "'Lato', sans-serif",
+                    fontFamily: "'Inter', sans-serif",
                     fontSize: '12px',
                     cursor: 'pointer',
                   }}
@@ -464,7 +471,7 @@ export default function DocUploader({
           {/* Table */}
           <div
             style={{
-              border: '1px solid #E2E8F0',
+              border: '1px solid var(--border-default)',
               borderRadius: '10px',
               overflow: 'hidden',
               marginBottom: '16px',
@@ -472,7 +479,12 @@ export default function DocUploader({
           >
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
-                <tr style={{ background: '#F8F9FB', borderBottom: '1px solid #E2E8F0' }}>
+                <tr
+                  style={{
+                    background: 'var(--bg-page)',
+                    borderBottom: '1px solid var(--border-default)',
+                  }}
+                >
                   {['File', 'Size', 'Type', 'Category', 'Status', ''].map(h => (
                     <th
                       key={h}
@@ -480,7 +492,7 @@ export default function DocUploader({
                         padding: '10px 12px',
                         textAlign: 'left',
                         fontWeight: 700,
-                        color: '#475569',
+                        color: 'var(--text-secondary)',
                         fontSize: '11px',
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em',
@@ -499,7 +511,8 @@ export default function DocUploader({
                     <tr
                       key={item.id}
                       style={{
-                        borderBottom: idx < queue.length - 1 ? '1px solid #F1F5F9' : 'none',
+                        borderBottom:
+                          idx < queue.length - 1 ? '1px solid var(--border-subtle)' : 'none',
                         background: item.status === 'error' ? '#FEF9F9' : '#fff',
                       }}
                     >
@@ -518,7 +531,7 @@ export default function DocUploader({
                           <div
                             style={{
                               fontWeight: 700,
-                              color: '#111111',
+                              color: 'var(--text-primary)',
                               fontSize: '12px',
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
@@ -528,13 +541,19 @@ export default function DocUploader({
                           >
                             {item.title || item.file?.name}
                           </div>
-                          <div style={{ fontSize: '10px', color: '#94A3B8' }}>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                             {item.file?.name}
                           </div>
                         </button>
                       </td>
                       {/* Size */}
-                      <td style={{ padding: '10px 12px', color: '#64748B', whiteSpace: 'nowrap' }}>
+                      <td
+                        style={{
+                          padding: '10px 12px',
+                          color: 'var(--text-secondary)',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
                         {fmtSize(item.file?.size || 0)}
                       </td>
                       {/* Type */}
@@ -545,8 +564,8 @@ export default function DocUploader({
                             fontWeight: 700,
                             padding: '2px 6px',
                             borderRadius: '4px',
-                            background: '#F1F5F9',
-                            color: '#475569',
+                            background: 'var(--bg-hover)',
+                            color: 'var(--text-secondary)',
                           }}
                         >
                           {getExt(item.file?.name || '')}
@@ -615,7 +634,7 @@ export default function DocUploader({
                               style={{
                                 marginTop: '4px',
                                 height: '3px',
-                                background: '#E2E8F0',
+                                background: 'var(--border-default)',
                                 borderRadius: '2px',
                                 overflow: 'hidden',
                                 minWidth: '80px',
@@ -646,12 +665,12 @@ export default function DocUploader({
                             title="Edit metadata"
                             style={{
                               padding: '4px 8px',
-                              background: '#F8F9FB',
-                              border: '1px solid #E2E8F0',
+                              background: 'var(--bg-page)',
+                              border: '1px solid var(--border-default)',
                               borderRadius: '5px',
                               cursor: 'pointer',
                               fontSize: '11px',
-                              color: '#475569',
+                              color: 'var(--text-secondary)',
                             }}
                           >
                             ✎
@@ -675,7 +694,7 @@ export default function DocUploader({
                                 cursor: 'pointer',
                                 fontSize: '11px',
                                 color: '#2563EB',
-                                fontFamily: "'Lato', sans-serif",
+                                fontFamily: "'Inter', sans-serif",
                                 fontWeight: 700,
                               }}
                             >
@@ -716,7 +735,7 @@ export default function DocUploader({
                   justifyContent: 'space-between',
                   marginBottom: '6px',
                   fontSize: '12px',
-                  color: '#64748B',
+                  color: 'var(--text-secondary)',
                 }}
               >
                 <span>Uploading…</span>
@@ -725,7 +744,7 @@ export default function DocUploader({
               <div
                 style={{
                   height: '6px',
-                  background: '#E2E8F0',
+                  background: 'var(--border-default)',
                   borderRadius: '3px',
                   overflow: 'hidden',
                 }}
@@ -733,7 +752,7 @@ export default function DocUploader({
                 <div
                   style={{
                     height: '100%',
-                    background: '#7C3AED',
+                    background: 'var(--accent-primary)',
                     width: `${uploadProgress}%`,
                     transition: 'width 0.3s',
                     borderRadius: '3px',
@@ -772,11 +791,11 @@ export default function DocUploader({
               aria-label="Upload all queued files"
               style={{
                 padding: '11px 24px',
-                background: uploading ? '#CBD5E1' : '#7C3AED',
+                background: uploading ? 'var(--border-strong)' : 'var(--accent-primary)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontWeight: 700,
                 fontSize: '14px',
                 cursor: uploading ? 'not-allowed' : 'pointer',
@@ -811,12 +830,12 @@ export default function DocUploader({
               style={{
                 padding: '11px 18px',
                 background: 'transparent',
-                border: '1.5px solid #E2E8F0',
+                border: '1.5px solid var(--border-default)',
                 borderRadius: '8px',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontSize: '14px',
                 cursor: 'pointer',
-                color: '#64748B',
+                color: 'var(--text-secondary)',
               }}
             >
               Clear

@@ -6,8 +6,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useNotifications, relativeTime } from '../context/NotificationContext.jsx';
 
 const TYPE_META = {
-  ticket_message: { icon: '💬', color: '#7C3AED', bg: '#FFF4EF' },
-  doc_edit: { icon: '✏️', color: '#111111', bg: '#EFF6FF' },
+  ticket_message: { icon: '💬', color: 'var(--accent-primary)', bg: '#FFF4EF' },
+  doc_edit: { icon: '✏️', color: 'var(--text-primary)', bg: '#EFF6FF' },
   doc_upload: { icon: '📤', color: '#0EA5E9', bg: '#F0F9FF' },
   status_change: { icon: '🔄', color: '#16A34A', bg: '#F0FDF4' },
 };
@@ -52,7 +52,7 @@ export default function NotificationBell({ onNavigate }) {
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
         style={{
           position: 'relative',
-          background: open ? '#F4F4F5' : 'none',
+          background: open ? 'var(--bg-hover)' : 'none',
           border: 'none',
           cursor: 'pointer',
           padding: '7px',
@@ -69,7 +69,7 @@ export default function NotificationBell({ onNavigate }) {
           height="20"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#4B5563"
+          stroke="var(--text-secondary)"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -88,17 +88,17 @@ export default function NotificationBell({ onNavigate }) {
               minWidth: '16px',
               height: '16px',
               borderRadius: '8px',
-              background: '#7C3AED',
+              background: 'var(--accent-primary)',
               color: '#fff',
               fontSize: '10px',
               fontWeight: 800,
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               padding: '0 3px',
               lineHeight: 1,
-              border: '2px solid #111111',
+              border: '2px solid var(--text-primary)',
             }}
           >
             {unreadCount > 9 ? '9+' : unreadCount}
@@ -116,15 +116,15 @@ export default function NotificationBell({ onNavigate }) {
             right: 0,
             width: '360px',
             maxHeight: '480px',
-            background: '#fff',
+            background: 'var(--bg-elevated)',
             borderRadius: '12px',
             boxShadow: '0 8px 32px rgba(26,43,74,0.18), 0 2px 8px rgba(0,0,0,0.08)',
-            border: '1px solid #E2E8F0',
+            border: '1px solid var(--border-default)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
             zIndex: 1000,
-            fontFamily: "'Lato', sans-serif",
+            fontFamily: "'Inter', sans-serif",
           }}
         >
           {/* Header */}
@@ -134,11 +134,11 @@ export default function NotificationBell({ onNavigate }) {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '14px 16px 12px',
-              borderBottom: '1px solid #F1F5F9',
+              borderBottom: '1px solid var(--border-subtle)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '15px', fontWeight: 800, color: '#111111' }}>
+              <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)' }}>
                 Notifications
               </span>
               {unreadCount > 0 && (
@@ -146,7 +146,7 @@ export default function NotificationBell({ onNavigate }) {
                   style={{
                     fontSize: '11px',
                     fontWeight: 700,
-                    background: '#7C3AED',
+                    background: 'var(--accent-primary)',
                     color: '#fff',
                     borderRadius: '100px',
                     padding: '2px 7px',
@@ -166,8 +166,8 @@ export default function NotificationBell({ onNavigate }) {
                     cursor: 'pointer',
                     fontSize: '11px',
                     fontWeight: 700,
-                    color: '#7C3AED',
-                    fontFamily: "'Lato', sans-serif",
+                    color: 'var(--accent-primary)',
+                    fontFamily: "'Inter', sans-serif",
                     padding: '3px 6px',
                     borderRadius: '5px',
                   }}
@@ -184,8 +184,8 @@ export default function NotificationBell({ onNavigate }) {
                     cursor: 'pointer',
                     fontSize: '11px',
                     fontWeight: 700,
-                    color: '#94A3B8',
-                    fontFamily: "'Lato', sans-serif",
+                    color: 'var(--text-muted)',
+                    fontFamily: "'Inter', sans-serif",
                     padding: '3px 6px',
                     borderRadius: '5px',
                   }}
@@ -203,7 +203,7 @@ export default function NotificationBell({ onNavigate }) {
                 style={{
                   padding: '40px 20px',
                   textAlign: 'center',
-                  color: '#94A3B8',
+                  color: 'var(--text-muted)',
                   fontSize: '13px',
                 }}
               >
@@ -223,15 +223,15 @@ export default function NotificationBell({ onNavigate }) {
                       gap: '11px',
                       width: '100%',
                       padding: '12px 16px',
-                      background: n.read ? '#fff' : '#FAFBFF',
+                      background: n.read ? 'var(--bg-elevated)' : 'var(--accent-soft)',
                       border: 'none',
-                      borderBottom: '1px solid #F8FAFC',
+                      borderBottom: '1px solid var(--border-subtle)',
                       cursor: 'pointer',
                       textAlign: 'left',
-                      fontFamily: "'Lato', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       transition: 'background 0.1s',
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#F8F9FB')}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-page)')}
                     onMouseLeave={e =>
                       (e.currentTarget.style.background = n.read ? '#fff' : '#FAFBFF')
                     }
@@ -259,7 +259,7 @@ export default function NotificationBell({ onNavigate }) {
                         style={{
                           fontSize: '12px',
                           fontWeight: n.read ? 600 : 800,
-                          color: '#111111',
+                          color: 'var(--text-primary)',
                           lineHeight: 1.35,
                           marginBottom: '3px',
                         }}
@@ -269,7 +269,7 @@ export default function NotificationBell({ onNavigate }) {
                       <div
                         style={{
                           fontSize: '11.5px',
-                          color: '#64748B',
+                          color: 'var(--text-secondary)',
                           lineHeight: 1.4,
                           overflow: 'hidden',
                           display: '-webkit-box',
@@ -280,7 +280,9 @@ export default function NotificationBell({ onNavigate }) {
                       >
                         {n.body}
                       </div>
-                      <div style={{ fontSize: '10.5px', color: '#94A3B8', fontWeight: 600 }}>
+                      <div
+                        style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}
+                      >
                         {relativeTime(n.createdAt)}
                       </div>
                     </div>
@@ -292,7 +294,7 @@ export default function NotificationBell({ onNavigate }) {
                           width: '8px',
                           height: '8px',
                           borderRadius: '50%',
-                          background: '#7C3AED',
+                          background: 'var(--accent-primary)',
                           flexShrink: 0,
                           marginTop: '4px',
                         }}
@@ -309,11 +311,11 @@ export default function NotificationBell({ onNavigate }) {
             <div
               style={{
                 padding: '10px 16px',
-                borderTop: '1px solid #F1F5F9',
+                borderTop: '1px solid var(--border-subtle)',
                 textAlign: 'center',
               }}
             >
-              <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 Showing {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
               </span>
             </div>

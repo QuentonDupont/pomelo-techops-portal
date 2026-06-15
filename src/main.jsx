@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import * as Sentry from '@sentry/react';
 import PomeloTechOpsPortal from '../PomeloTechOpsPortal.jsx';
+import { ThemeProvider, readStoredTheme } from './context/ThemeContext.jsx';
 
 // Sentry — opt-in via VITE_SENTRY_DSN. Skipped silently in dev when unset.
 if (import.meta.env.VITE_SENTRY_DSN) {
@@ -14,8 +15,14 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   });
 }
 
+// Apply the persisted theme before React mounts so the first paint uses the
+// correct palette (no light→dark flicker on hard reload).
+document.documentElement.setAttribute('data-theme', readStoredTheme());
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <PomeloTechOpsPortal />
+    <ThemeProvider>
+      <PomeloTechOpsPortal />
+    </ThemeProvider>
   </React.StrictMode>
 );

@@ -5,19 +5,33 @@
 // video / audio). Used by Submit Ticket previews, TicketDetail attachments,
 // and the Documentation page source-file viewer.
 
+import {
+  Image as ImageIcon,
+  FileText,
+  FileSpreadsheet,
+  Presentation,
+  FileCode,
+  Archive,
+  Video,
+  Music,
+  Paperclip,
+  FileType,
+  X,
+} from 'lucide-react';
+
 export const FILE_CATEGORIES = {
-  image: { icon: '🖼️', color: '#7C3AED', label: 'Image', inline: true },
-  pdf: { icon: '📕', color: '#DC2626', label: 'PDF', inline: true },
-  doc: { icon: '📘', color: '#2563EB', label: 'Word', inline: false },
-  sheet: { icon: '📗', color: '#16A34A', label: 'Excel', inline: false },
-  slide: { icon: '📙', color: '#EA580C', label: 'Slides', inline: false },
-  csv: { icon: '📊', color: '#16A34A', label: 'CSV', inline: true },
-  text: { icon: '📄', color: '#64748B', label: 'Text', inline: true },
-  markdown: { icon: '📝', color: '#64748B', label: 'Markdown', inline: true },
-  archive: { icon: '🗜️', color: '#92400E', label: 'Archive', inline: false },
-  video: { icon: '🎬', color: '#7C3AED', label: 'Video', inline: true },
-  audio: { icon: '🎵', color: '#7C3AED', label: 'Audio', inline: true },
-  other: { icon: '📎', color: '#64748B', label: 'File', inline: false },
+  image: { Icon: ImageIcon, color: 'var(--accent-primary)', label: 'Image', inline: true },
+  pdf: { Icon: FileText, color: '#DC2626', label: 'PDF', inline: true },
+  doc: { Icon: FileType, color: '#2563EB', label: 'Word', inline: false },
+  sheet: { Icon: FileSpreadsheet, color: '#16A34A', label: 'Excel', inline: false },
+  slide: { Icon: Presentation, color: '#EA580C', label: 'Slides', inline: false },
+  csv: { Icon: FileSpreadsheet, color: '#16A34A', label: 'CSV', inline: true },
+  text: { Icon: FileText, color: 'var(--text-secondary)', label: 'Text', inline: true },
+  markdown: { Icon: FileCode, color: 'var(--text-secondary)', label: 'Markdown', inline: true },
+  archive: { Icon: Archive, color: '#92400E', label: 'Archive', inline: false },
+  video: { Icon: Video, color: 'var(--accent-primary)', label: 'Video', inline: true },
+  audio: { Icon: Music, color: 'var(--accent-primary)', label: 'Audio', inline: true },
+  other: { Icon: Paperclip, color: 'var(--text-secondary)', label: 'File', inline: false },
 };
 
 export const ATTACHMENT_DATAURL_LIMIT = 1_048_576; // 1 MB
@@ -103,11 +117,11 @@ export default function FilePreviewCard({ name, size, type, src, onRemove, compa
         alignItems: 'center',
         gap: '12px',
         padding: compact ? '6px 10px' : '8px 10px',
-        background: '#fff',
-        border: '1px solid #E5E7EB',
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-default)',
         borderRadius: '10px',
         textDecoration: 'none',
-        color: '#1F2937',
+        color: 'var(--text-primary)',
         transition: 'border-color 0.12s, box-shadow 0.12s',
         cursor: src ? 'pointer' : 'default',
       }}
@@ -138,7 +152,7 @@ export default function FilePreviewCard({ name, size, type, src, onRemove, compa
             height: `${thumbSize}px`,
             objectFit: 'cover',
             borderRadius: '6px',
-            background: '#F4F4F5',
+            background: 'var(--bg-hover)',
             flexShrink: 0,
           }}
         />
@@ -154,10 +168,9 @@ export default function FilePreviewCard({ name, size, type, src, onRemove, compa
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: compact ? '18px' : '22px',
           }}
         >
-          {meta.icon}
+          <meta.Icon size={compact ? 18 : 22} strokeWidth={1.8} />
         </div>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -165,7 +178,7 @@ export default function FilePreviewCard({ name, size, type, src, onRemove, compa
           style={{
             fontSize: '13px',
             fontWeight: 700,
-            color: '#111111',
+            color: 'var(--text-primary)',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -176,7 +189,7 @@ export default function FilePreviewCard({ name, size, type, src, onRemove, compa
         <div
           style={{
             fontSize: '11px',
-            color: '#6B7280',
+            color: 'var(--text-secondary)',
             marginTop: '3px',
             display: 'flex',
             alignItems: 'center',
@@ -217,14 +230,15 @@ export default function FilePreviewCard({ name, size, type, src, onRemove, compa
             background: 'none',
             border: 'none',
             cursor: 'pointer',
-            color: '#9CA3AF',
-            fontSize: '18px',
-            lineHeight: 1,
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             padding: '4px 6px',
             flexShrink: 0,
           }}
         >
-          ×
+          <X size={16} strokeWidth={2} />
         </button>
       )}
     </Wrapper>

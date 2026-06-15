@@ -38,21 +38,35 @@ function ConfirmModal({ count, onConfirm, onCancel }) {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%,-50%)',
-          background: '#fff',
+          background: 'var(--bg-elevated)',
           borderRadius: '14px',
           zIndex: 701,
           width: '420px',
           maxWidth: '95vw',
           padding: '28px',
           boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-          fontFamily: "'Lato', sans-serif",
+          fontFamily: "'Inter', sans-serif",
         }}
       >
         <div style={{ fontSize: '24px', marginBottom: '12px' }}>🗑️</div>
-        <div style={{ fontWeight: 900, fontSize: '17px', color: '#111111', marginBottom: '8px' }}>
+        <div
+          style={{
+            fontWeight: 900,
+            fontSize: '17px',
+            color: 'var(--text-primary)',
+            marginBottom: '8px',
+          }}
+        >
           Archive {count} document{count !== 1 ? 's' : ''}?
         </div>
-        <div style={{ fontSize: '13px', color: '#64748B', marginBottom: '24px', lineHeight: 1.6 }}>
+        <div
+          style={{
+            fontSize: '13px',
+            color: 'var(--text-secondary)',
+            marginBottom: '24px',
+            lineHeight: 1.6,
+          }}
+        >
           This will archive the selected document{count !== 1 ? 's' : ''}. Archived documents are
           hidden from the library but can be restored.
         </div>
@@ -62,12 +76,12 @@ function ConfirmModal({ count, onConfirm, onCancel }) {
             style={{
               padding: '9px 18px',
               background: 'transparent',
-              border: '1.5px solid #E2E8F0',
+              border: '1.5px solid var(--border-default)',
               borderRadius: '8px',
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontSize: '13px',
               cursor: 'pointer',
-              color: '#64748B',
+              color: 'var(--text-secondary)',
             }}
           >
             Cancel
@@ -80,7 +94,7 @@ function ConfirmModal({ count, onConfirm, onCancel }) {
               color: '#fff',
               border: 'none',
               borderRadius: '8px',
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontWeight: 700,
               fontSize: '13px',
               cursor: 'pointer',
@@ -223,19 +237,19 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
   const inputSt = {
     padding: '7px 10px',
     borderRadius: '7px',
-    border: '1.5px solid #E2E8F0',
-    fontFamily: "'Lato', sans-serif",
+    border: '1.5px solid var(--border-default)',
+    fontFamily: "'Inter', sans-serif",
     fontSize: '12px',
-    background: '#F8F9FB',
+    background: 'var(--bg-page)',
     outline: 'none',
-    color: '#111111',
+    color: 'var(--text-primary)',
   };
   const thSt = {
     padding: '10px 12px',
     textAlign: 'left',
     fontSize: '11px',
     fontWeight: 700,
-    color: '#475569',
+    color: 'var(--text-secondary)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     whiteSpace: 'nowrap',
@@ -243,21 +257,21 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
     userSelect: 'none',
     position: 'sticky',
     top: 0,
-    background: '#F8F9FB',
-    borderBottom: '1px solid #E2E8F0',
+    background: 'var(--bg-page)',
+    borderBottom: '1px solid var(--border-default)',
   };
   const tdSt = {
     padding: '10px 12px',
     fontSize: '12px',
-    color: '#1E293B',
+    color: 'var(--text-primary)',
     verticalAlign: 'middle',
-    borderBottom: '1px solid #F1F5F9',
+    borderBottom: '1px solid var(--border-subtle)',
   };
 
   const sortIcon = col => (sortCol === col ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '');
 
   return (
-    <div style={{ fontFamily: "'Lato', sans-serif" }}>
+    <div style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* Filters bar */}
       <div
         style={{
@@ -335,7 +349,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
           style={{
             background: 'none',
             border: 'none',
-            color: '#7C3AED',
+            color: 'var(--accent-primary)',
             fontWeight: 700,
             fontSize: '12px',
             cursor: 'pointer',
@@ -344,7 +358,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
         >
           Reset filters
         </button>
-        <div style={{ marginLeft: 'auto', fontSize: '12px', color: '#94A3B8' }}>
+        <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)' }}>
           {filtered.length} document{filtered.length !== 1 ? 's' : ''}
         </div>
       </div>
@@ -397,7 +411,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ fontSize: '12px', fontWeight: 700, color: '#111111' }}>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
             {selected.length} selected
           </span>
           <button
@@ -408,7 +422,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
               color: '#fff',
               border: 'none',
               borderRadius: '6px',
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontSize: '12px',
               fontWeight: 700,
               cursor: 'pointer',
@@ -432,11 +446,11 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
               disabled={working}
               style={{
                 padding: '6px 12px',
-                background: '#111111',
+                background: 'var(--text-primary)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '6px',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontSize: '12px',
                 fontWeight: 700,
                 cursor: 'pointer',
@@ -454,7 +468,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
               borderRadius: '6px',
               fontSize: '12px',
               cursor: 'pointer',
-              color: '#111111',
+              color: 'var(--text-primary)',
             }}
           >
             Clear selection
@@ -465,7 +479,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
       {/* Table */}
       <div
         style={{
-          border: '1px solid #E2E8F0',
+          border: '1px solid var(--border-default)',
           borderRadius: '10px',
           overflow: 'auto',
           maxHeight: '560px',
@@ -505,7 +519,12 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
               <tr>
                 <td
                   colSpan={10}
-                  style={{ ...tdSt, textAlign: 'center', padding: '40px', color: '#94A3B8' }}
+                  style={{
+                    ...tdSt,
+                    textAlign: 'center',
+                    padding: '40px',
+                    color: 'var(--text-muted)',
+                  }}
                 >
                   No documents found.
                 </td>
@@ -542,7 +561,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
                     <div
                       style={{
                         fontWeight: 700,
-                        color: '#111111',
+                        color: 'var(--text-primary)',
                         maxWidth: '220px',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
@@ -551,7 +570,7 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
                     >
                       {doc.icon} {doc.title}
                     </div>
-                    <div style={{ fontSize: '10px', color: '#94A3B8' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                       {fmtSize(doc.fileSize)}
                     </div>
                   </td>
@@ -562,8 +581,8 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
                         fontWeight: 700,
                         padding: '2px 8px',
                         borderRadius: '100px',
-                        background: '#F1F5F9',
-                        color: '#475569',
+                        background: 'var(--bg-hover)',
+                        color: 'var(--text-secondary)',
                       }}
                     >
                       {doc.category}
@@ -597,8 +616,8 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
                         fontWeight: 700,
                         padding: '2px 8px',
                         borderRadius: '100px',
-                        background: isArchived ? '#F1F5F9' : '#F0FDF4',
-                        color: isArchived ? '#64748B' : '#16A34A',
+                        background: isArchived ? 'var(--bg-hover)' : '#F0FDF4',
+                        color: isArchived ? 'var(--text-secondary)' : '#16A34A',
                       }}
                     >
                       {doc.status}
@@ -629,12 +648,12 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
                           aria-label={`Export ${doc.title}`}
                           style={{
                             padding: '4px 8px',
-                            background: '#F8F9FB',
-                            border: '1px solid #E2E8F0',
+                            background: 'var(--bg-page)',
+                            border: '1px solid var(--border-default)',
                             borderRadius: '5px',
                             cursor: 'pointer',
                             fontSize: '11px',
-                            color: '#475569',
+                            color: 'var(--text-secondary)',
                           }}
                         >
                           ↗
@@ -714,12 +733,12 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
             disabled={page === 1}
             style={{
               padding: '6px 12px',
-              background: page === 1 ? '#F1F5F9' : '#111111',
-              color: page === 1 ? '#94A3B8' : '#fff',
+              background: page === 1 ? 'var(--bg-hover)' : 'var(--text-primary)',
+              color: page === 1 ? 'var(--text-muted)' : '#fff',
               border: 'none',
               borderRadius: '6px',
               cursor: page === 1 ? 'default' : 'pointer',
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontSize: '12px',
               fontWeight: 700,
             }}
@@ -731,18 +750,20 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
             .map((p, idx, arr) => (
               <span key={p}>
                 {idx > 0 && arr[idx - 1] !== p - 1 && (
-                  <span style={{ color: '#94A3B8', fontSize: '12px', padding: '0 4px' }}>…</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '12px', padding: '0 4px' }}>
+                    …
+                  </span>
                 )}
                 <button
                   onClick={() => setPage(p)}
                   style={{
                     padding: '6px 10px',
-                    background: p === page ? '#7C3AED' : 'transparent',
-                    color: p === page ? '#fff' : '#111111',
-                    border: `1.5px solid ${p === page ? '#7C3AED' : '#E2E8F0'}`,
+                    background: p === page ? 'var(--accent-primary)' : 'transparent',
+                    color: p === page ? '#fff' : 'var(--text-primary)',
+                    border: `1.5px solid ${p === page ? 'var(--accent-primary)' : 'var(--border-default)'}`,
                     borderRadius: '6px',
                     cursor: 'pointer',
-                    fontFamily: "'Lato', sans-serif",
+                    fontFamily: "'Inter', sans-serif",
                     fontSize: '12px',
                     fontWeight: 700,
                   }}
@@ -756,12 +777,12 @@ export default function DocAdminPanel({ docs, onRefresh, onEdit }) {
             disabled={page === pages}
             style={{
               padding: '6px 12px',
-              background: page === pages ? '#F1F5F9' : '#111111',
-              color: page === pages ? '#94A3B8' : '#fff',
+              background: page === pages ? 'var(--bg-hover)' : 'var(--text-primary)',
+              color: page === pages ? 'var(--text-muted)' : '#fff',
               border: 'none',
               borderRadius: '6px',
               cursor: page === pages ? 'default' : 'pointer',
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontSize: '12px',
               fontWeight: 700,
             }}

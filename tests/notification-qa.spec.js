@@ -214,7 +214,7 @@ test.describe('No regressions on other pages', () => {
   test('bell persists on docs page', async ({ page }) => {
     // Documentation now lives under the Resources dropdown
     await page.click('button[aria-label="Resources"]');
-    await page.click('button[role="menuitem"]:has-text("Documentation")');
+    await page.click('[role="menuitem"]:has-text("Documentation")');
     await page.waitForTimeout(500);
     const bell = page.locator('button[aria-label*="Notification"]');
     await expect(bell).toBeVisible();

@@ -27,8 +27,8 @@ function SkeletonCard() {
   return (
     <div
       style={{
-        background: '#fff',
-        border: '1px solid #E2E8F0',
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border-default)',
         borderRadius: '10px',
         padding: '18px',
         display: 'flex',
@@ -42,7 +42,8 @@ function SkeletonCard() {
             width: '36px',
             height: '36px',
             borderRadius: '8px',
-            background: 'linear-gradient(90deg, #F1F5F9 25%, #E8EDF5 50%, #F1F5F9 75%)',
+            background:
+              'linear-gradient(90deg, var(--bg-hover) 25%, var(--bg-elevated) 50%, var(--bg-hover) 75%)',
             backgroundSize: '200% 100%',
             animation: 'shimmer 1.4s infinite',
           }}
@@ -52,7 +53,8 @@ function SkeletonCard() {
             style={{
               height: '14px',
               borderRadius: '4px',
-              background: 'linear-gradient(90deg, #F1F5F9 25%, #E8EDF5 50%, #F1F5F9 75%)',
+              background:
+                'linear-gradient(90deg, var(--bg-hover) 25%, var(--bg-elevated) 50%, var(--bg-hover) 75%)',
               backgroundSize: '200% 100%',
               animation: 'shimmer 1.4s infinite',
               marginBottom: '8px',
@@ -63,7 +65,8 @@ function SkeletonCard() {
             style={{
               height: '10px',
               borderRadius: '4px',
-              background: 'linear-gradient(90deg, #F1F5F9 25%, #E8EDF5 50%, #F1F5F9 75%)',
+              background:
+                'linear-gradient(90deg, var(--bg-hover) 25%, var(--bg-elevated) 50%, var(--bg-hover) 75%)',
               backgroundSize: '200% 100%',
               animation: 'shimmer 1.4s infinite',
               width: '40%',
@@ -75,7 +78,8 @@ function SkeletonCard() {
         style={{
           height: '12px',
           borderRadius: '4px',
-          background: 'linear-gradient(90deg, #F1F5F9 25%, #E8EDF5 50%, #F1F5F9 75%)',
+          background:
+            'linear-gradient(90deg, var(--bg-hover) 25%, var(--bg-elevated) 50%, var(--bg-hover) 75%)',
           backgroundSize: '200% 100%',
           animation: 'shimmer 1.4s infinite',
           width: '100%',
@@ -85,7 +89,8 @@ function SkeletonCard() {
         style={{
           height: '12px',
           borderRadius: '4px',
-          background: 'linear-gradient(90deg, #F1F5F9 25%, #E8EDF5 50%, #F1F5F9 75%)',
+          background:
+            'linear-gradient(90deg, var(--bg-hover) 25%, var(--bg-elevated) 50%, var(--bg-hover) 75%)',
           backgroundSize: '200% 100%',
           animation: 'shimmer 1.4s infinite',
           width: '80%',
@@ -157,12 +162,12 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose: _onClose }) {
         transform: 'translateX(-50%)',
         width: '560px',
         maxWidth: '95vw',
-        background: '#fff',
+        background: 'var(--bg-elevated)',
         borderRadius: '16px',
         boxShadow: '0 24px 72px rgba(0,0,0,0.28)',
         zIndex: 801,
         overflow: 'hidden',
-        fontFamily: "'Lato', sans-serif",
+        fontFamily: "'Inter', sans-serif",
       }}
     >
       <div
@@ -171,7 +176,7 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose: _onClose }) {
           alignItems: 'center',
           gap: '10px',
           padding: '14px 18px',
-          borderBottom: '1px solid #E2E8F0',
+          borderBottom: '1px solid var(--border-default)',
         }}
       >
         <span style={{ fontSize: '18px' }}>🔍</span>
@@ -189,16 +194,16 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose: _onClose }) {
             border: 'none',
             outline: 'none',
             fontSize: '15px',
-            color: '#111111',
-            fontFamily: "'Lato', sans-serif",
+            color: 'var(--text-primary)',
+            fontFamily: "'Inter', sans-serif",
             background: 'transparent',
           }}
         />
         <kbd
           style={{
             fontSize: '11px',
-            color: '#94A3B8',
-            background: '#F1F5F9',
+            color: 'var(--text-muted)',
+            background: 'var(--bg-hover)',
             padding: '2px 6px',
             borderRadius: '4px',
             fontFamily: 'monospace',
@@ -209,17 +214,24 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose: _onClose }) {
       </div>
       <div style={{ maxHeight: '360px', overflowY: 'auto' }}>
         {allItems.length === 0 && (
-          <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+          <div
+            style={{
+              padding: '24px',
+              textAlign: 'center',
+              color: 'var(--text-muted)',
+              fontSize: '13px',
+            }}
+          >
             No results for "{query}"
           </div>
         )}
         {matchedDocs.length > 0 && (
-          <div style={{ padding: '8px 0 4px', borderBottom: '1px solid #F1F5F9' }}>
+          <div style={{ padding: '8px 0 4px', borderBottom: '1px solid var(--border-subtle)' }}>
             <div
               style={{
                 fontSize: '10px',
                 fontWeight: 700,
-                color: '#94A3B8',
+                color: 'var(--text-muted)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
                 padding: '0 18px 6px',
@@ -244,10 +256,10 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose: _onClose }) {
               >
                 <span style={{ fontSize: '20px' }}>{doc.icon || '📄'}</span>
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#111111' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
                     {doc.title}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#94A3B8' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                     {doc.category} · {doc.format}
                   </div>
                 </div>
@@ -261,7 +273,7 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose: _onClose }) {
               style={{
                 fontSize: '10px',
                 fontWeight: 700,
-                color: '#94A3B8',
+                color: 'var(--text-muted)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
                 padding: '0 18px 6px',
@@ -287,7 +299,7 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose: _onClose }) {
                   onMouseEnter={() => setCursor(globalIdx)}
                 >
                   <span style={{ fontSize: '18px' }}>{action.icon}</span>
-                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#374151' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                     {action.label}
                   </span>
                 </div>
@@ -299,19 +311,19 @@ function CmdPalette({ docs, onSelectDoc, onAction, onClose: _onClose }) {
       <div
         style={{
           padding: '8px 18px',
-          borderTop: '1px solid #F1F5F9',
-          background: '#F8F9FB',
+          borderTop: '1px solid var(--border-subtle)',
+          background: 'var(--bg-page)',
           display: 'flex',
           gap: '16px',
         }}
       >
-        <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
           <kbd style={{ fontFamily: 'monospace' }}>↑↓</kbd> navigate
         </span>
-        <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
           <kbd style={{ fontFamily: 'monospace' }}>↵</kbd> select
         </span>
-        <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
           <kbd style={{ fontFamily: 'monospace' }}>⌘K</kbd> toggle
         </span>
       </div>
@@ -341,7 +353,7 @@ function UploaderModal({ manager, onClose, currentUser }) {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%,-50%)',
-          background: '#fff',
+          background: 'var(--bg-elevated)',
           borderRadius: '16px',
           zIndex: 501,
           width: '720px',
@@ -351,12 +363,12 @@ function UploaderModal({ manager, onClose, currentUser }) {
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          fontFamily: "'Lato', sans-serif",
+          fontFamily: "'Inter', sans-serif",
         }}
       >
         <div
           style={{
-            background: '#111111',
+            background: 'var(--text-primary)',
             padding: '18px 24px',
             display: 'flex',
             alignItems: 'center',
@@ -445,7 +457,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
           <code
             key={j}
             style={{
-              background: '#F1F5F9',
+              background: 'var(--bg-hover)',
               padding: '1px 5px',
               borderRadius: '4px',
               fontSize: '13px',
@@ -489,7 +501,12 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
           {listBuffer.map((item, j) => (
             <li
               key={j}
-              style={{ fontSize: '14px', color: '#374151', lineHeight: 1.7, marginBottom: '4px' }}
+              style={{
+                fontSize: '14px',
+                color: 'var(--text-primary)',
+                lineHeight: 1.7,
+                marginBottom: '4px',
+              }}
             >
               {renderInline(item)}
             </li>
@@ -505,14 +522,14 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
         <pre
           key={`code-${elements.length}`}
           style={{
-            background: '#F8F9FB',
-            border: '1px solid #E2E8F0',
+            background: 'var(--bg-page)',
+            border: '1px solid var(--border-default)',
             borderRadius: '8px',
             padding: '14px 16px',
             overflowX: 'auto',
             fontSize: '13px',
             fontFamily: 'monospace',
-            color: '#111111',
+            color: 'var(--text-primary)',
             margin: '10px 0 16px',
             lineHeight: 1.6,
           }}
@@ -549,7 +566,12 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
           <h3
             id={`h-${i}`}
             key={i}
-            style={{ fontSize: '15px', fontWeight: 700, color: '#111111', margin: '20px 0 6px' }}
+            style={{
+              fontSize: '15px',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              margin: '20px 0 6px',
+            }}
           >
             {renderInline(line.replace(/^###\s/, ''))}
           </h3>
@@ -565,9 +587,9 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
             style={{
               fontSize: '19px',
               fontWeight: 900,
-              color: '#111111',
+              color: 'var(--text-primary)',
               margin: '28px 0 10px',
-              borderBottom: '2px solid #7C3AED',
+              borderBottom: '2px solid var(--accent-primary)',
               paddingBottom: '6px',
             }}
           >
@@ -588,10 +610,10 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
           <blockquote
             key={i}
             style={{
-              borderLeft: '4px solid #7C3AED',
+              borderLeft: '4px solid var(--accent-primary)',
               paddingLeft: '14px',
               margin: '10px 0',
-              color: '#64748B',
+              color: 'var(--text-secondary)',
               fontStyle: 'italic',
               fontSize: '13px',
               lineHeight: 1.7,
@@ -636,7 +658,11 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
         elements.push(
           <hr
             key={i}
-            style={{ border: 'none', borderTop: '1px solid #E2E8F0', margin: '20px 0' }}
+            style={{
+              border: 'none',
+              borderTop: '1px solid var(--border-default)',
+              margin: '20px 0',
+            }}
           />
         );
         continue;
@@ -656,7 +682,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 maxHeight: '520px',
                 objectFit: 'contain',
                 borderRadius: '8px',
-                border: '1px solid #E2E8F0',
+                border: '1px solid var(--border-default)',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
               }}
               onError={e => {
@@ -667,7 +693,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
               <p
                 style={{
                   fontSize: '12px',
-                  color: '#94A3B8',
+                  color: 'var(--text-muted)',
                   marginTop: '6px',
                   fontStyle: 'italic',
                 }}
@@ -692,7 +718,12 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
       elements.push(
         <p
           key={i}
-          style={{ fontSize: '14px', color: '#374151', lineHeight: 1.8, marginBottom: '10px' }}
+          style={{
+            fontSize: '14px',
+            color: 'var(--text-primary)',
+            lineHeight: 1.8,
+            marginBottom: '10px',
+          }}
         >
           {renderInline(line)}
         </p>
@@ -711,9 +742,9 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
         style={{
           width: '260px',
           flexShrink: 0,
-          borderRight: '1px solid #E2E8F0',
+          borderRight: '1px solid var(--border-default)',
           padding: '28px 16px',
-          background: '#F8F9FB',
+          background: 'var(--bg-page)',
         }}
       >
         <button
@@ -724,8 +755,8 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
             gap: '6px',
             background: 'none',
             border: 'none',
-            color: '#7C3AED',
-            fontFamily: "'Lato', sans-serif",
+            color: 'var(--accent-primary)',
+            fontFamily: "'Inter', sans-serif",
             fontWeight: 700,
             fontSize: '13px',
             cursor: 'pointer',
@@ -738,7 +769,13 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
 
         {/* Sidebar tabs */}
         {tocItems.length > 0 && (
-          <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', marginBottom: '12px' }}>
+          <div
+            style={{
+              display: 'flex',
+              borderBottom: '1px solid var(--border-default)',
+              marginBottom: '12px',
+            }}
+          >
             <button
               onClick={() => setSidebarTab('toc')}
               style={{
@@ -748,10 +785,13 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 background: 'none',
                 fontSize: '11px',
                 fontWeight: 700,
-                color: sidebarTab === 'toc' ? '#7C3AED' : '#94A3B8',
-                borderBottom: sidebarTab === 'toc' ? '2px solid #7C3AED' : '2px solid transparent',
+                color: sidebarTab === 'toc' ? 'var(--accent-primary)' : 'var(--text-muted)',
+                borderBottom:
+                  sidebarTab === 'toc'
+                    ? '2px solid var(--accent-primary)'
+                    : '2px solid transparent',
                 cursor: 'pointer',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
               }}
             >
               Contents
@@ -765,10 +805,13 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 background: 'none',
                 fontSize: '11px',
                 fontWeight: 700,
-                color: sidebarTab === 'docs' ? '#7C3AED' : '#94A3B8',
-                borderBottom: sidebarTab === 'docs' ? '2px solid #7C3AED' : '2px solid transparent',
+                color: sidebarTab === 'docs' ? 'var(--accent-primary)' : 'var(--text-muted)',
+                borderBottom:
+                  sidebarTab === 'docs'
+                    ? '2px solid var(--accent-primary)'
+                    : '2px solid transparent',
                 cursor: 'pointer',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
               }}
             >
               All Docs
@@ -785,13 +828,13 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 display: 'block',
                 padding: `6px 8px 6px ${item.level === 3 ? '20px' : '8px'}`,
                 fontSize: '12px',
-                color: '#374151',
+                color: 'var(--text-primary)',
                 fontWeight: item.level === 2 ? 700 : 400,
                 textDecoration: 'none',
                 borderRadius: '6px',
                 marginBottom: '2px',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#7C3AED14')}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-soft)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
               {item.text}
@@ -804,7 +847,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
               style={{
                 fontSize: '11px',
                 fontWeight: 700,
-                color: '#94A3B8',
+                color: 'var(--text-muted)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
                 marginBottom: '10px',
@@ -826,15 +869,15 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                   background: 'transparent',
                   cursor: 'pointer',
                   marginBottom: '2px',
-                  fontFamily: "'Lato', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#7C3AED14')}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-soft)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
                   {d.icon} {d.title}
                 </div>
-                <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>
+                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
                   {d.category}
                 </div>
               </button>
@@ -857,14 +900,14 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
             left: 0,
             right: 0,
             height: '3px',
-            background: '#E2E8F0',
+            background: 'var(--border-default)',
             zIndex: 10,
           }}
         >
           <div
             style={{
               height: '3px',
-              background: '#7C3AED',
+              background: 'var(--accent-primary)',
               width: `${scrollPct}%`,
               transition: 'width 0.1s',
             }}
@@ -879,8 +922,8 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 fontWeight: 700,
                 padding: '3px 10px',
                 borderRadius: '100px',
-                background: '#F1F5F9',
-                color: '#64748B',
+                background: 'var(--bg-hover)',
+                color: 'var(--text-secondary)',
               }}
             >
               {doc.category}
@@ -905,14 +948,14 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
             style={{
               fontSize: '30px',
               fontWeight: 900,
-              color: '#111111',
+              color: 'var(--text-primary)',
               marginBottom: '8px',
               lineHeight: 1.2,
             }}
           >
             {doc.icon} {doc.title}
           </h1>
-          <div style={{ fontSize: '13px', color: '#94A3B8', marginBottom: '4px' }}>
+          <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>
             {doc.author && `By ${doc.author}`}
             {doc.author && doc.updatedAt && ' · '}
             {doc.updatedAt &&
@@ -928,9 +971,13 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
               marginBottom: '20px',
             }}
           >
-            <span style={{ fontSize: '12px', color: '#94A3B8' }}>📖 {readingTime} min read</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              📖 {readingTime} min read
+            </span>
             {scrollPct > 5 && (
-              <span style={{ fontSize: '12px', color: '#94A3B8' }}>· {scrollPct}% read</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                · {scrollPct}% read
+              </span>
             )}
           </div>
           {/* Source-file preview — admins/users can click to open the original
@@ -941,7 +988,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 style={{
                   fontSize: '11px',
                   fontWeight: 700,
-                  color: '#475569',
+                  color: 'var(--text-secondary)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
                   marginBottom: '8px',
@@ -957,7 +1004,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
               />
             </div>
           )}
-          <div style={{ borderBottom: '2px solid #E2E8F0', marginBottom: '28px' }} />
+          <div style={{ borderBottom: '2px solid var(--border-default)', marginBottom: '28px' }} />
 
           {/* Image hero — shown for image-format documents uploaded with a blob URL */}
           {doc.imageUrl && (
@@ -966,7 +1013,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 <div
                   style={{
                     padding: '40px 20px',
-                    color: '#94A3B8',
+                    color: 'var(--text-muted)',
                     fontSize: '13px',
                     textAlign: 'center',
                   }}
@@ -982,7 +1029,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                     maxHeight: '560px',
                     objectFit: 'contain',
                     borderRadius: '10px',
-                    border: '1px solid #E2E8F0',
+                    border: '1px solid var(--border-default)',
                     boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
                   }}
                   onError={() => setHeroImageFailed(true)}
@@ -1000,7 +1047,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
               justifyContent: 'space-between',
               marginTop: '48px',
               paddingTop: '20px',
-              borderTop: '2px solid #E2E8F0',
+              borderTop: '2px solid var(--border-default)',
               gap: '12px',
             }}
           >
@@ -1010,11 +1057,11 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 style={{
                   flex: 1,
                   padding: '14px 16px',
-                  background: '#F8F9FB',
-                  border: '1px solid #E2E8F0',
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border-default)',
                   borderRadius: '10px',
                   cursor: 'pointer',
-                  fontFamily: "'Lato', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                   textAlign: 'left',
                 }}
               >
@@ -1022,13 +1069,13 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                   style={{
                     fontSize: '10px',
                     fontWeight: 700,
-                    color: '#94A3B8',
+                    color: 'var(--text-muted)',
                     marginBottom: '4px',
                   }}
                 >
                   ← PREVIOUS
                 </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
                   {prevDoc.icon} {prevDoc.title}
                 </div>
               </button>
@@ -1041,11 +1088,11 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                 style={{
                   flex: 1,
                   padding: '14px 16px',
-                  background: '#F8F9FB',
-                  border: '1px solid #E2E8F0',
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border-default)',
                   borderRadius: '10px',
                   cursor: 'pointer',
-                  fontFamily: "'Lato', sans-serif",
+                  fontFamily: "'Inter', sans-serif",
                   textAlign: 'right',
                 }}
               >
@@ -1053,13 +1100,13 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
                   style={{
                     fontSize: '10px',
                     fontWeight: 700,
-                    color: '#94A3B8',
+                    color: 'var(--text-muted)',
                     marginBottom: '4px',
                   }}
                 >
                   NEXT →
                 </div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
                   {nextDoc.icon} {nextDoc.title}
                 </div>
               </button>
@@ -1083,16 +1130,16 @@ function DocsSidebar({ docs, bookmarks: _bookmarks, onSelect, isBookmarked }) {
       style={{
         width: '220px',
         flexShrink: 0,
-        borderRight: '1px solid #E2E8F0',
+        borderRight: '1px solid var(--border-default)',
         padding: '28px 16px',
-        background: '#F8F9FB',
+        background: 'var(--bg-page)',
       }}
     >
       <div
         style={{
           fontSize: '11px',
           fontWeight: 700,
-          color: '#94A3B8',
+          color: 'var(--text-muted)',
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
           marginBottom: '10px',
@@ -1114,16 +1161,18 @@ function DocsSidebar({ docs, bookmarks: _bookmarks, onSelect, isBookmarked }) {
               marginBottom: '2px',
               cursor: 'pointer',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#7C3AED14')}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-soft)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
-            <span style={{ fontSize: '12px', color: '#374151', fontWeight: 600 }}>{cat}</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-primary)', fontWeight: 600 }}>
+              {cat}
+            </span>
             <span
               style={{
                 fontSize: '10px',
                 fontWeight: 700,
-                background: '#E2E8F0',
-                color: '#64748B',
+                background: 'var(--border-default)',
+                color: 'var(--text-secondary)',
                 padding: '1px 6px',
                 borderRadius: '100px',
               }}
@@ -1136,12 +1185,12 @@ function DocsSidebar({ docs, bookmarks: _bookmarks, onSelect, isBookmarked }) {
 
       {bookmarkedDocs.length > 0 && (
         <>
-          <div style={{ borderTop: '1px solid #E2E8F0', margin: '16px 0 12px' }} />
+          <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0 12px' }} />
           <div
             style={{
               fontSize: '11px',
               fontWeight: 700,
-              color: '#94A3B8',
+              color: 'var(--text-muted)',
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
               marginBottom: '10px',
@@ -1163,13 +1212,13 @@ function DocsSidebar({ docs, bookmarks: _bookmarks, onSelect, isBookmarked }) {
                 border: 'none',
                 background: 'transparent',
                 cursor: 'pointer',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 marginBottom: '2px',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#7C3AED14')}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--accent-soft)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#111111' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
                 {d.icon} {d.title}
               </div>
             </button>
@@ -1194,14 +1243,14 @@ function ArchiveConfirmModal({ count, onCancel, onConfirm, working }) {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%,-50%)',
-          background: '#fff',
+          background: 'var(--bg-elevated)',
           borderRadius: '14px',
           zIndex: 601,
           width: '420px',
           maxWidth: '94vw',
           boxShadow: '0 24px 72px rgba(0,0,0,0.22)',
           padding: '28px 28px 24px',
-          fontFamily: "'Lato', sans-serif",
+          fontFamily: "'Inter', sans-serif",
         }}
       >
         <div style={{ fontSize: '32px', marginBottom: '12px', textAlign: 'center' }}>🗑️</div>
@@ -1209,7 +1258,7 @@ function ArchiveConfirmModal({ count, onCancel, onConfirm, working }) {
           style={{
             fontSize: '18px',
             fontWeight: 900,
-            color: '#111111',
+            color: 'var(--text-primary)',
             textAlign: 'center',
             marginBottom: '8px',
           }}
@@ -1219,7 +1268,7 @@ function ArchiveConfirmModal({ count, onCancel, onConfirm, working }) {
         <div
           style={{
             fontSize: '13px',
-            color: '#64748B',
+            color: 'var(--text-secondary)',
             textAlign: 'center',
             lineHeight: 1.6,
             marginBottom: '24px',
@@ -1235,13 +1284,13 @@ function ArchiveConfirmModal({ count, onCancel, onConfirm, working }) {
               flex: 1,
               padding: '11px',
               background: 'transparent',
-              border: '1.5px solid #E2E8F0',
+              border: '1.5px solid var(--border-default)',
               borderRadius: '8px',
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontWeight: 700,
               fontSize: '14px',
               cursor: 'pointer',
-              color: '#475569',
+              color: 'var(--text-secondary)',
             }}
           >
             Cancel
@@ -1252,11 +1301,11 @@ function ArchiveConfirmModal({ count, onCancel, onConfirm, working }) {
             style={{
               flex: 1,
               padding: '11px',
-              background: working ? '#CBD5E1' : '#DC2626',
+              background: working ? 'var(--border-strong)' : '#DC2626',
               color: '#fff',
               border: 'none',
               borderRadius: '8px',
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               fontWeight: 700,
               fontSize: '14px',
               cursor: working ? 'not-allowed' : 'pointer',
@@ -1290,7 +1339,7 @@ function ArchivedDocsList({ onRestore }) {
 
   if (loading) {
     return (
-      <div style={{ padding: '32px', textAlign: 'center', color: '#94A3B8' }}>
+      <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
         Loading archived docs…
       </div>
     );
@@ -1301,10 +1350,10 @@ function ArchivedDocsList({ onRestore }) {
         style={{
           padding: '40px',
           textAlign: 'center',
-          color: '#94A3B8',
-          background: '#fff',
+          color: 'var(--text-muted)',
+          background: 'var(--bg-elevated)',
           borderRadius: '10px',
-          border: '1px solid #E2E8F0',
+          border: '1px solid var(--border-default)',
         }}
       >
         📭 No archived documents.
@@ -1314,9 +1363,9 @@ function ArchivedDocsList({ onRestore }) {
   return (
     <div
       style={{
-        background: '#fff',
+        background: 'var(--bg-elevated)',
         borderRadius: '12px',
-        border: '1px solid #E2E8F0',
+        border: '1px solid var(--border-default)',
         overflow: 'hidden',
       }}
     >
@@ -1326,7 +1375,7 @@ function ArchivedDocsList({ onRestore }) {
             key={d.id}
             style={{
               padding: '14px 18px',
-              borderTop: '1px solid #F1F5F9',
+              borderTop: '1px solid var(--border-subtle)',
               display: 'flex',
               alignItems: 'center',
               gap: '14px',
@@ -1334,8 +1383,10 @@ function ArchivedDocsList({ onRestore }) {
           >
             <span style={{ fontSize: '20px' }}>{d.icon || '📄'}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, color: '#1E293B', fontSize: '14px' }}>{d.title}</div>
-              <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+              <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '14px' }}>
+                {d.title}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
                 {d.category} · archived{' '}
                 {d.updatedAt ? new Date(d.updatedAt).toLocaleDateString() : ''}
               </div>
@@ -1351,7 +1402,7 @@ function ArchivedDocsList({ onRestore }) {
                 color: '#15803D',
                 border: '1px solid #86EFAC',
                 borderRadius: '7px',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontWeight: 700,
                 fontSize: '12px',
                 cursor: 'pointer',
@@ -1432,7 +1483,7 @@ function FlagReviewModal({ doc, onClose, onConfirm }) {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%,-50%)',
-          background: '#fff',
+          background: 'var(--bg-elevated)',
           borderRadius: '14px',
           zIndex: 601,
           width: '440px',
@@ -1442,11 +1493,15 @@ function FlagReviewModal({ doc, onClose, onConfirm }) {
           outline: 'none',
         }}
       >
-        <div style={{ padding: '18px 22px', borderBottom: '1px solid #E2E8F0' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#111111' }}>
+        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-default)' }}>
+          <h2
+            style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}
+          >
             Flag for review
           </h2>
-          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>{doc.title}</div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            {doc.title}
+          </div>
         </div>
         <form
           onSubmit={submit}
@@ -1457,7 +1512,7 @@ function FlagReviewModal({ doc, onClose, onConfirm }) {
               style={{
                 fontSize: '11px',
                 fontWeight: 700,
-                color: '#475569',
+                color: 'var(--text-secondary)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.06em',
               }}
@@ -1471,10 +1526,10 @@ function FlagReviewModal({ doc, onClose, onConfirm }) {
               placeholder="e.g. Alex Lee"
               style={{
                 padding: '10px 14px',
-                border: '1.5px solid #E2E8F0',
+                border: '1.5px solid var(--border-default)',
                 borderRadius: '8px',
                 fontSize: '13px',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 outline: 'none',
               }}
               autoFocus
@@ -1485,7 +1540,7 @@ function FlagReviewModal({ doc, onClose, onConfirm }) {
               style={{
                 fontSize: '11px',
                 fontWeight: 700,
-                color: '#475569',
+                color: 'var(--text-secondary)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.06em',
               }}
@@ -1499,10 +1554,10 @@ function FlagReviewModal({ doc, onClose, onConfirm }) {
               onChange={e => setDueDate(e.target.value)}
               style={{
                 padding: '10px 14px',
-                border: '1.5px solid #E2E8F0',
+                border: '1.5px solid var(--border-default)',
                 borderRadius: '8px',
                 fontSize: '13px',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 outline: 'none',
               }}
             />
@@ -1513,8 +1568,8 @@ function FlagReviewModal({ doc, onClose, onConfirm }) {
               onClick={onClose}
               style={{
                 padding: '8px 14px',
-                background: '#F1F5F9',
-                color: '#475569',
+                background: 'var(--bg-hover)',
+                color: 'var(--text-secondary)',
                 border: 'none',
                 borderRadius: '7px',
                 fontWeight: 700,
@@ -1529,7 +1584,7 @@ function FlagReviewModal({ doc, onClose, onConfirm }) {
               disabled={!reviewerName.trim()}
               style={{
                 padding: '8px 16px',
-                background: reviewerName.trim() ? '#7C3AED' : '#CBD5E1',
+                background: reviewerName.trim() ? 'var(--accent-primary)' : 'var(--border-strong)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '7px',
@@ -1801,22 +1856,22 @@ export default function DocImportExportPage({
   // Inline styles for select/button reuse
   const selectStyle = {
     padding: '6px 10px',
-    border: '1px solid #E2E8F0',
+    border: '1px solid var(--border-default)',
     borderRadius: '6px',
-    fontFamily: "'Lato', sans-serif",
+    fontFamily: "'Inter', sans-serif",
     fontSize: '12px',
-    color: '#111111',
-    background: '#fff',
+    color: 'var(--text-primary)',
+    background: 'var(--bg-elevated)',
     cursor: 'pointer',
     outline: 'none',
   };
   const applyBtnStyle = disabled => ({
     padding: '6px 12px',
-    background: disabled ? '#E2E8F0' : '#111111',
-    color: disabled ? '#94A3B8' : '#fff',
+    background: disabled ? 'var(--border-default)' : 'var(--text-primary)',
+    color: disabled ? 'var(--text-muted)' : '#fff',
     border: 'none',
     borderRadius: '6px',
-    fontFamily: "'Lato', sans-serif",
+    fontFamily: "'Inter', sans-serif",
     fontWeight: 700,
     fontSize: '12px',
     cursor: disabled ? 'not-allowed' : 'pointer',
@@ -1827,7 +1882,7 @@ export default function DocImportExportPage({
       <style>{`
         @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-        *:focus-visible { outline: 2px solid #7C3AED !important; outline-offset: 2px !important; }
+        *:focus-visible { outline: 2px solid var(--accent-primary) !important; outline-offset: 2px !important; }
       `}</style>
 
       <div
@@ -1835,7 +1890,7 @@ export default function DocImportExportPage({
           display: 'flex',
           margin: '0 -28px',
           minHeight: '100%',
-          fontFamily: "'Lato', sans-serif",
+          fontFamily: "'Inter', sans-serif",
         }}
       >
         {/* Sidebar */}
@@ -1862,10 +1917,10 @@ export default function DocImportExportPage({
             }}
           >
             <div>
-              <div style={{ fontSize: '20px', fontWeight: 900, color: '#111111' }}>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--text-primary)' }}>
                 Documentation Library
               </div>
-              <div style={{ fontSize: '13px', color: '#94A3B8', marginTop: '2px' }}>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
                 Guides, policies, and how-to articles from the IT team.
               </div>
             </div>
@@ -1879,13 +1934,13 @@ export default function DocImportExportPage({
                   aria-label="Search documents"
                   style={{
                     padding: '8px 32px 8px 12px',
-                    border: '1.5px solid #E2E8F0',
+                    border: '1.5px solid var(--border-default)',
                     borderRadius: '8px',
-                    fontFamily: "'Lato', sans-serif",
+                    fontFamily: "'Inter', sans-serif",
                     fontSize: '13px',
                     outline: 'none',
-                    background: '#F8F9FB',
-                    color: '#111111',
+                    background: 'var(--bg-page)',
+                    color: 'var(--text-primary)',
                     minWidth: '200px',
                   }}
                 />
@@ -1904,7 +1959,7 @@ export default function DocImportExportPage({
                       background: 'none',
                       border: 'none',
                       cursor: 'pointer',
-                      color: '#94A3B8',
+                      color: 'var(--text-muted)',
                       fontSize: '16px',
                       lineHeight: 1,
                       padding: 0,
@@ -1921,11 +1976,11 @@ export default function DocImportExportPage({
                 title="Open command palette (⌘K)"
                 style={{
                   padding: '7px 10px',
-                  background: '#F1F5F9',
-                  border: '1px solid #E2E8F0',
+                  background: 'var(--bg-hover)',
+                  border: '1px solid var(--border-default)',
                   borderRadius: '7px',
                   fontSize: '11px',
-                  color: '#64748B',
+                  color: 'var(--text-secondary)',
                   fontFamily: 'monospace',
                   cursor: 'pointer',
                   flexShrink: 0,
@@ -1942,11 +1997,11 @@ export default function DocImportExportPage({
                     aria-pressed={selectionMode}
                     style={{
                       padding: '8px 14px',
-                      background: selectionMode ? '#F1F5F9' : 'transparent',
-                      color: selectionMode ? '#DC2626' : '#475569',
-                      border: `1.5px solid ${selectionMode ? '#FCA5A5' : '#E2E8F0'}`,
+                      background: selectionMode ? 'var(--bg-hover)' : 'transparent',
+                      color: selectionMode ? '#DC2626' : 'var(--text-secondary)',
+                      border: `1.5px solid ${selectionMode ? '#FCA5A5' : 'var(--border-default)'}`,
                       borderRadius: '8px',
-                      fontFamily: "'Lato', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       fontWeight: 700,
                       fontSize: '13px',
                       cursor: 'pointer',
@@ -1965,8 +2020,8 @@ export default function DocImportExportPage({
                         padding: '8px 0',
                         background: 'none',
                         border: 'none',
-                        color: '#111111',
-                        fontFamily: "'Lato', sans-serif",
+                        color: 'var(--text-primary)',
+                        fontFamily: "'Inter', sans-serif",
                         fontWeight: 700,
                         fontSize: '13px',
                         cursor: 'pointer',
@@ -1988,11 +2043,11 @@ export default function DocImportExportPage({
                     disabled={exportingAll || displayDocs.length === 0}
                     style={{
                       padding: '8px 16px',
-                      background: exportingAll ? '#CBD5E1' : '#111111',
+                      background: exportingAll ? 'var(--border-strong)' : 'var(--text-primary)',
                       color: '#fff',
                       border: 'none',
                       borderRadius: '8px',
-                      fontFamily: "'Lato', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       fontWeight: 700,
                       fontSize: '13px',
                       cursor: exportingAll || displayDocs.length === 0 ? 'not-allowed' : 'pointer',
@@ -2023,16 +2078,16 @@ export default function DocImportExportPage({
                           top: 'calc(100% + 6px)',
                           right: 0,
                           zIndex: 100,
-                          background: '#fff',
-                          border: '1px solid #E2E8F0',
+                          background: 'var(--bg-elevated)',
+                          border: '1px solid var(--border-default)',
                           borderRadius: '12px',
                           boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
                           width: '260px',
                           overflow: 'hidden',
-                          fontFamily: "'Lato', sans-serif",
+                          fontFamily: "'Inter', sans-serif",
                         }}
                       >
-                        <div style={{ background: '#111111', padding: '12px 16px' }}>
+                        <div style={{ background: 'var(--text-primary)', padding: '12px 16px' }}>
                           <div style={{ color: '#fff', fontWeight: 900, fontSize: '13px' }}>
                             Export {displayDocs.length} document
                             {displayDocs.length !== 1 ? 's' : ''} as ZIP
@@ -2078,7 +2133,7 @@ export default function DocImportExportPage({
                                 gap: '10px',
                                 padding: '9px 10px',
                                 borderRadius: '8px',
-                                border: `1.5px solid ${exportAllFormat === fmt.id ? '#111111' : 'transparent'}`,
+                                border: `1.5px solid ${exportAllFormat === fmt.id ? 'var(--text-primary)' : 'transparent'}`,
                                 background: exportAllFormat === fmt.id ? '#F0F4FF' : 'transparent',
                                 cursor: 'pointer',
                                 textAlign: 'left',
@@ -2092,15 +2147,25 @@ export default function DocImportExportPage({
                               </span>
                               <div>
                                 <div
-                                  style={{ fontSize: '12px', fontWeight: 700, color: '#111111' }}
+                                  style={{
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    color: 'var(--text-primary)',
+                                  }}
                                 >
                                   {fmt.label}
                                 </div>
-                                <div style={{ fontSize: '11px', color: '#94A3B8' }}>{fmt.desc}</div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                  {fmt.desc}
+                                </div>
                               </div>
                               {exportAllFormat === fmt.id && (
                                 <span
-                                  style={{ marginLeft: 'auto', color: '#111111', fontSize: '13px' }}
+                                  style={{
+                                    marginLeft: 'auto',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '13px',
+                                  }}
                                 >
                                   ✓
                                 </span>
@@ -2114,11 +2179,11 @@ export default function DocImportExportPage({
                             style={{
                               width: '100%',
                               padding: '10px',
-                              background: '#7C3AED',
+                              background: 'var(--accent-primary)',
                               color: '#fff',
                               border: 'none',
                               borderRadius: '8px',
-                              fontFamily: "'Lato', sans-serif",
+                              fontFamily: "'Inter', sans-serif",
                               fontWeight: 700,
                               fontSize: '13px',
                               cursor: 'pointer',
@@ -2138,11 +2203,11 @@ export default function DocImportExportPage({
                   onClick={() => setShowUploader(true)}
                   style={{
                     padding: '8px 16px',
-                    background: '#7C3AED',
+                    background: 'var(--accent-primary)',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '8px',
-                    fontFamily: "'Lato', sans-serif",
+                    fontFamily: "'Inter', sans-serif",
                     fontWeight: 700,
                     fontSize: '13px',
                     cursor: 'pointer',
@@ -2190,11 +2255,11 @@ export default function DocImportExportPage({
                     alignItems: 'center',
                     gap: '5px',
                     padding: '4px 10px',
-                    background: '#F8F9FB',
-                    border: '1px solid #E2E8F0',
+                    background: 'var(--bg-page)',
+                    border: '1px solid var(--border-default)',
                     borderRadius: '100px',
                     fontSize: '11px',
-                    color: '#475569',
+                    color: 'var(--text-secondary)',
                     fontWeight: 600,
                   }}
                 >
@@ -2213,7 +2278,7 @@ export default function DocImportExportPage({
               display: 'flex',
               gap: '4px',
               marginBottom: '20px',
-              borderBottom: '2px solid #E2E8F0',
+              borderBottom: '2px solid var(--border-default)',
               paddingBottom: '0',
               marginTop: '12px',
             }}
@@ -2226,10 +2291,10 @@ export default function DocImportExportPage({
               style={{
                 padding: '10px 16px',
                 border: 'none',
-                borderBottom: `2px solid ${activeTab === 'library' ? '#7C3AED' : 'transparent'}`,
+                borderBottom: `2px solid ${activeTab === 'library' ? 'var(--accent-primary)' : 'transparent'}`,
                 background: 'transparent',
-                color: activeTab === 'library' ? '#7C3AED' : '#64748B',
-                fontFamily: "'Lato', sans-serif",
+                color: activeTab === 'library' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                fontFamily: "'Inter', sans-serif",
                 fontWeight: 700,
                 fontSize: '13px',
                 cursor: 'pointer',
@@ -2248,10 +2313,10 @@ export default function DocImportExportPage({
                   style={{
                     padding: '10px 16px',
                     border: 'none',
-                    borderBottom: `2px solid ${activeTab === 'manage' ? '#111111' : 'transparent'}`,
+                    borderBottom: `2px solid ${activeTab === 'manage' ? 'var(--text-primary)' : 'transparent'}`,
                     background: 'transparent',
-                    color: activeTab === 'manage' ? '#111111' : '#64748B',
-                    fontFamily: "'Lato', sans-serif",
+                    color: activeTab === 'manage' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontFamily: "'Inter', sans-serif",
                     fontWeight: 700,
                     fontSize: '13px',
                     cursor: 'pointer',
@@ -2268,10 +2333,10 @@ export default function DocImportExportPage({
                   style={{
                     padding: '10px 16px',
                     border: 'none',
-                    borderBottom: `2px solid ${activeTab === 'archived' ? '#64748B' : 'transparent'}`,
+                    borderBottom: `2px solid ${activeTab === 'archived' ? 'var(--text-secondary)' : 'transparent'}`,
                     background: 'transparent',
-                    color: activeTab === 'archived' ? '#64748B' : '#94A3B8',
-                    fontFamily: "'Lato', sans-serif",
+                    color: activeTab === 'archived' ? 'var(--text-secondary)' : 'var(--text-muted)',
+                    fontFamily: "'Inter', sans-serif",
                     fontWeight: 700,
                     fontSize: '13px',
                     cursor: 'pointer',
@@ -2319,10 +2384,10 @@ export default function DocImportExportPage({
                       style={{
                         padding: '7px 14px',
                         borderRadius: '100px',
-                        border: `1.5px solid ${isActive ? '#7C3AED' : '#E2E8F0'}`,
-                        background: isActive ? '#7C3AED' : '#fff',
-                        color: isActive ? '#fff' : '#475569',
-                        fontFamily: "'Lato', sans-serif",
+                        border: `1.5px solid ${isActive ? 'var(--accent-primary)' : 'var(--border-default)'}`,
+                        background: isActive ? 'var(--accent-primary)' : '#fff',
+                        color: isActive ? '#fff' : 'var(--text-secondary)',
+                        fontFamily: "'Inter', sans-serif",
                         fontWeight: 700,
                         fontSize: '12px',
                         cursor: 'pointer',
@@ -2337,8 +2402,8 @@ export default function DocImportExportPage({
                       {count > 0 && (
                         <span
                           style={{
-                            background: isActive ? 'rgba(255,255,255,0.3)' : '#F1F5F9',
-                            color: isActive ? '#fff' : '#64748B',
+                            background: isActive ? 'rgba(255,255,255,0.3)' : 'var(--bg-hover)',
+                            color: isActive ? '#fff' : 'var(--text-secondary)',
                             padding: '0px 5px',
                             borderRadius: '100px',
                             fontSize: '10px',
@@ -2367,7 +2432,7 @@ export default function DocImportExportPage({
                   style={{
                     fontSize: '11px',
                     fontWeight: 700,
-                    color: '#94A3B8',
+                    color: 'var(--text-muted)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
                   }}
@@ -2390,16 +2455,19 @@ export default function DocImportExportPage({
                       padding: '3px 0',
                       fontSize: '12px',
                       fontWeight: sortBy === val ? 700 : 400,
-                      color: sortBy === val ? '#7C3AED' : '#64748B',
+                      color: sortBy === val ? 'var(--accent-primary)' : 'var(--text-secondary)',
                       cursor: 'pointer',
-                      fontFamily: "'Lato', sans-serif",
-                      borderBottom: sortBy === val ? '2px solid #7C3AED' : '2px solid transparent',
+                      fontFamily: "'Inter', sans-serif",
+                      borderBottom:
+                        sortBy === val
+                          ? '2px solid var(--accent-primary)'
+                          : '2px solid transparent',
                     }}
                   >
                     {label}
                   </button>
                 ))}
-                <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#94A3B8' }}>
+                <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-muted)' }}>
                   {displayDocs.length} document{displayDocs.length !== 1 ? 's' : ''}
                   {manager.totalDocs > displayDocs.length ? ` of ${manager.totalDocs}` : ''}
                 </span>
@@ -2410,7 +2478,7 @@ export default function DocImportExportPage({
                 <div
                   style={{
                     fontSize: '12px',
-                    color: '#64748B',
+                    color: 'var(--text-secondary)',
                     marginBottom: '12px',
                     paddingLeft: '2px',
                   }}
@@ -2428,9 +2496,9 @@ export default function DocImportExportPage({
                   role="toolbar"
                   aria-label="Bulk actions"
                   style={{
-                    background: '#fff',
-                    border: '1px solid #E2E8F0',
-                    borderLeft: '4px solid #111111',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-default)',
+                    borderLeft: '4px solid var(--text-primary)',
                     borderRadius: '10px',
                     padding: '12px 16px',
                     marginBottom: '16px',
@@ -2446,7 +2514,7 @@ export default function DocImportExportPage({
                     style={{
                       fontSize: '13px',
                       fontWeight: 900,
-                      color: '#111111',
+                      color: 'var(--text-primary)',
                       whiteSpace: 'nowrap',
                       marginRight: '4px',
                     }}
@@ -2455,7 +2523,12 @@ export default function DocImportExportPage({
                   </span>
 
                   <div
-                    style={{ width: '1px', height: '24px', background: '#E2E8F0', flexShrink: 0 }}
+                    style={{
+                      width: '1px',
+                      height: '24px',
+                      background: 'var(--border-default)',
+                      flexShrink: 0,
+                    }}
                   />
 
                   {/* Archive — admin only */}
@@ -2469,7 +2542,7 @@ export default function DocImportExportPage({
                         color: '#DC2626',
                         border: '1px solid #FCA5A5',
                         borderRadius: '7px',
-                        fontFamily: "'Lato', sans-serif",
+                        fontFamily: "'Inter', sans-serif",
                         fontWeight: 700,
                         fontSize: '12px',
                         cursor: bulkWorking ? 'not-allowed' : 'pointer',
@@ -2488,10 +2561,10 @@ export default function DocImportExportPage({
                       style={{
                         padding: '7px 14px',
                         background: '#F0F4FF',
-                        color: '#111111',
+                        color: 'var(--text-primary)',
                         border: '1px solid #BFDBFE',
                         borderRadius: '7px',
-                        fontFamily: "'Lato', sans-serif",
+                        fontFamily: "'Inter', sans-serif",
                         fontWeight: 700,
                         fontSize: '12px',
                         cursor: bulkWorking ? 'not-allowed' : 'pointer',
@@ -2515,15 +2588,15 @@ export default function DocImportExportPage({
                             top: 'calc(100% + 6px)',
                             left: 0,
                             zIndex: 100,
-                            background: '#fff',
-                            border: '1px solid #E2E8F0',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border-default)',
                             borderRadius: '10px',
                             boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
                             width: '230px',
                             overflow: 'hidden',
                           }}
                         >
-                          <div style={{ background: '#111111', padding: '10px 14px' }}>
+                          <div style={{ background: 'var(--text-primary)', padding: '10px 14px' }}>
                             <div style={{ color: '#fff', fontWeight: 900, fontSize: '12px' }}>
                               Export {selectedCount} doc{selectedCount !== 1 ? 's' : ''} as ZIP
                             </div>
@@ -2541,14 +2614,14 @@ export default function DocImportExportPage({
                                   width: '100%',
                                   padding: '8px 10px',
                                   borderRadius: '7px',
-                                  border: `1.5px solid ${bulkExportFmt === fmt.id ? '#111111' : 'transparent'}`,
+                                  border: `1.5px solid ${bulkExportFmt === fmt.id ? 'var(--text-primary)' : 'transparent'}`,
                                   background: bulkExportFmt === fmt.id ? '#F0F4FF' : 'transparent',
                                   cursor: 'pointer',
                                   textAlign: 'left',
                                   fontSize: '12px',
-                                  fontFamily: "'Lato', sans-serif",
+                                  fontFamily: "'Inter', sans-serif",
                                   fontWeight: 700,
-                                  color: '#111111',
+                                  color: 'var(--text-primary)',
                                   marginBottom: '2px',
                                   display: 'flex',
                                   justifyContent: 'space-between',
@@ -2557,7 +2630,7 @@ export default function DocImportExportPage({
                               >
                                 {fmt.label}
                                 {bulkExportFmt === fmt.id && (
-                                  <span style={{ color: '#111111' }}>✓</span>
+                                  <span style={{ color: 'var(--text-primary)' }}>✓</span>
                                 )}
                               </button>
                             ))}
@@ -2568,11 +2641,11 @@ export default function DocImportExportPage({
                               style={{
                                 width: '100%',
                                 padding: '9px',
-                                background: '#7C3AED',
+                                background: 'var(--accent-primary)',
                                 color: '#fff',
                                 border: 'none',
                                 borderRadius: '7px',
-                                fontFamily: "'Lato', sans-serif",
+                                fontFamily: "'Inter', sans-serif",
                                 fontWeight: 700,
                                 fontSize: '12px',
                                 cursor: 'pointer',
@@ -2646,7 +2719,7 @@ export default function DocImportExportPage({
                       color: '#D97706',
                       border: '1px solid #FDE68A',
                       borderRadius: '7px',
-                      fontFamily: "'Lato', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       fontWeight: 700,
                       fontSize: '12px',
                       cursor: bulkWorking ? 'not-allowed' : 'pointer',
@@ -2662,10 +2735,10 @@ export default function DocImportExportPage({
                     style={{
                       padding: '7px 14px',
                       background: 'transparent',
-                      color: '#94A3B8',
-                      border: '1px solid #E2E8F0',
+                      color: 'var(--text-muted)',
+                      border: '1px solid var(--border-default)',
                       borderRadius: '7px',
-                      fontFamily: "'Lato', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       fontWeight: 700,
                       fontSize: '12px',
                       cursor: 'pointer',
@@ -2704,7 +2777,7 @@ export default function DocImportExportPage({
                     style={{
                       fontSize: '11px',
                       fontWeight: 700,
-                      color: '#94A3B8',
+                      color: 'var(--text-muted)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.08em',
                       marginBottom: '10px',
@@ -2725,21 +2798,33 @@ export default function DocImportExportPage({
                             alignItems: 'center',
                             gap: '8px',
                             padding: '8px 14px',
-                            background: '#fff',
-                            border: '1px solid #E2E8F0',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border-default)',
                             borderRadius: '100px',
                             cursor: 'pointer',
-                            fontFamily: "'Lato', sans-serif",
+                            fontFamily: "'Inter', sans-serif",
                             boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
                           }}
-                          onMouseEnter={e => (e.currentTarget.style.borderColor = '#7C3AED')}
-                          onMouseLeave={e => (e.currentTarget.style.borderColor = '#E2E8F0')}
+                          onMouseEnter={e =>
+                            (e.currentTarget.style.borderColor = 'var(--accent-primary)')
+                          }
+                          onMouseLeave={e =>
+                            (e.currentTarget.style.borderColor = 'var(--border-default)')
+                          }
                         >
                           <span>{doc.icon}</span>
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#111111' }}>
+                          <span
+                            style={{
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              color: 'var(--text-primary)',
+                            }}
+                          >
                             {doc.title}
                           </span>
-                          <span style={{ fontSize: '10px', color: '#94A3B8' }}>{doc.category}</span>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                            {doc.category}
+                          </span>
                         </button>
                       );
                     })}
@@ -2840,19 +2925,19 @@ export default function DocImportExportPage({
                       onClick={() => manager.setPage(p => p + 1)}
                       style={{
                         padding: '10px 28px',
-                        background: '#fff',
-                        border: '1.5px solid #E2E8F0',
+                        background: 'var(--bg-elevated)',
+                        border: '1.5px solid var(--border-default)',
                         borderRadius: '100px',
-                        fontFamily: "'Lato', sans-serif",
+                        fontFamily: "'Inter', sans-serif",
                         fontWeight: 700,
                         fontSize: '13px',
                         cursor: 'pointer',
-                        color: '#475569',
+                        color: 'var(--text-secondary)',
                       }}
                     >
                       Load more documents
                     </button>
-                    <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '6px' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
                       Showing {sortedDocs.length} of {manager.totalDocs}
                     </div>
                   </div>
@@ -2864,8 +2949,8 @@ export default function DocImportExportPage({
                   style={{
                     textAlign: 'center',
                     padding: '60px 40px',
-                    background: '#fff',
-                    border: '1px dashed #E2E8F0',
+                    background: 'var(--bg-elevated)',
+                    border: '1px dashed var(--border-default)',
                     borderRadius: '12px',
                   }}
                 >
@@ -2874,13 +2959,15 @@ export default function DocImportExportPage({
                     style={{
                       fontWeight: 900,
                       fontSize: '16px',
-                      color: '#111111',
+                      color: 'var(--text-primary)',
                       marginBottom: '6px',
                     }}
                   >
                     No documents found
                   </div>
-                  <div style={{ fontSize: '13px', color: '#94A3B8', marginBottom: '20px' }}>
+                  <div
+                    style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}
+                  >
                     {localSearch || catTab !== 'All'
                       ? 'Try clearing your filters.'
                       : 'No documents have been uploaded yet.'}
@@ -2890,11 +2977,11 @@ export default function DocImportExportPage({
                       onClick={() => setShowUploader(true)}
                       style={{
                         padding: '10px 22px',
-                        background: '#7C3AED',
+                        background: 'var(--accent-primary)',
                         color: '#fff',
                         border: 'none',
                         borderRadius: '8px',
-                        fontFamily: "'Lato', sans-serif",
+                        fontFamily: "'Inter', sans-serif",
                         fontWeight: 700,
                         fontSize: '14px',
                         cursor: 'pointer',
@@ -2921,13 +3008,13 @@ export default function DocImportExportPage({
                       bottom: 0,
                       width: '400px',
                       maxWidth: '95vw',
-                      background: '#fff',
-                      borderLeft: '1px solid #E2E8F0',
+                      background: 'var(--bg-elevated)',
+                      borderLeft: '1px solid var(--border-default)',
                       boxShadow: '-8px 0 32px rgba(0,0,0,0.1)',
                       zIndex: 301,
                       overflowY: 'auto',
                       padding: '28px 24px',
-                      fontFamily: "'Lato', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       animation: 'slideUp 0.2s ease',
                     }}
                   >
@@ -2946,8 +3033,8 @@ export default function DocImportExportPage({
                             fontWeight: 700,
                             padding: '3px 10px',
                             borderRadius: '100px',
-                            background: '#F1F5F9',
-                            color: '#64748B',
+                            background: 'var(--bg-hover)',
+                            color: 'var(--text-secondary)',
                           }}
                         >
                           {sidebarDoc.category}
@@ -2960,7 +3047,7 @@ export default function DocImportExportPage({
                           background: 'none',
                           border: 'none',
                           cursor: 'pointer',
-                          color: '#94A3B8',
+                          color: 'var(--text-muted)',
                           fontSize: '20px',
                           lineHeight: 1,
                           padding: '2px',
@@ -2974,7 +3061,7 @@ export default function DocImportExportPage({
                       style={{
                         fontSize: '20px',
                         fontWeight: 900,
-                        color: '#111111',
+                        color: 'var(--text-primary)',
                         marginBottom: '8px',
                         lineHeight: 1.2,
                       }}
@@ -2984,7 +3071,7 @@ export default function DocImportExportPage({
                     <p
                       style={{
                         fontSize: '13px',
-                        color: '#64748B',
+                        color: 'var(--text-secondary)',
                         lineHeight: 1.6,
                         marginBottom: '20px',
                       }}
@@ -3015,7 +3102,7 @@ export default function DocImportExportPage({
                         </span>
                       )}
                       {sidebarDoc.author && (
-                        <span style={{ fontSize: '11px', color: '#64748B' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                           By {sidebarDoc.author}
                         </span>
                       )}
@@ -3037,8 +3124,8 @@ export default function DocImportExportPage({
                               fontWeight: 700,
                               padding: '2px 8px',
                               borderRadius: '100px',
-                              background: '#F1F5F9',
-                              color: '#475569',
+                              background: 'var(--bg-hover)',
+                              color: 'var(--text-secondary)',
                             }}
                           >
                             #{t}
@@ -3054,11 +3141,11 @@ export default function DocImportExportPage({
                       style={{
                         width: '100%',
                         padding: '12px',
-                        background: '#7C3AED',
+                        background: 'var(--accent-primary)',
                         color: '#fff',
                         border: 'none',
                         borderRadius: '8px',
-                        fontFamily: "'Lato', sans-serif",
+                        fontFamily: "'Inter', sans-serif",
                         fontWeight: 700,
                         fontSize: '14px',
                         cursor: 'pointer',
@@ -3078,13 +3165,13 @@ export default function DocImportExportPage({
                         width: '100%',
                         padding: '11px',
                         background: 'transparent',
-                        border: '1.5px solid #E2E8F0',
+                        border: '1.5px solid var(--border-default)',
                         borderRadius: '8px',
-                        fontFamily: "'Lato', sans-serif",
+                        fontFamily: "'Inter', sans-serif",
                         fontWeight: 700,
                         fontSize: '13px',
                         cursor: 'pointer',
-                        color: '#475569',
+                        color: 'var(--text-secondary)',
                       }}
                     >
                       {manager.isBookmarked(sidebarDoc.id) ? '★ Bookmarked' : '☆ Bookmark'}
@@ -3224,7 +3311,7 @@ export default function DocImportExportPage({
               background:
                 t.type === 'success' ? '#F0FDF4' : t.type === 'error' ? '#FEF2F2' : '#EFF6FF',
               border: `1px solid ${t.type === 'success' ? '#BBF7D0' : t.type === 'error' ? '#FCA5A5' : '#BFDBFE'}`,
-              fontFamily: "'Lato', sans-serif",
+              fontFamily: "'Inter', sans-serif",
               animation: 'slideUp 0.2s ease',
             }}
           >
@@ -3236,7 +3323,7 @@ export default function DocImportExportPage({
                 flex: 1,
                 fontSize: '13px',
                 fontWeight: 600,
-                color: '#111111',
+                color: 'var(--text-primary)',
                 lineHeight: 1.4,
               }}
             >
@@ -3248,7 +3335,7 @@ export default function DocImportExportPage({
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: '#94A3B8',
+                color: 'var(--text-muted)',
                 fontSize: '16px',
                 lineHeight: 1,
                 padding: '0 0 0 4px',

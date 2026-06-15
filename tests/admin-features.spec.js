@@ -28,7 +28,7 @@ async function freshLogin(page, { email, password }) {
 // Opens the Admin tools dropdown and clicks the labelled menu item.
 async function navAdmin(page, label) {
   await page.click('button[aria-label="Admin tools"]');
-  await page.click(`button[role="menuitem"]:has-text("${label}")`);
+  await page.click(`[role="menuitem"]:has-text("${label}")`);
 }
 
 // ─── Admin view-mode pill ─────────────────────────────────────────────────────
@@ -40,10 +40,10 @@ test.describe('Admin view-mode pill', () => {
     await expect(page.locator('button[aria-label="Admin tools"]')).toBeVisible();
     // All four destinations show up inside the dropdown
     await page.click('button[aria-label="Admin tools"]');
-    await expect(page.locator('button[role="menuitem"]:has-text("Admin Console")')).toBeVisible();
-    await expect(page.locator('button[role="menuitem"]:has-text("Users")')).toBeVisible();
-    await expect(page.locator('button[role="menuitem"]:has-text("Audit log")')).toBeVisible();
-    await expect(page.locator('button[role="menuitem"]:has-text("Chat logs")')).toBeVisible();
+    await expect(page.locator('[role="menuitem"]:has-text("Admin Console")')).toBeVisible();
+    await expect(page.locator('[role="menuitem"]:has-text("Users")')).toBeVisible();
+    await expect(page.locator('[role="menuitem"]:has-text("Audit log")')).toBeVisible();
+    await expect(page.locator('[role="menuitem"]:has-text("Chat logs")')).toBeVisible();
   });
 
   test('regular user sees no view-mode pill and no admin tools', async ({ page }) => {
@@ -55,7 +55,7 @@ test.describe('Admin view-mode pill', () => {
   test('admin can switch to user view and admin chrome disappears', async ({ page }) => {
     await freshLogin(page, ADMIN);
     await page.click('button[aria-label="Switch admin view mode"]');
-    await page.click('button[role="menuitem"]:has-text("View as regular user")');
+    await page.click('[role="menuitem"]:has-text("View as regular user")');
     // Pill stays as the escape hatch, but admin tools button is gone
     await expect(page.locator('button[aria-label="Switch admin view mode"]')).toBeVisible();
     await expect(page.locator('button[aria-label="Admin tools"]')).toHaveCount(0);
@@ -66,10 +66,13 @@ test.describe('Admin view-mode pill', () => {
   test('admin can switch back to admin from user view', async ({ page }) => {
     await freshLogin(page, ADMIN);
     await page.click('button[aria-label="Switch admin view mode"]');
-    await page.click('button[role="menuitem"]:has-text("View as regular user")');
+    await page.locator('[role="menuitem"]:has-text("View as regular user")').click();
     await expect(page.locator('button[aria-label="Admin tools"]')).toHaveCount(0);
+    // Wait for the trigger to settle after viewAs re-render, then re-open
+    await page.waitForTimeout(150);
     await page.click('button[aria-label="Switch admin view mode"]');
-    await page.click('button[role="menuitem"]:has-text("Admin (default)")');
+    await page.locator('[role="menuitem"]:has-text("Admin (default)")').waitFor({ state: 'visible' });
+    await page.locator('[role="menuitem"]:has-text("Admin (default)")').click();
     await expect(page.locator('button[aria-label="Admin tools"]')).toBeVisible();
   });
 });
@@ -113,10 +116,12 @@ test.describe('Audit log', () => {
   test('switching view-as is recorded', async ({ page }) => {
     await freshLogin(page, ADMIN);
     await page.click('button[aria-label="Switch admin view mode"]');
-    await page.click('button[role="menuitem"]:has-text("View as regular user")');
-    // Switch back so we can navigate to Audit
+    await page.locator('[role="menuitem"]:has-text("View as regular user")').click();
+    // Switch back so we can navigate to Audit — wait for trigger re-render
+    await page.waitForTimeout(150);
     await page.click('button[aria-label="Switch admin view mode"]');
-    await page.click('button[role="menuitem"]:has-text("Admin (default)")');
+    await page.locator('[role="menuitem"]:has-text("Admin (default)")').waitFor({ state: 'visible' });
+    await page.locator('[role="menuitem"]:has-text("Admin (default)")').click();
     await navAdmin(page, 'Audit log');
     await expect(page.locator('text=View-as switched').first()).toBeVisible();
   });
@@ -210,5 +215,30 @@ test.describe('localStorage persistence', () => {
     const afterCount = await page.locator('li').filter({ hasText: 'Admin login' }).count();
     // At least the original Admin login entry should still be there
     expect(afterCount).toBeGreaterThanOrEqual(beforeCount);
+  });
+});
+
+// ─── Theme toggle ─────────────────────────────────────────────────────────────
+
+test.describe('Theme toggle (light / dark)', () => {
+  test('app starts in light mode by default', async ({ page }) => {
+    await freshLogin(page, USER);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+
+  test('toggle flips to dark mode and persists across reload', async ({ page }) => {
+    await freshLogin(page, USER);
+    await page.click('button[aria-label="Switch to dark mode"]');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    // Toggle label has flipped — it now offers to switch back to light
+    await expect(page.locator('button[aria-label="Switch to light mode"]')).toBeVisible();
+  });
+
+  test('theme toggle is visible to admins too', async ({ page }) => {
+    await freshLogin(page, ADMIN);
+    await expect(page.locator('button[aria-label="Switch to dark mode"]')).toBeVisible();
   });
 });

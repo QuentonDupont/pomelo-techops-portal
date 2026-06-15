@@ -38,7 +38,7 @@ function renderInline(text) {
         <code
           key={j}
           style={{
-            background: '#F1F5F9',
+            background: 'var(--bg-hover)',
             padding: '1px 5px',
             borderRadius: '4px',
             fontSize: '13px',
@@ -55,7 +55,14 @@ function renderInline(text) {
 function PreviewPane({ content }) {
   if (!content)
     return (
-      <div style={{ color: '#94A3B8', fontSize: '13px', padding: '20px', textAlign: 'center' }}>
+      <div
+        style={{
+          color: 'var(--text-muted)',
+          fontSize: '13px',
+          padding: '20px',
+          textAlign: 'center',
+        }}
+      >
         Nothing to preview yet.
       </div>
     );
@@ -72,7 +79,12 @@ function PreviewPane({ content }) {
         {listBuffer.map((item, j) => (
           <li
             key={j}
-            style={{ fontSize: '13px', color: '#374151', lineHeight: 1.7, marginBottom: '3px' }}
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-primary)',
+              lineHeight: 1.7,
+              marginBottom: '3px',
+            }}
           >
             {renderInline(item)}
           </li>
@@ -87,8 +99,8 @@ function PreviewPane({ content }) {
       <pre
         key={`pre-${elements.length}`}
         style={{
-          background: '#F8F9FB',
-          border: '1px solid #E2E8F0',
+          background: 'var(--bg-page)',
+          border: '1px solid var(--border-default)',
           borderRadius: '6px',
           padding: '10px 12px',
           overflowX: 'auto',
@@ -124,7 +136,12 @@ function PreviewPane({ content }) {
       elements.push(
         <h3
           key={i}
-          style={{ fontSize: '14px', fontWeight: 700, color: '#111111', margin: '16px 0 4px' }}
+          style={{
+            fontSize: '14px',
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            margin: '16px 0 4px',
+          }}
         >
           {renderInline(line.replace(/^###\s/, ''))}
         </h3>
@@ -139,9 +156,9 @@ function PreviewPane({ content }) {
           style={{
             fontSize: '17px',
             fontWeight: 900,
-            color: '#111111',
+            color: 'var(--text-primary)',
             margin: '22px 0 8px',
-            borderBottom: '2px solid #7C3AED',
+            borderBottom: '2px solid var(--accent-primary)',
             paddingBottom: '4px',
           }}
         >
@@ -155,7 +172,12 @@ function PreviewPane({ content }) {
       elements.push(
         <h1
           key={i}
-          style={{ fontSize: '21px', fontWeight: 900, color: '#111111', margin: '0 0 14px' }}
+          style={{
+            fontSize: '21px',
+            fontWeight: 900,
+            color: 'var(--text-primary)',
+            margin: '0 0 14px',
+          }}
         >
           {renderInline(line.replace(/^#\s/, ''))}
         </h1>
@@ -168,10 +190,10 @@ function PreviewPane({ content }) {
         <blockquote
           key={i}
           style={{
-            borderLeft: '3px solid #7C3AED',
+            borderLeft: '3px solid var(--accent-primary)',
             paddingLeft: '12px',
             margin: '8px 0',
-            color: '#64748B',
+            color: 'var(--text-secondary)',
             fontStyle: 'italic',
             fontSize: '13px',
           }}
@@ -203,7 +225,10 @@ function PreviewPane({ content }) {
     if (/^[-_*]{3,}$/.test(line.trim())) {
       flushList();
       elements.push(
-        <hr key={i} style={{ border: 'none', borderTop: '1px solid #E2E8F0', margin: '16px 0' }} />
+        <hr
+          key={i}
+          style={{ border: 'none', borderTop: '1px solid var(--border-default)', margin: '16px 0' }}
+        />
       );
       continue;
     }
@@ -216,7 +241,12 @@ function PreviewPane({ content }) {
     elements.push(
       <p
         key={i}
-        style={{ fontSize: '13px', color: '#374151', lineHeight: 1.8, marginBottom: '8px' }}
+        style={{
+          fontSize: '13px',
+          color: 'var(--text-primary)',
+          lineHeight: 1.8,
+          marginBottom: '8px',
+        }}
       >
         {renderInline(line)}
       </p>
@@ -284,18 +314,18 @@ export default function DocEditModal({ doc, onSave, onClose }) {
     width: '100%',
     padding: '9px 12px',
     borderRadius: '8px',
-    border: '1.5px solid #E2E8F0',
-    fontFamily: "'Lato', sans-serif",
+    border: '1.5px solid var(--border-default)',
+    fontFamily: "'Inter', sans-serif",
     fontSize: '13px',
-    color: '#1E293B',
-    background: '#F8F9FB',
+    color: 'var(--text-primary)',
+    background: 'var(--bg-page)',
     outline: 'none',
     boxSizing: 'border-box',
   };
   const labelStyle = {
     fontSize: '11px',
     fontWeight: 700,
-    color: '#475569',
+    color: 'var(--text-secondary)',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
     display: 'block',
@@ -307,10 +337,10 @@ export default function DocEditModal({ doc, onSave, onClose }) {
       style={{
         padding: '8px 18px',
         border: 'none',
-        borderBottom: `2px solid ${tab === id ? '#7C3AED' : 'transparent'}`,
+        borderBottom: `2px solid ${tab === id ? 'var(--accent-primary)' : 'transparent'}`,
         background: 'transparent',
-        color: tab === id ? '#7C3AED' : '#64748B',
-        fontFamily: "'Lato', sans-serif",
+        color: tab === id ? 'var(--accent-primary)' : 'var(--text-secondary)',
+        fontFamily: "'Inter', sans-serif",
         fontWeight: 700,
         fontSize: '13px',
         cursor: 'pointer',
@@ -336,7 +366,7 @@ export default function DocEditModal({ doc, onSave, onClose }) {
           top: '50%',
           left: '50%',
           transform: 'translate(-50%,-50%)',
-          background: '#fff',
+          background: 'var(--bg-elevated)',
           borderRadius: '16px',
           zIndex: 701,
           width: '860px',
@@ -345,14 +375,14 @@ export default function DocEditModal({ doc, onSave, onClose }) {
           boxShadow: '0 28px 80px rgba(0,0,0,0.25)',
           display: 'flex',
           flexDirection: 'column',
-          fontFamily: "'Lato', sans-serif",
+          fontFamily: "'Inter', sans-serif",
           overflow: 'hidden',
         }}
       >
         {/* Header */}
         <div
           style={{
-            background: '#111111',
+            background: 'var(--text-primary)',
             padding: '18px 24px',
             display: 'flex',
             alignItems: 'center',
@@ -392,8 +422,8 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                       top: 'calc(100% + 6px)',
                       left: 0,
                       zIndex: 801,
-                      background: '#fff',
-                      border: '1px solid #E2E8F0',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border-default)',
                       borderRadius: '10px',
                       boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
                       padding: '10px',
@@ -414,8 +444,8 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                           fontSize: '22px',
                           padding: '4px 6px',
                           borderRadius: '6px',
-                          border: `2px solid ${form.icon === icon ? '#7C3AED' : 'transparent'}`,
-                          background: form.icon === icon ? '#F5F3FF' : 'transparent',
+                          border: `2px solid ${form.icon === icon ? 'var(--accent-primary)' : 'transparent'}`,
+                          background: form.icon === icon ? 'var(--accent-soft)' : 'transparent',
                           cursor: 'pointer',
                         }}
                       >
@@ -450,7 +480,13 @@ export default function DocEditModal({ doc, onSave, onClose }) {
         </div>
 
         {/* Tabs */}
-        <div style={{ borderBottom: '1px solid #E2E8F0', padding: '0 24px', flexShrink: 0 }}>
+        <div
+          style={{
+            borderBottom: '1px solid var(--border-default)',
+            padding: '0 24px',
+            flexShrink: 0,
+          }}
+        >
           {tabBtn('details', '📋 Details')}
           {tabBtn('content', '✏️ Content')}
         </div>
@@ -522,8 +558,8 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                     readOnly
                     style={{
                       ...inputStyle,
-                      background: '#F1F5F9',
-                      color: '#94A3B8',
+                      background: 'var(--bg-hover)',
+                      color: 'var(--text-muted)',
                       cursor: 'default',
                     }}
                     title="Format is set at upload time"
@@ -540,7 +576,7 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                       fontWeight: 400,
                       textTransform: 'none',
                       letterSpacing: 0,
-                      color: '#94A3B8',
+                      color: 'var(--text-muted)',
                     }}
                   >
                     (comma-separated)
@@ -567,8 +603,8 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                             fontWeight: 700,
                             padding: '2px 8px',
                             borderRadius: '100px',
-                            background: '#F1F5F9',
-                            color: '#475569',
+                            background: 'var(--bg-hover)',
+                            color: 'var(--text-secondary)',
                           }}
                         >
                           #{t}
@@ -593,8 +629,9 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                         flex: 1,
                         padding: '12px',
                         borderRadius: '10px',
-                        border: `2px solid ${form.visibility === val ? '#111111' : '#E2E8F0'}`,
-                        background: form.visibility === val ? '#111111' : '#F8F9FB',
+                        border: `2px solid ${form.visibility === val ? 'var(--text-primary)' : 'var(--border-default)'}`,
+                        background:
+                          form.visibility === val ? 'var(--text-primary)' : 'var(--bg-page)',
                         cursor: 'pointer',
                         textAlign: 'left',
                         transition: 'all 0.15s',
@@ -605,8 +642,8 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                         style={{
                           fontSize: '13px',
                           fontWeight: 700,
-                          color: form.visibility === val ? '#fff' : '#111111',
-                          fontFamily: "'Lato', sans-serif",
+                          color: form.visibility === val ? '#fff' : 'var(--text-primary)',
+                          fontFamily: "'Inter', sans-serif",
                         }}
                       >
                         {val}
@@ -614,8 +651,9 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                       <div
                         style={{
                           fontSize: '11px',
-                          color: form.visibility === val ? 'rgba(255,255,255,0.6)' : '#94A3B8',
-                          fontFamily: "'Lato', sans-serif",
+                          color:
+                            form.visibility === val ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)',
+                          fontFamily: "'Inter', sans-serif",
                           marginTop: '2px',
                         }}
                       >
@@ -633,7 +671,7 @@ export default function DocEditModal({ doc, onSave, onClose }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {/* Toolbar */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
                   MARKDOWN EDITOR
                 </span>
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
@@ -659,28 +697,30 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                       }}
                       style={{
                         padding: '4px 8px',
-                        background: '#F8F9FB',
-                        border: '1px solid #E2E8F0',
+                        background: 'var(--bg-page)',
+                        border: '1px solid var(--border-default)',
                         borderRadius: '5px',
                         fontFamily: 'monospace',
                         fontSize: '11px',
                         cursor: 'pointer',
-                        color: '#475569',
+                        color: 'var(--text-secondary)',
                       }}
                     >
                       {label}
                     </button>
                   ))}
-                  <div style={{ width: '1px', background: '#E2E8F0', margin: '0 4px' }} />
+                  <div
+                    style={{ width: '1px', background: 'var(--border-default)', margin: '0 4px' }}
+                  />
                   <button
                     onClick={() => setPreview(v => !v)}
                     style={{
                       padding: '4px 12px',
-                      background: preview ? '#111111' : 'transparent',
-                      color: preview ? '#fff' : '#111111',
-                      border: '1.5px solid #E2E8F0',
+                      background: preview ? 'var(--text-primary)' : 'transparent',
+                      color: preview ? '#fff' : 'var(--text-primary)',
+                      border: '1.5px solid var(--border-default)',
                       borderRadius: '6px',
-                      fontFamily: "'Lato', sans-serif",
+                      fontFamily: "'Inter', sans-serif",
                       fontWeight: 700,
                       fontSize: '12px',
                       cursor: 'pointer',
@@ -695,11 +735,11 @@ export default function DocEditModal({ doc, onSave, onClose }) {
               {preview ? (
                 <div
                   style={{
-                    border: '1.5px solid #E2E8F0',
+                    border: '1.5px solid var(--border-default)',
                     borderRadius: '10px',
                     padding: '20px 24px',
                     minHeight: '400px',
-                    background: '#fff',
+                    background: 'var(--bg-elevated)',
                     overflowY: 'auto',
                   }}
                 >
@@ -716,12 +756,12 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                     minHeight: '420px',
                     padding: '14px 16px',
                     borderRadius: '10px',
-                    border: '1.5px solid #E2E8F0',
+                    border: '1.5px solid var(--border-default)',
                     fontFamily: 'monospace',
                     fontSize: '13px',
                     lineHeight: 1.7,
-                    color: '#1E293B',
-                    background: '#F8F9FB',
+                    color: 'var(--text-primary)',
+                    background: 'var(--bg-page)',
                     outline: 'none',
                     resize: 'vertical',
                     boxSizing: 'border-box',
@@ -730,7 +770,7 @@ export default function DocEditModal({ doc, onSave, onClose }) {
                 />
               )}
 
-              <div style={{ fontSize: '11px', color: '#94A3B8' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 {form.content.length.toLocaleString()} characters ·{' '}
                 {form.content.split('\n').length} lines
               </div>
@@ -742,12 +782,12 @@ export default function DocEditModal({ doc, onSave, onClose }) {
         <div
           style={{
             padding: '16px 24px',
-            borderTop: '1px solid #E2E8F0',
+            borderTop: '1px solid var(--border-default)',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
             flexShrink: 0,
-            background: '#FAFBFC',
+            background: 'var(--bg-page)',
           }}
         >
           {error && (
@@ -761,12 +801,12 @@ export default function DocEditModal({ doc, onSave, onClose }) {
               style={{
                 padding: '10px 22px',
                 background: 'transparent',
-                border: '1.5px solid #E2E8F0',
+                border: '1.5px solid var(--border-default)',
                 borderRadius: '8px',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontSize: '13px',
                 cursor: 'pointer',
-                color: '#64748B',
+                color: 'var(--text-secondary)',
                 fontWeight: 700,
               }}
             >
@@ -777,11 +817,11 @@ export default function DocEditModal({ doc, onSave, onClose }) {
               disabled={saving}
               style={{
                 padding: '10px 28px',
-                background: saving ? '#CBD5E1' : '#7C3AED',
+                background: saving ? 'var(--border-strong)' : 'var(--accent-primary)',
                 color: '#fff',
                 border: 'none',
                 borderRadius: '8px',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontWeight: 700,
                 fontSize: '13px',
                 cursor: saving ? 'not-allowed' : 'pointer',

@@ -46,7 +46,7 @@ export default function DocCard({
   const isArchived = doc.status === 'Archived';
 
   const fmt = FORMAT_COLORS[doc.format] || FORMAT_COLORS.TXT;
-  const catColor = '#64748B';
+  const catColor = 'var(--text-secondary)';
   // Use the dedicated imageUrl field set during upload (blob URL — fast and reliable)
   const thumbnailSrc = doc.imageUrl || null;
 
@@ -66,7 +66,12 @@ export default function DocCard({
       <>
         {text.slice(0, idx)}
         <mark
-          style={{ background: '#FEF08A', color: '#111111', borderRadius: '2px', padding: '0 1px' }}
+          style={{
+            background: '#FEF08A',
+            color: 'var(--text-primary)',
+            borderRadius: '2px',
+            padding: '0 1px',
+          }}
         >
           {text.slice(idx, idx + searchQuery.length)}
         </mark>
@@ -82,8 +87,8 @@ export default function DocCard({
       style={{
         background: isSelected ? '#F0F7FF' : '#fff',
         border: isSelected
-          ? '1.5px solid #111111'
-          : `1px solid ${hovering && !selectionMode ? '#7C3AED' : '#E2E8F0'}`,
+          ? '1.5px solid var(--text-primary)'
+          : `1px solid ${hovering && !selectionMode ? 'var(--accent-primary)' : 'var(--border-default)'}`,
         borderRadius: '10px',
         padding: '18px',
         display: 'flex',
@@ -97,7 +102,7 @@ export default function DocCard({
             ? '0 4px 18px rgba(124,58,237,0.10)'
             : '0 1px 4px rgba(0,0,0,0.04)',
         position: 'relative',
-        fontFamily: "'Lato', sans-serif",
+        fontFamily: "'Inter', sans-serif",
       }}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
@@ -113,8 +118,8 @@ export default function DocCard({
             width: '20px',
             height: '20px',
             borderRadius: '5px',
-            border: `2px solid ${isSelected ? '#111111' : '#94A3B8'}`,
-            background: isSelected ? '#111111' : '#fff',
+            border: `2px solid ${isSelected ? 'var(--text-primary)' : 'var(--text-muted)'}`,
+            background: isSelected ? 'var(--text-primary)' : '#fff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -158,7 +163,14 @@ export default function DocCard({
               marginBottom: '4px',
             }}
           >
-            <span style={{ fontSize: '14px', fontWeight: 700, color: '#111111', lineHeight: 1.3 }}>
+            <span
+              style={{
+                fontSize: '14px',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                lineHeight: 1.3,
+              }}
+            >
               {highlight(doc.title)}
             </span>
             {/* Format badge */}
@@ -199,7 +211,7 @@ export default function DocCard({
               fontWeight: 700,
               padding: '2px 8px',
               borderRadius: '100px',
-              background: '#F1F5F9',
+              background: 'var(--bg-hover)',
               color: catColor,
             }}
           >
@@ -240,7 +252,7 @@ export default function DocCard({
             borderRadius: '6px',
             overflow: 'hidden',
             height: '140px',
-            background: '#F1F5F9',
+            background: 'var(--bg-hover)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -263,7 +275,7 @@ export default function DocCard({
               flexDirection: 'column',
               alignItems: 'center',
               gap: '6px',
-              color: '#94A3B8',
+              color: 'var(--text-muted)',
               fontSize: '12px',
               position: 'absolute',
               inset: 0,
@@ -278,7 +290,7 @@ export default function DocCard({
         <div
           style={{
             fontSize: '12px',
-            color: '#64748B',
+            color: 'var(--text-secondary)',
             lineHeight: 1.5,
             display: '-webkit-box',
             WebkitLineClamp: 2,
@@ -297,7 +309,7 @@ export default function DocCard({
             style={{
               fontSize: '10px',
               fontWeight: 700,
-              color: '#111111',
+              color: 'var(--text-primary)',
               background: '#EFF6FF',
               border: '1px solid #BFDBFE',
               borderRadius: '4px',
@@ -307,17 +319,21 @@ export default function DocCard({
             v{doc.version}
           </span>
         )}
-        <span style={{ fontSize: '11px', color: '#94A3B8' }}>{relativeTime(doc.updatedAt)}</span>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          {relativeTime(doc.updatedAt)}
+        </span>
         {doc.viewCount > 0 && (
-          <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             👁 {doc.viewCount.toLocaleString()}
           </span>
         )}
         {doc.fileSize > 0 && (
-          <span style={{ fontSize: '11px', color: '#94A3B8' }}>{fmtFileSize(doc.fileSize)}</span>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            {fmtFileSize(doc.fileSize)}
+          </span>
         )}
         {doc.content && (
-          <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             📖 {Math.max(1, Math.ceil(doc.content.split(/\s+/).filter(Boolean).length / 200))} min
           </span>
         )}
@@ -348,7 +364,7 @@ export default function DocCard({
             gap: '6px',
             marginTop: 'auto',
             paddingTop: '4px',
-            borderTop: '1px solid #F1F5F9',
+            borderTop: '1px solid var(--border-subtle)',
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -360,8 +376,8 @@ export default function DocCard({
               padding: '7px 0',
               background: 'none',
               border: 'none',
-              color: '#7C3AED',
-              fontFamily: "'Lato', sans-serif",
+              color: 'var(--accent-primary)',
+              fontFamily: "'Inter', sans-serif",
               fontWeight: 700,
               fontSize: '12px',
               cursor: 'pointer',
@@ -382,13 +398,13 @@ export default function DocCard({
               aria-label="Export document"
               style={{
                 padding: '6px 10px',
-                background: '#F8F9FB',
-                border: '1px solid #E2E8F0',
+                background: 'var(--bg-page)',
+                border: '1px solid var(--border-default)',
                 borderRadius: '6px',
                 cursor: 'pointer',
                 fontSize: '12px',
-                color: '#475569',
-                fontFamily: "'Lato', sans-serif",
+                color: 'var(--text-secondary)',
+                fontFamily: "'Inter', sans-serif",
                 fontWeight: 700,
               }}
             >
@@ -415,13 +431,13 @@ export default function DocCard({
                 aria-label={doc.featured ? 'Unpin doc from Home' : 'Pin doc to Home'}
                 style={{
                   padding: '6px 10px',
-                  background: doc.featured ? '#FEF3C7' : '#F8F9FB',
-                  border: `1px solid ${doc.featured ? '#FDE68A' : '#E2E8F0'}`,
+                  background: doc.featured ? '#FEF3C7' : 'var(--bg-page)',
+                  border: `1px solid ${doc.featured ? '#FDE68A' : 'var(--border-default)'}`,
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontSize: '12px',
-                  color: doc.featured ? '#92400E' : '#475569',
-                  fontFamily: "'Lato', sans-serif",
+                  color: doc.featured ? '#92400E' : 'var(--text-secondary)',
+                  fontFamily: "'Inter', sans-serif",
                   fontWeight: 700,
                 }}
               >
@@ -436,13 +452,13 @@ export default function DocCard({
                 aria-label={doc.review ? 'Mark review complete' : 'Flag doc for review'}
                 style={{
                   padding: '6px 10px',
-                  background: doc.review ? '#FEE2E2' : '#F8F9FB',
-                  border: `1px solid ${doc.review ? '#FCA5A5' : '#E2E8F0'}`,
+                  background: doc.review ? '#FEE2E2' : 'var(--bg-page)',
+                  border: `1px solid ${doc.review ? '#FCA5A5' : 'var(--border-default)'}`,
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontSize: '12px',
-                  color: doc.review ? '#B91C1C' : '#475569',
-                  fontFamily: "'Lato', sans-serif",
+                  color: doc.review ? '#B91C1C' : 'var(--text-secondary)',
+                  fontFamily: "'Inter', sans-serif",
                   fontWeight: 700,
                 }}
               >
@@ -457,13 +473,13 @@ export default function DocCard({
                 aria-label="Edit document"
                 style={{
                   padding: '6px 10px',
-                  background: '#F8F9FB',
-                  border: '1px solid #E2E8F0',
+                  background: 'var(--bg-page)',
+                  border: '1px solid var(--border-default)',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontSize: '12px',
-                  color: '#111111',
-                  fontFamily: "'Lato', sans-serif",
+                  color: 'var(--text-primary)',
+                  fontFamily: "'Inter', sans-serif",
                   fontWeight: 700,
                 }}
               >
@@ -487,7 +503,7 @@ export default function DocCard({
                 cursor: 'pointer',
                 fontSize: '12px',
                 color: '#15803D',
-                fontFamily: "'Lato', sans-serif",
+                fontFamily: "'Inter', sans-serif",
                 fontWeight: 700,
               }}
             >
@@ -539,11 +555,11 @@ export default function DocCard({
         <div
           style={{
             fontSize: '11px',
-            color: '#94A3B8',
+            color: 'var(--text-muted)',
             textAlign: 'center',
             marginTop: 'auto',
             paddingTop: '8px',
-            borderTop: '1px solid #F1F5F9',
+            borderTop: '1px solid var(--border-subtle)',
           }}
         >
           Tap to select
@@ -553,7 +569,7 @@ export default function DocCard({
         <div
           style={{
             fontSize: '11px',
-            color: '#111111',
+            color: 'var(--text-primary)',
             fontWeight: 700,
             textAlign: 'center',
             marginTop: 'auto',
