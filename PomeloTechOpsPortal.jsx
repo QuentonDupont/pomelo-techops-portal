@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, Component } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Component } from 'react';
 import DocImportExportPage from './src/components/docs/DocImportExportPage.jsx';
 import { createJiraTicket, isJiraConfigured } from './src/api/jiraApi.js';
 import { listFeaturedDocs, listDocSummaries } from './src/api/docsApi.js';
@@ -6,6 +6,11 @@ import FilePreviewCard, { fileToAttachment, ATTACHMENT_DATAURL_LIMIT as _ATT_LIM
 import { NotificationProvider, useNotifications, buildSeedNotifications } from './src/context/NotificationContext.jsx';
 import NotificationBell from './src/components/NotificationBell.jsx';
 import { useTheme } from './src/context/ThemeContext.jsx';
+import {
+  CAPABILITIES, SEED_ROLES, DEFAULT_ASSIGNEE,
+  LEGACY_ROLE_TO_ROLE_ID, SEED_EMAIL_REWRITE, DEFAULT_ROLE_ID,
+  RBAC_SCHEMA_VERSION, hasPermission,
+} from './src/rbac.js';
 import {
   Search, Wrench, Users as UsersIcon, ScrollText, MessageCircle, BookOpen,
   Target, ClipboardList, Ticket, Home, PlusCircle, Moon, Sun, ChevronDown,
@@ -889,10 +894,10 @@ const LOCKOUT_MS   = 30_000;
 const AUTH_DELAY   = 600;
 
 let MOCK_USERS = [
-  { id: 'u1', name: 'Alex Lee',       email: 'alex.lee@pomelo.com',      passwordHash: btoa('salt_u1_Admin123!'),   role: 'superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-09-01' },
-  { id: 'u2', name: 'Kai Nguyen',     email: 'kai.nguyen@pomelo.com',    passwordHash: btoa('salt_u2_User123!'),    role: 'user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-11-12' },
-  { id: 'u3', name: 'Prim Srisawat',  email: 'prim.srisawat@pomelo.com', passwordHash: btoa('salt_u3_User123!'),    role: 'user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2025-01-22' },
-  { id: 'u4', name: 'Quenton Dupont', email: 'quentondupont@gmail.com',  passwordHash: 'c2FsdF91NF9Ub3lvdGFzdXByYTdA', role: 'superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-08-15' },
+  { id: 'u1', name: 'Alex Lee',       email: 'alex.lee@pomelo.com',          passwordHash: btoa('salt_u1_Admin123!'),   role: 'superadmin', roleId: 'role_superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-09-01' },
+  { id: 'u2', name: 'Kai Nguyen',     email: 'kai.nguyen@pomelo.com',        passwordHash: btoa('salt_u2_User123!'),    role: 'user',       roleId: 'role_user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-11-12' },
+  { id: 'u3', name: 'Prim Srisawat',  email: 'prim.srisawat@pomelo.com',     passwordHash: btoa('salt_u3_User123!'),    role: 'user',       roleId: 'role_user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2025-01-22' },
+  { id: 'u4', name: 'Quenton Dupont', email: 'quentond.d@pomelofashion.com', passwordHash: 'c2FsdF91NF9Ub3lvdGFzdXByYTdA', role: 'superadmin', roleId: 'role_superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-08-15' },
 ];
 
 // ─── Chat log store (in-memory) ───────────────────────────────────────────────
@@ -1037,6 +1042,93 @@ for (const t of MOCK_TICKETS) {
       t.status = mapLegacyStatus(t.status);
     }
   }
+})();
+
+// ─── RBAC runtime registry ────────────────────────────────────────────────────
+// Capability definitions + seed role shapes live in `src/rbac.js`. The runtime
+// state (current role list, settings overrides) lives here so it can mutate
+// MOCK_USERS during migration and call recordAudit on changes — both circular
+// concerns we'd hit if the registry moved into the pure rbac module.
+let ROLES_REGISTRY = SEED_ROLES.map(r => ({ ...r, capabilities: r.capabilities.slice() }));
+let SETTINGS = { defaultAssigneeName: DEFAULT_ASSIGNEE.name, defaultAssigneeEmail: DEFAULT_ASSIGNEE.email };
+
+let _rolesVersion = 0;
+const _rolesListeners = new Set();
+const bumpRoles = () => {
+  _rolesVersion++;
+  _rolesListeners.forEach(fn => fn(_rolesVersion));
+  saveStore('roles', ROLES_REGISTRY);
+};
+const subscribeRoles = (fn) => { _rolesListeners.add(fn); return () => _rolesListeners.delete(fn); };
+
+let _settingsVersion = 0;
+const _settingsListeners = new Set();
+const bumpSettings = () => {
+  _settingsVersion++;
+  _settingsListeners.forEach(fn => fn(_settingsVersion));
+  saveStore('settings', SETTINGS);
+};
+const subscribeSettings = (fn) => { _settingsListeners.add(fn); return () => _settingsListeners.delete(fn); };
+
+const listRoles = () => ROLES_REGISTRY.slice();
+const findRole = (roleId) => ROLES_REGISTRY.find(r => r.id === roleId) || null;
+const getDefaultRoleId = () => (ROLES_REGISTRY.find(r => r.isDefault)?.id) || DEFAULT_ROLE_ID;
+const getSettings = () => ({ ...SETTINGS });
+const setSettings = (next) => {
+  SETTINGS = { ...SETTINGS, ...next };
+  bumpSettings();
+};
+const countUsersInRole = (roleId) => MOCK_USERS.reduce((n, u) => n + (u.roleId === roleId ? 1 : 0), 0);
+
+// ─── One-shot RBAC migration ──────────────────────────────────────────────────
+// Runs at boot when the persisted schema version is older than the current.
+// Idempotent: rerunning is a no-op. Handles three jobs:
+//   1. Load persisted roles + settings if present; else use seeds.
+//   2. Rewrite legacy seed emails (Quenton: gmail → pomelofashion). Collision
+//      guard: if the new email already exists, log + skip to avoid a duplicate.
+//   3. Back-fill `roleId` on persisted users whose only role marker is the
+//      legacy `role` string.
+(() => {
+  const storedRoles = loadStore('roles', null);
+  if (Array.isArray(storedRoles) && storedRoles.length) {
+    ROLES_REGISTRY = storedRoles;
+  } else {
+    saveStore('roles', ROLES_REGISTRY);
+  }
+  const storedSettings = loadStore('settings', null);
+  if (storedSettings && typeof storedSettings === 'object') {
+    SETTINGS = { ...SETTINGS, ...storedSettings };
+  } else {
+    saveStore('settings', SETTINGS);
+  }
+
+  const storedVersion = loadStore('userRolesV', 0);
+  if (storedVersion >= RBAC_SCHEMA_VERSION) return;
+
+  let touched = false;
+
+  for (const [oldEmail, newEmail] of Object.entries(SEED_EMAIL_REWRITE)) {
+    const oldUser = MOCK_USERS.find(u => u.email === oldEmail);
+    if (!oldUser) continue;
+    const collision = MOCK_USERS.find(u => u.email === newEmail && u.id !== oldUser.id);
+    if (collision) {
+      // eslint-disable-next-line no-console
+      console.warn(`[rbac migration] skipping email rewrite ${oldEmail} → ${newEmail}: target email already exists on user ${collision.id}`);
+      continue;
+    }
+    oldUser.email = newEmail;
+    touched = true;
+  }
+
+  for (const u of MOCK_USERS) {
+    if (u.roleId) continue;
+    const mapped = LEGACY_ROLE_TO_ROLE_ID[u.role] || getDefaultRoleId();
+    u.roleId = mapped;
+    touched = true;
+  }
+
+  if (touched) bumpUsers();
+  saveStore('userRolesV', RBAC_SCHEMA_VERSION);
 })();
 
 const sanitiseUser = ({ passwordHash: _, ...u }) => u;
@@ -6023,6 +6115,21 @@ function AdminViewModePill({ viewAs, onSet, allUsers, currentUserName }) {
   );
 }
 
+// ─── RBAC context ─────────────────────────────────────────────────────────────
+// One source of truth for "what can the effective user do right now?". Read
+// via useCan() at every gating site. The provider lives inside AppContent so
+// `can` flips automatically when impersonation, login, role edits, or
+// capability toggles happen.
+const RbacContext = createContext({
+  can: () => false,
+  roles: [],
+  currentRole: null,
+  settings: { defaultAssigneeName: DEFAULT_ASSIGNEE.name, defaultAssigneeEmail: DEFAULT_ASSIGNEE.email },
+});
+function useCan()      { return useContext(RbacContext).can; }
+function useRoles()    { return useContext(RbacContext).roles; }
+function useRbacCtx()  { return useContext(RbacContext); }
+
 // ─── Main App (inner) ─────────────────────────────────────────────────────────
 function AppContent() {
   const { seedNotifications, addNotification } = useNotifications();
@@ -6034,6 +6141,12 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [docs, setDocs] = useState(DOCS);
   const [suggestions, setSuggestions] = useState([]);
+  // Bumped whenever the roles registry or settings change so consumers
+  // (and the `can` memo below) re-evaluate without prop drilling.
+  const [rolesVersion, setRolesVersion] = useState(0);
+  const [settingsVersion, setSettingsVersion] = useState(0);
+  useEffect(() => subscribeRoles(setRolesVersion), []);
+  useEffect(() => subscribeSettings(setSettingsVersion), []);
   // viewAs: null = see as self (real role); 'user' = downgrade self to user view;
   // {user object} = impersonate that specific user. Session-only — resets on refresh.
   const [viewAs, setViewAs] = useState(null);
@@ -6052,13 +6165,40 @@ function AppContent() {
   }, []);
 
   const effectiveRole = viewAs === 'user' ? 'user' : (viewAs && typeof viewAs === 'object' ? viewAs.role : role);
-  const effectiveUser = viewAs && typeof viewAs === 'object' ? viewAs : currentUser;
+  // effectiveUser carries roleId so RBAC gating (useCan) flips correctly when
+  // impersonating. The 'view as regular user' shortcut downgrades to the
+  // default role rather than referencing a specific user.
+  const effectiveUser = useMemo(() => {
+    if (viewAs && typeof viewAs === 'object') return viewAs;
+    if (viewAs === 'user') return currentUser ? { ...currentUser, roleId: getDefaultRoleId() } : null;
+    return currentUser;
+  }, [viewAs, currentUser]);
   const isImpersonating = viewAs !== null;
+
+  // Build the `can` callback. Recomputes whenever the effective user changes
+  // OR the roles registry version bumps (e.g. admin toggled a capability) OR
+  // the settings change — the last is referenced via settingsVersion only so
+  // strip consumers re-render too.
+  const can = useCallback(
+    (capId) => hasPermission(effectiveUser, capId, listRoles()),
+    [effectiveUser, rolesVersion], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const currentRoleObj = effectiveUser?.roleId ? findRole(effectiveUser.roleId) : null;
+  const rbacValue = useMemo(
+    () => ({ can, roles: listRoles(), currentRole: currentRoleObj, settings: getSettings() }),
+    [can, rolesVersion, settingsVersion, currentRoleObj], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   useEffect(() => {
     const session = getSession();
     if (session) {
-      setCurrentUser({ name: session.name, email: session.email, department: session.department });
+      // Back-fill roleId for sessions created before the RBAC migration
+      // landed — derive from the legacy role string. Once the user logs in
+      // again, the createSession write will carry roleId natively.
+      const roleId = session.roleId
+        || LEGACY_ROLE_TO_ROLE_ID[session.role]
+        || getDefaultRoleId();
+      setCurrentUser({ name: session.name, email: session.email, department: session.department, roleId });
       setRole(session.role);
       setIsAuthenticated(true);
       setAuditActor({ name: session.name, email: session.email });
@@ -6089,7 +6229,8 @@ function AppContent() {
   }, [isAuthenticated]);
 
   const handleLogin = (user) => {
-    setCurrentUser({ name: user.name, email: user.email, department: user.department });
+    const roleId = user.roleId || LEGACY_ROLE_TO_ROLE_ID[user.role] || getDefaultRoleId();
+    setCurrentUser({ name: user.name, email: user.email, department: user.department, roleId });
     setRole(user.role);
     setIsAuthenticated(true);
     setViewAs(null);
@@ -6174,6 +6315,7 @@ function AppContent() {
   }
 
   return (
+    <RbacContext.Provider value={rbacValue}>
     <div style={S.app}>
       <style>{`
         @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
@@ -6418,6 +6560,7 @@ function AppContent() {
         role={effectiveRole}
       />
     </div>
+    </RbacContext.Provider>
   );
 }
 
