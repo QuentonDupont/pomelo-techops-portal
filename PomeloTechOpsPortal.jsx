@@ -1000,7 +1000,7 @@ const subscribeAudit = (fn) => { _auditListeners.add(fn); return () => _auditLis
 const recordAudit = (action, actor, target = null, details = null) => {
   AUDIT_LOG.unshift({
     id: 'a' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-    ts: new Date().toISOString(),
+    timestamp: new Date().toISOString(),
     action,            // e.g. 'user.promote'
     actorEmail: actor?.email || 'unknown',
     actorName: actor?.name || 'Unknown',
@@ -3066,7 +3066,9 @@ function JiraSyncChip({ ticket }) {
 // ─── Recent Activity feed (Home) ──────────────────────────────────────────────
 // Live view of the most-recently-updated tickets, plus (admin only) the last
 // few audit entries so admins see admin actions on their dashboard.
-function RecentActivityFeed({ role, onTicket, setSection }) {
+function RecentActivityFeed({ role, onTicket, setSection }) { // eslint-disable-line no-unused-vars
+  const can = useCan();
+  const canSeeAudit = can('audit.view');
   const [, _setV] = useState(0);
   useEffect(() => subscribeTickets(_setV), []);
   useEffect(() => subscribeAudit(_setV), []);
@@ -3133,7 +3135,7 @@ function RecentActivityFeed({ role, onTicket, setSection }) {
             <div style={{ flex: 1, fontSize: '12px', color: 'var(--text-secondary)' }}>
               {e.actorName}{e.targetLabel ? ` · ${e.targetLabel}` : ''}
             </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>{fmtAgo(e.ts)}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>{fmtAgo(e.timestamp)}</div>
           </div>
         ))}
       </div>
@@ -5692,7 +5694,7 @@ function UsersPanelPage({ currentUserEmail }) {
     const q = query.trim().toLowerCase();
     return listUsers().filter(u => {
       if (q && !u.name.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) return false;
-      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+      if (roleFilter !== 'all' && u.roleId !== roleFilter) return false;
       if (statusFilter === 'active' && !u.active) return false;
       if (statusFilter === 'deactivated' && u.active) return false;
       if (statusFilter === 'never-logged-in' && u.lastLoginAt) return false;
@@ -5723,10 +5725,16 @@ function UsersPanelPage({ currentUserEmail }) {
     return <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: '#DCFCE7', color: '#15803D', fontWeight: 700 }}>Active</span>;
   };
 
+  const [actionError, setActionError] = useState('');
   const handleConfirmed = () => {
     if (!confirm) return;
-    const { action, user } = confirm;
-    if (action === 'promote') setUserRole(user.id, 'superadmin');
+    const { action, user, message } = confirm;
+    setActionError('');
+    if (action === 'changeRole') {
+      const res = setUserRoleId(user.id, message.roleId);
+      if (res?.error) { setActionError(res.error); return; }
+    }
+    else if (action === 'promote') setUserRole(user.id, 'superadmin');
     else if (action === 'demote') setUserRole(user.id, 'user');
     else if (action === 'deactivate') setUserActive(user.id, false);
     else if (action === 'reactivate') setUserActive(user.id, true);
@@ -5761,8 +5769,7 @@ function UsersPanelPage({ currentUserEmail }) {
         />
         <select aria-label="Filter by role" value={roleFilter} onChange={e => setRoleFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
           <option value="all">All roles</option>
-          <option value="superadmin">Superadmin</option>
-          <option value="user">User</option>
+          {listRoles().map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
         </select>
         <select aria-label="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
           <option value="all">All status</option>
@@ -5790,11 +5797,13 @@ function UsersPanelPage({ currentUserEmail }) {
             <tbody>
               {users.map(u => {
                 const isSelf = u.email === currentUserEmail;
+                const userRole = findRole(u.roleId);
+                const roleColor = userRole?.color || 'var(--text-muted)';
                 return (
                   <tr key={u.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: u.role === 'superadmin' ? 'var(--accent-primary)' : 'var(--text-muted)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: roleColor, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px' }}>
                           {u.name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2)}
                         </div>
                         <div>
@@ -5804,8 +5813,8 @@ function UsersPanelPage({ currentUserEmail }) {
                       </div>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontSize: '12px', padding: '3px 8px', borderRadius: '4px', background: u.role === 'superadmin' ? 'var(--accent-soft)' : 'var(--bg-hover)', color: u.role === 'superadmin' ? 'var(--accent-primary)' : 'var(--text-secondary)', fontWeight: 700 }}>
-                        {u.role === 'superadmin' ? '⭐ Superadmin' : '👤 User'}
+                      <span style={{ fontSize: '12px', padding: '3px 8px', borderRadius: '4px', background: (roleColor || 'var(--text-muted)') + '18', color: roleColor, fontWeight: 700 }}>
+                        {userRole?.label || u.role || 'Unknown'}
                       </span>
                     </td>
                     <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>{u.department}</td>
@@ -5834,16 +5843,25 @@ function UsersPanelPage({ currentUserEmail }) {
 
       {/* Modals */}
       {creating && <UserCreateModal onClose={() => setCreating(false)} />}
-      {editing && <UserEditModal user={editing} onClose={() => setEditing(null)} />}
+      {editing && <UserEditModal user={editing} onClose={() => setEditing(null)} currentUserEmail={currentUserEmail} />}
       {resetting && <UserResetPasswordModal user={resetting} onClose={() => setResetting(null)} />}
       {confirm && (
         <ConfirmDialog
           title={confirm.message.title}
-          body={confirm.message.body}
+          body={
+            <>
+              {confirm.message.body}
+              {actionError && (
+                <div role="alert" style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '8px', background: '#FEF2F2', color: '#B91C1C', fontSize: '13px', fontWeight: 600 }}>
+                  {actionError}
+                </div>
+              )}
+            </>
+          }
           confirmLabel={confirm.message.confirmLabel}
           confirmStyle={confirm.message.danger ? 'danger' : 'primary'}
           onConfirm={handleConfirmed}
-          onCancel={() => setConfirm(null)}
+          onCancel={() => { setConfirm(null); setActionError(''); }}
         />
       )}
     </div>
@@ -5851,24 +5869,33 @@ function UsersPanelPage({ currentUserEmail }) {
 }
 
 function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
+  const can = useCan();
+  const roles = useRoles();
   const [open, setOpen] = useState(false);
+  const [roleSubOpen, setRoleSubOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
-    const onDown = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const onDown = e => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setRoleSubOpen(false); } };
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
   }, []);
 
-  const item = (label, onClick, danger = false) => (
+  const canEdit = can('users.edit');
+  const canChangeRole = can('roles.assign');
+
+  const item = (label, onClick, opts = {}) => (
     <button
       key={label}
       role="menuitem"
-      onClick={() => { setOpen(false); onClick(); }}
-      style={{ width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'none', color: danger ? '#B91C1C' : 'var(--text-primary)', cursor: 'pointer', fontSize: '13px', borderRadius: '6px' }}
+      onClick={() => { setOpen(false); setRoleSubOpen(false); onClick(); }}
+      disabled={opts.disabled}
+      style={{ width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'none', color: opts.danger ? '#B91C1C' : 'var(--text-primary)', cursor: opts.disabled ? 'not-allowed' : 'pointer', fontSize: '13px', borderRadius: '6px', opacity: opts.disabled ? 0.5 : 1 }}
     >
       {label}
     </button>
   );
+
+  const currentRole = roles.find(r => r.id === user.roleId);
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
@@ -5881,18 +5908,60 @@ function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
         Actions ▾
       </button>
       {open && (
-        <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, minWidth: '200px', background: 'var(--bg-surface)', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', padding: '4px', zIndex: 100, textAlign: 'left' }}>
-          {item('Edit details', onEdit)}
-          {item(user.role === 'superadmin' ? 'Demote to user' : 'Promote to superadmin', () =>
-            onConfirm(user.role === 'superadmin' ? 'demote' : 'promote', {
-              title: user.role === 'superadmin' ? 'Demote to regular user?' : 'Promote to superadmin?',
-              body: user.role === 'superadmin'
-                ? `${user.name} will lose admin powers immediately.`
-                : `${user.name} will gain admin powers including the Users panel.`,
-              confirmLabel: user.role === 'superadmin' ? 'Demote' : 'Promote',
-              danger: user.role === 'superadmin',
-            })
-          )}
+        <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, minWidth: '220px', background: 'var(--bg-surface)', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', padding: '4px', zIndex: 100, textAlign: 'left' }}>
+          {item('Edit details & role', onEdit, { disabled: !canEdit && !canChangeRole })}
+
+          {/* Change role submenu — replaces the binary promote/demote item.
+              Any role from the registry is a valid target. Selecting the
+              user's current role is a no-op (disabled). */}
+          <div style={{ position: 'relative' }}>
+            <button
+              role="menuitem"
+              aria-haspopup="menu"
+              aria-expanded={roleSubOpen}
+              onClick={() => setRoleSubOpen(o => !o)}
+              disabled={!canChangeRole}
+              style={{ width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'none', color: 'var(--text-primary)', cursor: canChangeRole ? 'pointer' : 'not-allowed', fontSize: '13px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: canChangeRole ? 1 : 0.5 }}
+            >
+              <span>Change role…</span>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{roleSubOpen ? '▾' : '▸'}</span>
+            </button>
+            {roleSubOpen && canChangeRole && (
+              <div role="menu" style={{ marginLeft: '12px', marginTop: '2px', marginBottom: '4px', borderLeft: '2px solid var(--border-subtle)', paddingLeft: '4px' }}>
+                {roles.map(r => {
+                  const isCurrent = r.id === user.roleId;
+                  return (
+                    <button
+                      key={r.id}
+                      role="menuitem"
+                      disabled={isCurrent}
+                      onClick={() => {
+                        setOpen(false); setRoleSubOpen(false);
+                        onConfirm('changeRole', {
+                          title: `Change ${user.name}'s role to ${r.label}?`,
+                          body: `${user.name} will take on every capability granted to "${r.label}" and lose anything that's not in that role.${isSelf ? ' This is your own account — the last-admin guard will block a change that locks out role management.' : ''}`,
+                          confirmLabel: `Change to ${r.label}`,
+                          danger: false,
+                          roleId: r.id,
+                        });
+                      }}
+                      style={{ width: '100%', textAlign: 'left', padding: '7px 10px', border: 'none', background: 'none', color: isCurrent ? 'var(--text-muted)' : 'var(--text-primary)', cursor: isCurrent ? 'default' : 'pointer', fontSize: '12px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: r.color || 'var(--text-muted)', flexShrink: 0 }} />
+                      <span style={{ flex: 1 }}>{r.label}</span>
+                      {isCurrent && <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>current</span>}
+                    </button>
+                  );
+                })}
+                {currentRole?.isSystem && currentRole.id === 'role_superadmin' && (
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '4px 10px' }}>
+                    Demoting a superadmin reduces their access immediately.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {item('Reset password', onResetPassword)}
           {item('Force re-OTP on next login', () =>
             onConfirm('forceOtp', {
@@ -5911,7 +5980,7 @@ function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
               confirmLabel: user.active ? 'Deactivate' : 'Reactivate',
               danger: user.active,
             }),
-            user.active
+            { danger: user.active }
           )}
         </div>
       )}
@@ -5972,12 +6041,20 @@ function UserCreateModal({ onClose }) {
   );
 }
 
-function UserEditModal({ user, onClose }) {
+function UserEditModal({ user, onClose, currentUserEmail }) {
+  const can = useCan();
+  const roles = useRoles();
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [department, setDepartment] = useState(user.department);
+  const [roleId, setRoleId] = useState(user.roleId || '');
+  const [error, setError] = useState('');
   const panelRef = useRef(null);
   useModalFocusTrap(panelRef);
+
+  const canEditProfile = can('users.edit');
+  const canChangeRole = can('roles.assign');
+  const isSelf = user.email === currentUserEmail;
 
   useEffect(() => {
     const handleKey = e => { if (e.key === 'Escape') onClose(); };
@@ -5987,25 +6064,55 @@ function UserEditModal({ user, onClose }) {
 
   const submit = e => {
     e.preventDefault();
-    updateUser(user.id, { name: name.trim(), email: email.trim().toLowerCase(), department: department.trim() });
+    setError('');
+    // Update profile fields first.
+    if (canEditProfile) {
+      updateUser(user.id, { name: name.trim(), email: email.trim().toLowerCase(), department: department.trim() });
+    }
+    // Then role, separately — the role mutator runs its own last-admin guard
+    // and surfaces a clean error if the change would lock the actor out.
+    if (canChangeRole && roleId && roleId !== user.roleId) {
+      const res = setUserRoleId(user.id, roleId);
+      if (res?.error) { setError(res.error); return; }
+    }
     onClose();
   };
 
   return (
     <>
       <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 500 }} />
-      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Edit ${user.name}`} style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'var(--bg-surface)', borderRadius: '14px', zIndex: 501, width: '440px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden', outline: 'none' }}>
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Edit ${user.name}`} style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'var(--bg-surface)', borderRadius: '14px', zIndex: 501, width: '460px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden', outline: 'none' }}>
         <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>Edit user</h2>
           <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: '20px', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
         <form onSubmit={submit} style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <FormField label="Full name"><input aria-label="Full name" value={name} onChange={e => setName(e.target.value)} style={inputStyle} /></FormField>
-          <FormField label="Email"><input aria-label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} /></FormField>
-          <FormField label="Department"><input aria-label="Department" value={department} onChange={e => setDepartment(e.target.value)} style={inputStyle} /></FormField>
+          <FormField label="Full name"><input aria-label="Full name" value={name} onChange={e => setName(e.target.value)} disabled={!canEditProfile} style={inputStyle} /></FormField>
+          <FormField label="Email"><input aria-label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={!canEditProfile} style={inputStyle} /></FormField>
+          <FormField label="Department"><input aria-label="Department" value={department} onChange={e => setDepartment(e.target.value)} disabled={!canEditProfile} style={inputStyle} /></FormField>
+          <FormField label={isSelf ? 'Role (your own role)' : 'Role'}>
+            <select
+              aria-label="Role"
+              value={roleId}
+              onChange={e => setRoleId(e.target.value)}
+              disabled={!canChangeRole}
+              style={inputStyle}
+            >
+              {roles.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+            {!canChangeRole && (
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Requires the roles.assign capability.</div>
+            )}
+            {isSelf && canChangeRole && (
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Changing your own role takes effect immediately. The last-admin guard will block a change that locks out role management.</div>
+            )}
+          </FormField>
+          {error && (
+            <div role="alert" style={{ padding: '10px 12px', borderRadius: '8px', background: '#FEF2F2', color: '#B91C1C', fontSize: '13px', fontWeight: 600 }}>{error}</div>
+          )}
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <button type="button" onClick={onClose} style={ghostBtn}>Cancel</button>
-            <button type="submit" style={primaryBtn}>Save</button>
+            <button type="submit" disabled={!canEditProfile && !canChangeRole} style={primaryBtn}>Save</button>
           </div>
         </form>
       </div>
@@ -6743,7 +6850,7 @@ function AuditLogPage() {
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {entries.map(e => (
               <li key={e.id} style={{ padding: '12px 18px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', minWidth: '150px', fontFamily: 'monospace' }}>{fmtTs(e.ts)}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', minWidth: '150px', fontFamily: 'monospace' }}>{fmtTs(e.timestamp)}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '13px' }}>{actionLabel(e.action)}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
