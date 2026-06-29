@@ -110,7 +110,7 @@ test.describe('Audit log', () => {
     await freshLogin(page, ADMIN);
     await navAdmin(page, 'Audit log');
     await expect(page.locator('h1:has-text("Audit log")')).toBeVisible();
-    await expect(page.locator('text=Admin login').first()).toBeVisible();
+    await expect(page.locator('text=Login').first()).toBeVisible();
   });
 
   test('switching view-as is recorded', async ({ page }) => {
@@ -208,11 +208,11 @@ test.describe('localStorage persistence', () => {
   test('audit log entries survive a full page reload', async ({ page }) => {
     await freshLogin(page, ADMIN);
     await navAdmin(page, 'Audit log');
-    const beforeCount = await page.locator('li').filter({ hasText: 'Admin login' }).count();
+    const beforeCount = await page.locator('li').filter({ hasText: 'Login' }).count();
     await page.reload();
     await page.waitForLoadState('networkidle');
     await navAdmin(page, 'Audit log');
-    const afterCount = await page.locator('li').filter({ hasText: 'Admin login' }).count();
+    const afterCount = await page.locator('li').filter({ hasText: 'Login' }).count();
     // At least the original Admin login entry should still be there
     expect(afterCount).toBeGreaterThanOrEqual(beforeCount);
   });

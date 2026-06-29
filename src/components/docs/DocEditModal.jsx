@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { updateDoc } from '../../api/docsApi.js';
 import { DOC_CATEGORIES } from '../../mocks/docsMockData.js';
+import { MarkdownView } from './MarkdownView.jsx';
 
 const ICON_OPTIONS = [
   '📄',
@@ -28,30 +29,7 @@ const ICON_OPTIONS = [
   '📌',
 ];
 
-// ─── Minimal inline markdown renderer (reused from DocFullPage) ─────────────
-function renderInline(text) {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-  return parts.map((part, j) => {
-    if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={j}>{part.slice(2, -2)}</strong>;
-    if (/^`[^`]+`$/.test(part))
-      return (
-        <code
-          key={j}
-          style={{
-            background: 'var(--bg-hover)',
-            padding: '1px 5px',
-            borderRadius: '4px',
-            fontSize: '13px',
-            fontFamily: 'monospace',
-          }}
-        >
-          {part.slice(1, -1)}
-        </code>
-      );
-    return part;
-  });
-}
-
+// Live preview — delegates to the shared MarkdownView renderer.
 function PreviewPane({ content }) {
   if (!content)
     return (
@@ -66,195 +44,7 @@ function PreviewPane({ content }) {
         Nothing to preview yet.
       </div>
     );
-  const lines = content.split('\n');
-  const elements = [];
-  let listBuffer = [];
-  let inCode = false;
-  let codeLines = [];
-
-  const flushList = () => {
-    if (!listBuffer.length) return;
-    elements.push(
-      <ul key={`ul-${elements.length}`} style={{ paddingLeft: '20px', margin: '6px 0 12px' }}>
-        {listBuffer.map((item, j) => (
-          <li
-            key={j}
-            style={{
-              fontSize: '13px',
-              color: 'var(--text-primary)',
-              lineHeight: 1.7,
-              marginBottom: '3px',
-            }}
-          >
-            {renderInline(item)}
-          </li>
-        ))}
-      </ul>
-    );
-    listBuffer = [];
-  };
-  const flushCode = () => {
-    if (!codeLines.length) return;
-    elements.push(
-      <pre
-        key={`pre-${elements.length}`}
-        style={{
-          background: 'var(--bg-page)',
-          border: '1px solid var(--border-default)',
-          borderRadius: '6px',
-          padding: '10px 12px',
-          overflowX: 'auto',
-          fontSize: '12px',
-          fontFamily: 'monospace',
-          margin: '8px 0',
-        }}
-      >
-        {codeLines.join('\n')}
-      </pre>
-    );
-    codeLines = [];
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^```/.test(line)) {
-      if (inCode) {
-        inCode = false;
-        flushCode();
-      } else {
-        flushList();
-        inCode = true;
-      }
-      continue;
-    }
-    if (inCode) {
-      codeLines.push(line);
-      continue;
-    }
-    if (/^###\s/.test(line)) {
-      flushList();
-      elements.push(
-        <h3
-          key={i}
-          style={{
-            fontSize: '14px',
-            fontWeight: 700,
-            color: 'var(--text-primary)',
-            margin: '16px 0 4px',
-          }}
-        >
-          {renderInline(line.replace(/^###\s/, ''))}
-        </h3>
-      );
-      continue;
-    }
-    if (/^##\s/.test(line)) {
-      flushList();
-      elements.push(
-        <h2
-          key={i}
-          style={{
-            fontSize: '17px',
-            fontWeight: 900,
-            color: 'var(--text-primary)',
-            margin: '22px 0 8px',
-            borderBottom: '2px solid var(--accent-primary)',
-            paddingBottom: '4px',
-          }}
-        >
-          {renderInline(line.replace(/^##\s/, ''))}
-        </h2>
-      );
-      continue;
-    }
-    if (/^#\s/.test(line)) {
-      flushList();
-      elements.push(
-        <h1
-          key={i}
-          style={{
-            fontSize: '21px',
-            fontWeight: 900,
-            color: 'var(--text-primary)',
-            margin: '0 0 14px',
-          }}
-        >
-          {renderInline(line.replace(/^#\s/, ''))}
-        </h1>
-      );
-      continue;
-    }
-    if (/^>\s/.test(line)) {
-      flushList();
-      elements.push(
-        <blockquote
-          key={i}
-          style={{
-            borderLeft: '3px solid var(--accent-primary)',
-            paddingLeft: '12px',
-            margin: '8px 0',
-            color: 'var(--text-secondary)',
-            fontStyle: 'italic',
-            fontSize: '13px',
-          }}
-        >
-          {renderInline(line.replace(/^>\s/, ''))}
-        </blockquote>
-      );
-      continue;
-    }
-    if (/^[-*]\s/.test(line)) {
-      listBuffer.push(line.replace(/^[-*]\s/, ''));
-      continue;
-    }
-    if (/^\d+\.\s/.test(line)) {
-      listBuffer.push(line.replace(/^\d+\.\s/, ''));
-      continue;
-    }
-    if (/^\|[-| :]+\|$/.test(line.trim())) continue;
-    if (/^\|.+\|$/.test(line.trim())) {
-      const cells = line
-        .trim()
-        .replace(/^\||\|$/g, '')
-        .split('|')
-        .map(c => c.trim())
-        .filter(Boolean);
-      listBuffer.push(cells.join(' — '));
-      continue;
-    }
-    if (/^[-_*]{3,}$/.test(line.trim())) {
-      flushList();
-      elements.push(
-        <hr
-          key={i}
-          style={{ border: 'none', borderTop: '1px solid var(--border-default)', margin: '16px 0' }}
-        />
-      );
-      continue;
-    }
-    if (line.trim() === '') {
-      flushList();
-      elements.push(<div key={i} style={{ height: '8px' }} />);
-      continue;
-    }
-    flushList();
-    elements.push(
-      <p
-        key={i}
-        style={{
-          fontSize: '13px',
-          color: 'var(--text-primary)',
-          lineHeight: 1.8,
-          marginBottom: '8px',
-        }}
-      >
-        {renderInline(line)}
-      </p>
-    );
-  }
-  flushList();
-  flushCode();
-  return <div>{elements}</div>;
+  return <MarkdownView content={content} />;
 }
 
 // ─── DocEditModal ──────────────────────────────────────────────────────────────

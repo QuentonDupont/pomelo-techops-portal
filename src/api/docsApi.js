@@ -300,6 +300,50 @@ export const uploadDocs = async (fileMetaList, onProgress) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/docs — Create a manually-authored document (Documentation Studio).
+// Unlike uploadDocs (file → AI extraction), this takes title + markdown content
+// authored directly in the portal.
+// @param {{ title, content, category, description, tags, visibility, author, icon }} payload
+// ─────────────────────────────────────────────────────────────────────────────
+export const createDoc = async payload => {
+  return wrap(async () => {
+    if (USE_MOCK) {
+      await simulateDelay(250);
+      const now = new Date().toISOString();
+      const tags = Array.isArray(payload.tags)
+        ? payload.tags
+        : String(payload.tags || '')
+            .split(',')
+            .map(t => t.trim())
+            .filter(Boolean);
+      const newDoc = {
+        id: 'doc-' + Date.now(),
+        title: payload.title || 'Untitled Page',
+        description: payload.description || '',
+        category: payload.category || 'Other',
+        format: 'MD',
+        icon: payload.icon || '📝',
+        fileSize: (payload.content || '').length,
+        viewCount: 0,
+        version: '1.0',
+        author: payload.author || 'Unknown',
+        createdAt: now,
+        updatedAt: now,
+        tags,
+        visibility: payload.visibility || 'Public',
+        status: 'Active',
+        content: payload.content || '',
+        versions: [],
+      };
+      mockStore.unshift(newDoc);
+      return newDoc;
+    }
+    const { data } = await api.post('/api/docs', payload);
+    return data;
+  });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PUT /api/docs/:id — Update document metadata
 // @param {string} id
 // @param {Partial<Doc>} updates
@@ -314,6 +358,84 @@ export const updateDoc = async (id, updates) => {
       return mockStore[idx];
     }
     const { data } = await api.put(`/api/docs/${id}`, updates);
+    return data;
+  });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Version history (Documentation Studio).
+// A snapshot captures the doc's content + key metadata at a point in time.
+// Snapshots live on doc.versions (most-recent first). The current content is
+// NOT a snapshot until the next save creates one.
+// ─────────────────────────────────────────────────────────────────────────────
+const MAX_VERSIONS = 30;
+
+// Capture the doc's CURRENT state as a snapshot before it is overwritten.
+export const snapshotDoc = async (id, author) => {
+  return wrap(async () => {
+    if (USE_MOCK) {
+      const idx = mockStore.findIndex(d => d.id === id);
+      if (idx === -1) throw new Error('Document not found.');
+      const doc = mockStore[idx];
+      const snapshot = {
+        versionId: 'v-' + Date.now(),
+        savedAt: new Date().toISOString(),
+        author: author || doc.author || 'Unknown',
+        title: doc.title,
+        content: doc.content,
+        version: doc.version,
+      };
+      const versions = [snapshot, ...(doc.versions || [])].slice(0, MAX_VERSIONS);
+      mockStore[idx] = { ...doc, versions };
+      return snapshot;
+    }
+    const { data } = await api.post(`/api/docs/${id}/versions`, { author });
+    return data;
+  });
+};
+
+export const listDocVersions = async id => {
+  return wrap(async () => {
+    if (USE_MOCK) {
+      const doc = mockStore.find(d => d.id === id);
+      if (!doc) throw new Error('Document not found.');
+      return doc.versions || [];
+    }
+    const { data } = await api.get(`/api/docs/${id}/versions`);
+    return data;
+  });
+};
+
+// Restore a snapshot's content/title. Snapshots the current state first so the
+// restore itself is reversible.
+export const restoreDocVersion = async (id, versionId, author) => {
+  return wrap(async () => {
+    if (USE_MOCK) {
+      const idx = mockStore.findIndex(d => d.id === id);
+      if (idx === -1) throw new Error('Document not found.');
+      const doc = mockStore[idx];
+      const snap = (doc.versions || []).find(v => v.versionId === versionId);
+      if (!snap) throw new Error('Version not found.');
+      // Snapshot current state, then apply the restore.
+      const current = {
+        versionId: 'v-' + Date.now(),
+        savedAt: new Date().toISOString(),
+        author: author || doc.author || 'Unknown',
+        title: doc.title,
+        content: doc.content,
+        version: doc.version,
+      };
+      const versions = [current, ...(doc.versions || [])].slice(0, MAX_VERSIONS);
+      mockStore[idx] = {
+        ...doc,
+        title: snap.title,
+        content: snap.content,
+        versions,
+        updatedAt: new Date().toISOString(),
+      };
+      return mockStore[idx];
+    }
+    const { data } = await api.post(`/api/docs/${id}/versions/${versionId}/restore`, { author });
     return data;
   });
 };

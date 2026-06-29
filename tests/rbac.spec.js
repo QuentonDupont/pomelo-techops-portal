@@ -105,12 +105,19 @@ test.describe('Default ticket assignment', () => {
   test('a new ticket from a regular user lands assigned to the default admin', async ({ page }) => {
     await freshLogin(page, USER);
     await page.click('button:has-text("Submit Ticket")');
-    await page.fill('input[aria-label="Email"]', USER.email);
-    await page.fill('input[aria-label="Ticket title"]', 'RBAC default-assignee smoke test');
-    await page.fill('textarea[aria-label="Description"]', 'Auto-routed to admin for triage.');
-    await page.fill('textarea[aria-label="Current result"]', 'unrouted');
-    await page.fill('textarea[aria-label="Expected result"]', 'routed to default admin');
-    await page.click('button:has-text("Submit Ticket")');
+    // SubmitPage fields are labelled by placeholder, not aria-label.
+    await page.fill('input[placeholder="your.name@pomelo.com"]', USER.email);
+    await page.fill('input[placeholder^="Short, direct summary"]', 'RBAC default-assignee smoke test');
+    await page.fill('textarea[placeholder^="Describe your issue in full"]', 'Auto-routed to admin for triage.');
+    await page.fill('textarea[placeholder^="What is happening right now"]', 'unrouted');
+    await page.fill('textarea[placeholder^="What should be happening"]', 'routed to default admin');
+    // Required fields — without these, validation blocks submit.
+    await page.locator('label:has-text("Shopify")').first().click(); // at least one platform
+    await page.locator('select', { has: page.locator('option:text-is("Select shop")') }).selectOption('Pomelo TH');
+    await page.locator('select', { has: page.locator('option:text-is("Select department")') }).selectOption('Tech & Engineering');
+    await page.locator('select', { has: page.locator('option:text-is("Select priority")') }).selectOption('Medium');
+    // The form's own submit button shares the "Submit Ticket" label with the nav — take the last.
+    await page.locator('button:has-text("Submit Ticket")').last().click();
     // The submit handler navigates to My Tickets on success.
     await page.waitForSelector('text=My Tickets', { timeout: 8000 });
     const tickets = await page.evaluate(() => JSON.parse(localStorage.getItem('pomelo:v1:tickets') || '[]'));

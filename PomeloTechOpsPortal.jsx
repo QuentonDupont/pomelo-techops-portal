@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Component } from 'react';
 import DocImportExportPage from './src/components/docs/DocImportExportPage.jsx';
+import { MarkdownView } from './src/components/docs/MarkdownView.jsx';
+import DocStudioPage from './src/components/docs/studio/DocStudioPage.jsx';
 import { createJiraTicket, isJiraConfigured } from './src/api/jiraApi.js';
 import { listFeaturedDocs, listDocSummaries } from './src/api/docsApi.js';
 import FilePreviewCard, { fileToAttachment, ATTACHMENT_DATAURL_LIMIT as _ATT_LIMIT } from './src/components/FilePreviewCard.jsx'; // eslint-disable-line no-unused-vars
@@ -86,6 +88,45 @@ const MOCK_TICKETS = [
       { from: 'Kai Nguyen', time: '2026-03-24 11:32', text: 'Hi, I\'ve received your ticket. Can you confirm which Shopify store you\'re trying to access?' },
       { from: 'You', time: '2026-03-24 11:45', text: 'It\'s the main Pomelo store — pomelo-fashion.myshopify.com' },
     ],
+    pullRequests: [
+      {
+        id: 'pr-482', number: 482, title: 'Fix 403 on Shopify admin SSO callback',
+        url: 'https://github.com/pomelofashion/shopify-admin/pull/482',
+        repo: 'pomelofashion/shopify-admin', status: 'OPEN',
+        author: { name: 'Kai Nguyen', login: 'kai-nguyen' },
+        sourceBranch: 'fix/sso-callback-403', targetBranch: 'main',
+        additions: 124, deletions: 38, changedFiles: 6, commentCount: 4,
+        reviews: [
+          { reviewer: 'Prim Srisawat', state: 'CHANGES_REQUESTED' },
+          { reviewer: 'Alex Lee', state: 'COMMENTED' },
+        ],
+        checks: { status: 'failed', passed: 9, failed: 2, pending: 0, total: 11 },
+        lastUpdate: '2026-03-25T10:32:00Z',
+      },
+      {
+        id: 'pr-475', number: 475, title: 'Add structured logging to auth middleware',
+        url: 'https://github.com/pomelofashion/shopify-admin/pull/475',
+        repo: 'pomelofashion/shopify-admin', status: 'MERGED',
+        author: { name: 'Kai Nguyen', login: 'kai-nguyen' },
+        sourceBranch: 'chore/auth-logging', targetBranch: 'main',
+        additions: 61, deletions: 9, changedFiles: 3, commentCount: 2,
+        reviews: [{ reviewer: 'Alex Lee', state: 'APPROVED' }],
+        checks: { status: 'success', passed: 11, failed: 0, pending: 0, total: 11 },
+        lastUpdate: '2026-03-24 16:05',
+      },
+      {
+        id: 'pr-488', number: 488, title: 'WIP: regression test for SSO 403 path',
+        url: 'https://github.com/pomelofashion/shopify-admin/pull/488',
+        repo: 'pomelofashion/shopify-admin', status: 'DRAFT',
+        author: { name: 'Prim Srisawat', login: 'prim-s' },
+        sourceBranch: 'test/sso-403-regression', targetBranch: 'main',
+        additions: 47, deletions: 0, changedFiles: 2, commentCount: 0,
+        reviews: [],
+        checks: { status: 'pending', passed: 4, failed: 0, pending: 3, total: 7 },
+        lastUpdate: '2026-03-25T09:12:00Z',
+      },
+    ],
+    development: { branches: 4, commits: 12, lastCommitAt: '2026-03-25T10:32:00Z' },
   },
   {
     id: 'TKT-2026-0038',
@@ -112,6 +153,23 @@ const MOCK_TICKETS = [
       { from: 'You', time: '2026-03-21 10:20', text: 'That worked! Thank you so much.' },
       { from: 'Prim Srisawat', time: '2026-03-22 15:30', text: 'Glad that resolved it! Marking this ticket as resolved. Let us know if the issue recurs.' },
     ],
+    pullRequests: [
+      {
+        id: 'pr-310', number: 310, title: 'Re-register Slack push tokens after iOS upgrade',
+        url: 'https://github.com/pomelofashion/mobile-notifications/pull/310',
+        repo: 'pomelofashion/mobile-notifications', status: 'MERGED',
+        author: { name: 'Prim Srisawat', login: 'prim-s' },
+        sourceBranch: 'fix/slack-push-ios18', targetBranch: 'main',
+        additions: 88, deletions: 21, changedFiles: 4, commentCount: 3,
+        reviews: [
+          { reviewer: 'Kai Nguyen', state: 'APPROVED' },
+          { reviewer: 'Alex Lee', state: 'APPROVED' },
+        ],
+        checks: { status: 'success', passed: 14, failed: 0, pending: 0, total: 14 },
+        lastUpdate: '2026-03-22 14:50',
+      },
+    ],
+    development: { branches: 2, commits: 5, lastCommitAt: '2026-03-22T14:50:00Z' },
   },
   {
     id: 'TKT-2026-0031',
@@ -158,6 +216,20 @@ const MOCK_TICKETS = [
     messages: [
       { from: 'Sara M.', time: '2026-03-26 08:10', text: 'Shopee TH sync has been failing since 2 AM. Our inventory is out of date for 200+ SKUs.' },
     ],
+    pullRequests: [
+      {
+        id: 'pr-901', number: 901, title: 'Add retry + backoff to Shopee PIM sync worker',
+        url: 'https://github.com/pomelofashion/marketplace-sync/pull/901',
+        repo: 'pomelofashion/marketplace-sync', status: 'OPEN',
+        author: { name: 'Kai Nguyen', login: 'kai-nguyen' },
+        sourceBranch: 'fix/shopee-sync-retry', targetBranch: 'main',
+        additions: 203, deletions: 54, changedFiles: 9, commentCount: 1,
+        reviews: [{ reviewer: 'Alex Lee', state: 'APPROVED' }],
+        checks: { status: 'success', passed: 18, failed: 0, pending: 0, total: 18 },
+        lastUpdate: '2026-03-26T07:40:00Z',
+      },
+    ],
+    development: { branches: 3, commits: 8, lastCommitAt: '2026-03-26T07:40:00Z' },
   },
   {
     id: 'TKT-2026-0044',
@@ -642,6 +714,48 @@ const saveStore = (key, value) => {
   if (!__safeLocal) return;
   try { window.localStorage.setItem(STORE_PREFIX + key, JSON.stringify(value)); } catch { /* quota / private mode — drop silently */ }
 };
+const clearStore = (key) => {
+  if (!__safeLocal) return;
+  try { window.localStorage.removeItem(STORE_PREFIX + key); } catch { /* ignore */ }
+};
+
+// ─── Form draft persistence hook ──────────────────────────────────────────────
+// Drop-in replacement for useState that mirrors the value to localStorage so a
+// half-filled form survives navigating away and back. Drafts are scoped to the
+// logged-in user (via _currentActor) and restored silently on mount.
+//   const [form, setForm, clearDraft] = usePersistentState('submit', EMPTY_FORM, { omit: ['files'] });
+// `options.omit` lists keys that must never be serialised (e.g. File objects,
+// which JSON.stringify would turn into {}). Call clearDraft() on a successful
+// submit to wipe the stored draft and reset to the initial value.
+function usePersistentState(key, initialValue, options = {}) {
+  const omit = options.omit || [];
+  // Scope per user; _currentActor is set on login (falls back to 'anon').
+  const scopedKey = `draft:${_currentActor?.email || 'anon'}:${key}`;
+  const computeInitial = () => (typeof initialValue === 'function' ? initialValue() : initialValue);
+  const stripOmitted = (value) => {
+    if (!value || typeof value !== 'object' || omit.length === 0) return value;
+    const copy = { ...value };
+    for (const k of omit) delete copy[k];
+    return copy;
+  };
+  const [value, setValue] = useState(() => {
+    const init = computeInitial();
+    const saved = loadStore(scopedKey, null);
+    // Merge saved over the initial so omitted/new keys always start clean.
+    return saved && typeof saved === 'object' && typeof init === 'object'
+      ? { ...init, ...saved }
+      : (saved != null ? saved : init);
+  });
+  useEffect(() => {
+    saveStore(scopedKey, stripOmitted(value));
+  }, [scopedKey, value]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clearDraft = useCallback(() => {
+    clearStore(scopedKey);
+    setValue(computeInitial());
+  }, [scopedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  return [value, setValue, clearDraft];
+}
+
 // Replace an array's contents in-place so existing references stay valid.
 const replaceArrayInPlace = (arr, next) => {
   arr.length = 0;
@@ -790,6 +904,129 @@ function useJiraSla(jiraKey) {
     return () => { cancelled = true; };
   }, [jiraKey]);
   return data;
+}
+
+// ─── GitHub pull requests (via Jira dev-status) ───────────────────────────────
+// Jira surfaces linked GitHub PRs on an issue through its dev-status API. The
+// BFF normalises that into a flat list; tickets carry a `pullRequests` mock so
+// the panel is populated in demo mode (no Jira token) exactly like the rest of
+// the Jira surface. Normalised PR shape:
+//   { id, number, title, url, repo, status, author:{name,login}, sourceBranch,
+//     targetBranch, additions, deletions, changedFiles, commentCount,
+//     reviews:[{reviewer,state}], checks:{status,passed,failed,pending,total},
+//     lastUpdate }
+
+// PR lifecycle status → presentation (icon, colours, label).
+const PR_STATUS_META = {
+  OPEN:     { icon: '🟢', label: 'Open',     bg: '#DCFCE7', fg: '#15803D' },
+  DRAFT:    { icon: '📝', label: 'Draft',    bg: 'var(--bg-hover)', fg: 'var(--text-secondary)' },
+  MERGED:   { icon: '🟣', label: 'Merged',   bg: '#F3E8FF', fg: '#7E22CE' },
+  DECLINED: { icon: '🔴', label: 'Declined', bg: '#FEE2E2', fg: '#B91C1C' },
+};
+const prStatusMeta = status => PR_STATUS_META[status] || PR_STATUS_META.OPEN;
+
+// CI/checks rollup → presentation.
+const PR_CHECK_META = {
+  success: { icon: '✓', label: 'Checks passing', bg: '#DCFCE7', fg: '#15803D' },
+  failed:  { icon: '✕', label: 'Checks failing', bg: '#FEE2E2', fg: '#B91C1C' },
+  pending: { icon: '•', label: 'Checks running', bg: '#FEF3C7', fg: '#92400E' },
+};
+const prCheckMeta = status => PR_CHECK_META[status] || null;
+
+// Rolls a PR list up into the counts shown in the panel header + chip.
+function prSummary(prs) {
+  const list = Array.isArray(prs) ? prs : [];
+  return {
+    total: list.length,
+    open: list.filter(p => p.status === 'OPEN').length,
+    draft: list.filter(p => p.status === 'DRAFT').length,
+    merged: list.filter(p => p.status === 'MERGED').length,
+    declined: list.filter(p => p.status === 'DECLINED').length,
+    failing: list.filter(p => p.checks?.status === 'failed').length,
+  };
+}
+
+// Returns { prs, summary, loading, source }. Uses the ticket's mock PRs as the
+// baseline and overlays anything the BFF returns from live Jira dev-status.
+function usePullRequests(jiraKey, ticket) {
+  const mock = useMemo(() => (Array.isArray(ticket?.pullRequests) ? ticket.pullRequests : []), [ticket]);
+  const [prs, setPrs] = useState(mock);
+  const [source, setSource] = useState(mock.length ? 'mock' : 'none');
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { setPrs(mock); setSource(mock.length ? 'mock' : 'none'); }, [mock]);
+  useEffect(() => {
+    if (!jiraKey) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/jira/issue/${encodeURIComponent(jiraKey)}/pull-requests`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled || !json?.available || !Array.isArray(json.pullRequests)) return;
+        setPrs(json.pullRequests);
+        setSource('jira');
+      } catch { /* keep mock */ }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [jiraKey]);
+  return { prs, summary: prSummary(prs), loading, source };
+}
+
+// "17 days ago" style relative time for the Development panel.
+function relativeTime(value) {
+  if (!value) return '';
+  const then = new Date(value).getTime();
+  if (Number.isNaN(then)) return '';
+  const diff = Date.now() - then;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days} day${days > 1 ? 's' : ''} ago`;
+  const months = Math.floor(days / 30);
+  return `${months} month${months > 1 ? 's' : ''} ago`;
+}
+
+// The single status badge shown next to "N pull requests" — mirrors Jira, which
+// surfaces the most-recently-updated PR's state.
+function aggregatePrStatus(prs) {
+  const list = Array.isArray(prs) ? prs : [];
+  if (list.length === 0) return null;
+  const latest = list
+    .slice()
+    .sort((a, b) => new Date(b.lastUpdate || 0) - new Date(a.lastUpdate || 0))[0];
+  return latest?.status || 'OPEN';
+}
+
+// Rolls a ticket's dev data into the Development-panel summary. Build status is
+// derived from PR CI checks (a PR with failing checks = a failing build), so the
+// panel and the per-PR checks always agree.
+function devSummary(ticket) {
+  const prs = Array.isArray(ticket?.pullRequests) ? ticket.pullRequests : [];
+  const d = ticket?.development || {};
+  const buildsFailing = prs.filter(p => p.checks?.status === 'failed').length;
+  const buildsTotal = prs.filter(p => p.checks && p.checks.total > 0).length;
+  const buildsPending = prs.filter(p => p.checks?.status === 'pending').length;
+  return {
+    branches: d.branches ?? 0,
+    commits: d.commits ?? 0,
+    lastCommitAt: d.lastCommitAt || null,
+    prs,
+    prCount: prs.length,
+    prStatus: aggregatePrStatus(prs),
+    prSummary: prSummary(prs),
+    builds: {
+      failing: buildsFailing,
+      pending: buildsPending,
+      total: buildsTotal,
+      status: buildsFailing > 0 ? 'failing' : buildsPending > 0 ? 'pending' : 'passing',
+    },
+    hasAny: prs.length > 0 || (d.branches ?? 0) > 0 || (d.commits ?? 0) > 0,
+  };
 }
 
 // FilePreviewCard, FILE_CATEGORIES, categoryForFile, fileToAttachment, etc.
@@ -2371,7 +2608,7 @@ function DocPanel({ doc, onClose, onReadFull }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
-          <DocMarkdown content={doc.content} />
+          <MarkdownView content={doc.content} skipH1 />
         </div>
         {/* Read Full Article CTA */}
         <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-page)' }}>
@@ -2480,7 +2717,7 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
         <div style={{ height: '1px', background: 'var(--border-default)', marginBottom: '28px' }} />
 
         {/* Article body */}
-        <DocMarkdown content={activeDoc.content} />
+        <MarkdownView content={activeDoc.content} skipH1 />
 
         {/* Next / Prev navigation */}
         {otherDocs.length > 0 && (
@@ -2515,38 +2752,6 @@ function DocFullPage({ doc, allDocs, onClose, onSelect }) {
   );
 }
 
-// Safely render inline markdown bold (**text**) as React <strong> elements
-// without using dangerouslySetInnerHTML. Splits on the bold pattern and
-// alternates between plain text and bold spans.
-function InlineMd({ text }) {
-  const parts = text.split(/\*\*([^*]+)\*\*/g);
-  return (
-    <>
-      {parts.map((part, i) =>
-        i % 2 === 1 ? <strong key={i}>{part}</strong> : part
-      )}
-    </>
-  );
-}
-
-function DocMarkdown({ content }) {
-  const lines = (content || '').split('\n');
-  return (
-    <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-      {lines.map((line, i) => {
-        if (line.startsWith('# '))   return <h1 key={i} style={{ fontSize: '20px', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '12px', marginTop: i === 0 ? 0 : '20px' }}>{line.slice(2)}</h1>;
-        if (line.startsWith('## '))  return <h2 key={i} style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', marginTop: '18px' }}>{line.slice(3)}</h2>;
-        if (line.startsWith('### ')) return <h3 key={i} style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', marginTop: '14px' }}>{line.slice(4)}</h3>;
-        if (line.startsWith('- [ ] ')) return <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}><span style={{ color: 'var(--border-strong)' }}>☐</span><span>{line.slice(6)}</span></div>;
-        if (line.startsWith('- '))   return <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}><span style={{ color: 'var(--accent-primary)', flexShrink: 0 }}>•</span><span><InlineMd text={line.slice(2)} /></span></div>;
-        if (line.startsWith('| '))   return null;
-        if (line === '')             return <div key={i} style={{ height: '8px' }} />;
-        return <p key={i} style={{ marginBottom: '6px' }}><InlineMd text={line} /></p>;
-      })}
-    </div>
-  );
-}
-
 // ─── Ticket Detail ────────────────────────────────────────────────────────────
 function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, onAddNotification, currentUser }) {
   const can = useCan();
@@ -2567,7 +2772,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
   const jiraWorklog = useJiraWorklog(ticket?.jiraKey);
 
   const workflow = useJiraWorkflow();
-  const statusOrder = workflow.statuses.map(s => s.name);
+  const statusOrder = ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
   const currentIdx = statusOrder.indexOf(ticket.status);
 
   // Context about the assignee (department + workload) — shown to anyone with
@@ -2740,6 +2945,9 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
           </div>
         </div>
       )}
+
+      {/* Development panel — branches, commits, PRs, build status (Jira-style) */}
+      <DevelopmentPanel ticket={ticket} />
 
       {/* CSAT (resolved tickets only) */}
       {jiraCsat?.available && jiraCsat.rating != null && (
@@ -2957,7 +3165,7 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
                     onChange={e => onStatusChange(ticket.id, e.target.value)}
                     style={{ ...S.select, padding: '6px 28px 6px 10px', fontSize: '13px' }}
                   >
-                    {['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'].map(s => <option key={s} value={s}>{s}</option>)}
+                    {statusOrder.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)', fontSize: '11px' }}>▾</span>
                 </div>
@@ -3060,6 +3268,225 @@ function JiraSyncChip({ ticket }) {
     : '';
   return (
     <span title={title} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: p.bg, color: p.fg, fontWeight: 700 }}>{p.label}</span>
+  );
+}
+
+// ─── Development chip ─────────────────────────────────────────────────────────
+// The "symbol" on a ticket row signalling linked development activity, mirroring
+// the compact dev cluster Jira renders on board cards. Tinted red when a build
+// is failing, purple when every PR is merged, blue otherwise. Hidden when the
+// ticket has no dev data.
+function DevChip({ ticket }) {
+  const d = devSummary(ticket);
+  if (!d.hasAny) return null;
+  const allMerged = d.prCount > 0 && d.prSummary.merged === d.prCount;
+  const palette = d.builds.status === 'failing'
+    ? { bg: '#FEE2E2', fg: '#B91C1C' }
+    : allMerged
+      ? { bg: '#F3E8FF', fg: '#7E22CE' }
+      : { bg: '#EFF6FF', fg: '#1D4ED8' };
+  const buildIcon = d.builds.status === 'failing' ? '❌' : d.builds.status === 'pending' ? '🟡' : '✅';
+  const title = `${d.prCount} pull request${d.prCount !== 1 ? 's' : ''}` +
+    (d.branches ? ` · ${d.branches} branches` : '') +
+    (d.builds.failing ? ` · ${d.builds.failing} build${d.builds.failing > 1 ? 's' : ''} failing` : d.builds.total ? ' · builds passing' : '');
+  return (
+    <span aria-label={`Development: ${d.prCount} pull requests`} title={title} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: palette.bg, color: palette.fg, fontWeight: 700 }}>
+      🔀 {d.prCount}{d.builds.total ? <> {buildIcon}</> : null}
+    </span>
+  );
+}
+
+// ─── Pull-request detail card ─────────────────────────────────────────────────
+// One expandable PR inside the Development popup. Collapsed: status, title,
+// repo#number, reviewers, CI rollup, last-updated — the "more details" view.
+// The header links straight to the PR on GitHub; expanding reveals branch flow,
+// change stats and per-reviewer state.
+function PrCard({ pr }) {
+  const [open, setOpen] = useState(false);
+  const sm = prStatusMeta(pr.status);
+  const cm = prCheckMeta(pr.checks?.status);
+  const reviewerInitials = (pr.reviews || []).slice(0, 3).map(r =>
+    (r.reviewer || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  );
+  return (
+    <div style={{ background: 'var(--bg-page)', borderRadius: '10px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px' }}>
+        <span title={sm.label} style={{ fontSize: '15px', flexShrink: 0 }}>{sm.icon}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <a href={pr.url} target="_blank" rel="noopener noreferrer" aria-label={`Open pull request #${pr.number} on GitHub`}
+            style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {pr.title} ↗
+          </a>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            {pr.repo} #{pr.number} · updated {relativeTime(pr.lastUpdate) || '—'}
+          </div>
+        </div>
+        {reviewerInitials.length > 0 && (
+          <div style={{ display: 'flex', flexShrink: 0 }}>
+            {reviewerInitials.map((ini, i) => (
+              <span key={i} title="Reviewer" style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--accent-soft)', color: 'var(--accent-primary)', fontSize: '9px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--bg-surface)', marginLeft: i ? '-7px' : 0 }}>{ini}</span>
+            ))}
+          </div>
+        )}
+        <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '100px', background: sm.bg, color: sm.fg, fontWeight: 700, flexShrink: 0 }}>{sm.label}</span>
+        {cm && <span title={cm.label} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '100px', background: cm.bg, color: cm.fg, fontWeight: 700, flexShrink: 0 }}>{cm.icon}</span>}
+        <button onClick={() => setOpen(o => !o)} aria-label={open ? 'Collapse details' : 'Expand details'} aria-expanded={open}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--border-strong)', fontSize: '14px', flexShrink: 0, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>›</button>
+      </div>
+
+      {open && (
+        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-default)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px' }}>
+            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>{pr.sourceBranch}</span>
+            <span>→</span>
+            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>{pr.targetBranch}</span>
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <strong style={{ color: 'var(--text-primary)' }}>{pr.author?.name || pr.author?.login || '—'}</strong>
+            {' · '}+{pr.additions ?? 0} / −{pr.deletions ?? 0} · {pr.changedFiles ?? 0} files · {pr.commentCount ?? 0} comments
+          </div>
+          {pr.checks && (
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              CI: {pr.checks.passed}/{pr.checks.total} passing
+              {pr.checks.failed ? ` · ${pr.checks.failed} failing` : ''}
+              {pr.checks.pending ? ` · ${pr.checks.pending} running` : ''}
+            </div>
+          )}
+          {pr.reviews && pr.reviews.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              {pr.reviews.map((r, i) => {
+                const rp = r.state === 'APPROVED' ? { bg: '#DCFCE7', fg: '#15803D', label: '✓ Approved' }
+                  : r.state === 'CHANGES_REQUESTED' ? { bg: '#FEE2E2', fg: '#B91C1C', label: '✕ Changes requested' }
+                  : { bg: 'var(--bg-hover)', fg: 'var(--text-secondary)', label: '💬 Commented' };
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', fontSize: '12px' }}>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{r.reviewer}</span>
+                    <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '100px', background: rp.bg, color: rp.fg, fontWeight: 700 }}>{rp.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <a href={pr.url} target="_blank" rel="noopener noreferrer" style={{ ...S.orangeBtn, textDecoration: 'none', textAlign: 'center', display: 'block', fontSize: '13px', padding: '8px' }}>
+            Open in GitHub ↗
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Development popup (pull-request breakdown) ───────────────────────────────
+// The "more details" screen that opens from the Development panel's pull-request
+// line. Shows the merged / open / failing breakdown and one PrCard per PR.
+function DevelopmentPopup({ ticket, prs, onClose }) {
+  useEffect(() => {
+    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+  const summary = prSummary(prs);
+  const Count = ({ value, label, color }) => (
+    <div aria-label={`${label}: ${value}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '56px' }}>
+      <span style={{ fontSize: '20px', fontWeight: 900, color }}>{value}</span>
+      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+    </div>
+  );
+  return (
+    <>
+      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 320, animation: 'fadeIn 0.15s ease' }} />
+      <div role="dialog" aria-modal="true" aria-label="Pull requests" style={{
+        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+        background: 'var(--bg-surface)', borderRadius: '16px', zIndex: 321,
+        width: '600px', maxWidth: '95vw', maxHeight: '85vh',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.2s ease',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        <div style={{ background: '#111111', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 700, marginBottom: '4px', letterSpacing: '0.06em' }}>{ticket.id}</div>
+            <div style={{ fontSize: '16px', fontWeight: 900, color: '#fff' }}>Pull Requests ({summary.total})</div>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: '18px', justifyContent: 'center', padding: '16px 22px', borderBottom: '1px solid var(--border-default)', flexShrink: 0 }}>
+          <Count value={summary.merged} label="Merged" color="#7E22CE" />
+          <Count value={summary.open + summary.draft} label="Open" color="#1D4ED8" />
+          <Count value={summary.failing} label="Failing" color={summary.failing > 0 ? '#B91C1C' : 'var(--text-muted)'} />
+        </div>
+
+        <div style={{ overflowY: 'auto', padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {prs.map(pr => <PrCard key={pr.id || pr.number} pr={pr} />)}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Development panel (ticket detail) ────────────────────────────────────────
+// Mirrors Jira's "Development" widget: a compact summary of branches, commits,
+// pull requests (with the latest PR's status badge) and build health. The pull
+// requests and build lines open the DevelopmentPopup for the full breakdown.
+function DevelopmentPanel({ ticket }) {
+  const { prs, source } = usePullRequests(ticket?.jiraKey, ticket);
+  const [popupOpen, setPopupOpen] = useState(false);
+  const d = useMemo(() => devSummary({ ...ticket, pullRequests: prs }), [ticket, prs]);
+  if (!d.hasAny) return null;
+
+  const prMeta = d.prStatus ? prStatusMeta(d.prStatus) : null;
+  const buildLine = d.builds.status === 'failing'
+    ? { icon: '🔴', text: `${d.builds.failing} build${d.builds.failing > 1 ? 's' : ''} failing`, color: '#B91C1C' }
+    : d.builds.status === 'pending'
+      ? { icon: '🟡', text: `${d.builds.pending} build${d.builds.pending > 1 ? 's' : ''} running`, color: '#92400E' }
+      : d.builds.total
+        ? { icon: '🟢', text: 'Builds passing', color: '#15803D' }
+        : null;
+
+  const Row = ({ icon, children, onClick, ...rest }) => {
+    const base = { display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 10px', borderRadius: '8px', fontSize: '13px', width: '100%', textAlign: 'left' };
+    const content = <><span style={{ width: '18px', textAlign: 'center', flexShrink: 0 }}>{icon}</span><span style={{ flex: 1 }}>{children}</span></>;
+    return onClick
+      ? <button onClick={onClick} {...rest} style={{ ...base, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--accent-primary)', fontWeight: 700 }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>{content}</button>
+      : <div {...rest} style={{ ...base, color: 'var(--text-secondary)' }}>{content}</div>;
+  };
+
+  return (
+    <div style={{ ...S.card, marginBottom: '20px', borderLeft: `4px solid ${d.builds.status === 'failing' ? '#EF4444' : '#6366F1'}`, padding: '16px 18px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+        <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>🧬 Development</span>
+        {source === 'jira' && <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#DBEAFE', color: '#1D4ED8', fontWeight: 700 }}>via Jira</span>}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+        {d.branches > 0 && (
+          <Row icon="⎇">{d.branches} branch{d.branches > 1 ? 'es' : ''}</Row>
+        )}
+        {d.commits > 0 && (
+          <Row icon="◆">
+            {d.commits} commit{d.commits > 1 ? 's' : ''}
+            {d.lastCommitAt && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {relativeTime(d.lastCommitAt)}</span>}
+          </Row>
+        )}
+        {d.prCount > 0 && (
+          <Row icon="⇄" onClick={() => setPopupOpen(true)} aria-label={`${d.prCount} pull requests`}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              {d.prCount} pull request{d.prCount > 1 ? 's' : ''}
+              {prMeta && <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '3px', background: prMeta.bg, color: prMeta.fg, fontWeight: 800, letterSpacing: '0.03em' }}>{prMeta.label.toUpperCase()}</span>}
+            </span>
+          </Row>
+        )}
+        {buildLine && (
+          <Row icon="↻" onClick={() => setPopupOpen(true)} aria-label="Build status">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: buildLine.color, fontWeight: 700 }}>
+              {buildLine.text} {buildLine.icon}
+            </span>
+          </Row>
+        )}
+      </div>
+
+      {popupOpen && <DevelopmentPopup ticket={ticket} prs={prs} onClose={() => setPopupOpen(false)} />}
+    </div>
   );
 }
 
@@ -3247,7 +3674,7 @@ function TicketPopupModal({ ticket, onClose }) {
 function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) { // eslint-disable-line no-unused-vars
   const { can, currentRole } = useRbacCtx();
   const canEditOwnProfile = can('users.edit');
-  const [form, setForm] = useState({ ...currentUser });
+  const [form, setForm, clearDraft] = usePersistentState('profile-edit', { ...currentUser });
   const initials = form.name.split(' ').map(n => n[0]).join('').toUpperCase();
 
   useEffect(() => {
@@ -3256,7 +3683,7 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
-  const save = () => { setCurrentUser(form); onClose(); };
+  const save = () => { setCurrentUser(form); clearDraft(); onClose(); };
 
   return (
     <>
@@ -3350,7 +3777,7 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
 
 // ─── New Document Modal ───────────────────────────────────────────────────────
 function NewDocModal({ onSave, onClose }) {
-  const [form, setForm] = useState({ icon: '', title: '', category: '', summary: '', content: '' });
+  const [form, setForm, clearDraft] = usePersistentState('doc-new', { icon: '', title: '', category: '', summary: '', content: '' });
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
@@ -3373,6 +3800,7 @@ function NewDocModal({ onSave, onClose }) {
   const handleSave = () => {
     if (!validate()) return;
     onSave({ id: Date.now(), ...form });
+    clearDraft();
   };
 
   const err = (k) => errors[k] ? <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '4px' }}>{errors[k]}</div> : null;
@@ -3520,7 +3948,7 @@ function SuggestionCard({ suggestion, currentUser, role, onEdit, onDelete }) { /
 }
 
 function NewSuggestionForm({ currentUser, onSubmit }) {
-  const [form, setForm] = useState({ title: '', description: '' });
+  const [form, setForm, clearDraft] = usePersistentState('suggestion-new', { title: '', description: '' });
   const [errors, setErrors] = useState({});
 
   const submit = () => {
@@ -3530,7 +3958,7 @@ function NewSuggestionForm({ currentUser, onSubmit }) {
     setErrors(e);
     if (Object.keys(e).length > 0) return;
     onSubmit({ id: Date.now(), ...form, author: currentUser.name, timestamp: new Date().toISOString() });
-    setForm({ title: '', description: '' });
+    clearDraft();
     setErrors({});
   };
 
@@ -3719,7 +4147,7 @@ function HomePage({ setSection, role, currentUser }) { // eslint-disable-line no
 }
 
 const PLATFORMS = ['Shopify', 'Lazada', 'Shopee', 'TikTok Shop', 'Amazon', 'Tmall', 'JD.com', 'Nykaa', 'Internal Tools', 'Other'];
-const SHOPS = ['Pomelo TH', 'Pomelo MY', 'Pomelo SG', 'Pomelo PH', 'Pomelo ID', 'Pomelo VN', 'All Shops', 'Not Applicable'];
+const SHOPS = ['Pomelo TH', 'Pomelo MY', 'Pomelo SG', 'Pomelo PH', 'Pomelo ID', 'Pomelo VN', 'Shopee TH', 'Shopee SG', 'Lazada TH', 'Lazada SG', 'Tiktok TH', 'TMall', 'RED', 'JD', 'Zalora SG', 'Zalora HK', 'Nykaa Ind', 'All Shops', 'Not Applicable'];
 const DEPARTMENTS = ['Marketing', 'Merchandising', 'Tech & Engineering', 'Finance', 'HR & People', 'Operations', 'Creative', 'Customer Experience', 'Leadership', 'Other'];
 
 const EMPTY_FORM = {
@@ -3769,7 +4197,7 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
   const issueTypes = useIssueTypes();
   const components = useComponents();
   const initialStatus = (workflow.statuses.find(s => s.category === 'new') || workflow.statuses[0])?.name || 'To Do';
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm, clearDraft] = usePersistentState('submit', EMPTY_FORM, { omit: ['files'] });
   const [triage, setTriage] = useState(null); // { priority, reasoning, suggestedDocs, confidence }
   const [triaging, setTriaging] = useState(false);
   const [triageError, setTriageError] = useState('');
@@ -3946,7 +4374,7 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
     }
     addTicket(ticket);
     showToast(`Your ticket ${ticketId} has been submitted.${extraNote}`);
-    setForm(EMPTY_FORM);
+    clearDraft();
     setErrors({});
     if (fileInputRef.current) fileInputRef.current.value = '';
     setSection?.('mytickets');
@@ -4252,7 +4680,7 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
 
           {/* Actions */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '4px', borderTop: '1px solid var(--border-subtle)' }}>
-            <button onClick={() => { setForm(EMPTY_FORM); setErrors({}); if (fileInputRef.current) fileInputRef.current.value = ''; }} disabled={submitting} style={{ ...S.ghostBtn, opacity: submitting ? 0.5 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}>Clear Form</button>
+            <button onClick={() => { clearDraft(); setErrors({}); if (fileInputRef.current) fileInputRef.current.value = ''; }} disabled={submitting} style={{ ...S.ghostBtn, opacity: submitting ? 0.5 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}>Clear Form</button>
             <button onClick={submit} disabled={submitting} style={{ ...S.orangeBtn, opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '7px' }}>
               {submitting ? (
                 <>
@@ -4413,8 +4841,8 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
   const [, _setTicketsVersion] = useState(0);
   useEffect(() => subscribeTickets(_setTicketsVersion), []);
   const tickets = MOCK_TICKETS;
-  const [filter, setFilter] = useState('All');
-  const [priorityFilter, setPriorityFilter] = useState('All');
+  const [filter, setFilter] = usePersistentState('mytickets-filter', 'All');
+  const [priorityFilter, setPriorityFilter] = usePersistentState('mytickets-priority', 'All');
   const [assigneeFilter, setAssigneeFilter] = useState('All');
   const [staleOnly, setStaleOnly] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -4602,6 +5030,7 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
                   {isAdmin && isStale && <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', fontWeight: 700 }}>Stale {ageDays}d</span>}
                   {isAdmin && <SlaChip ticket={t} />}
                   {isAdmin && <JiraSyncChip ticket={t} />}
+                  <DevChip ticket={t} />
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                   {t.id} · {t.category} · Updated {t.updated}{isAdmin && t.assignee && <> · 👤 {t.assignee}</>}
@@ -4759,8 +5188,8 @@ function AdminPage() {
     color: statusColorFor(s.name),
     bg: STATUS_BG[statusColorFor(s.name)] || 'var(--bg-hover)',
   }));
-  const [filterPriority, setFilterPriority] = useState('All');
-  const [filterAssignee, setFilterAssignee] = useState('All');
+  const [filterPriority, setFilterPriority] = usePersistentState('admin-priority', 'All');
+  const [filterAssignee, setFilterAssignee] = usePersistentState('admin-assignee', 'All');
   const [dragId, setDragId] = useState(null);
   const [dragOver, setDragOver] = useState(null);
   const [detailTicket, setDetailTicket] = useState(null);
@@ -5528,10 +5957,14 @@ function UsersInRoleSection({ role, users, allRoles, canAssign, currentUserEmail
 }
 
 function CreateUserOnRolesPage({ roles, canCreate, onToast }) {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [department, setDepartment] = useState('IT & Technology');
-  const [roleId, setRoleId] = useState(roles.find(r => r.isDefault)?.id || roles[0]?.id || '');
+  // Persist the non-sensitive fields as a draft; the temp password is kept in
+  // plain state only (never written to localStorage).
+  const defaultRoleId = () => roles.find(r => r.isDefault)?.id || roles[0]?.id || '';
+  const [draft, setDraft, clearDraft] = usePersistentState('user-create', () => ({
+    name: '', email: '', department: 'IT & Technology', roleId: defaultRoleId(),
+  }));
+  const { name, email, department, roleId } = draft;
+  const setField = (k, v) => setDraft(d => ({ ...d, [k]: v }));
   const [tempPassword, setTempPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -5539,9 +5972,9 @@ function CreateUserOnRolesPage({ roles, canCreate, onToast }) {
     // If the previously-selected role disappears (admin deleted it), fall
     // back to the registry's default role.
     if (!roles.find(r => r.id === roleId)) {
-      setRoleId(roles.find(r => r.isDefault)?.id || roles[0]?.id || '');
+      setField('roleId', defaultRoleId());
     }
-  }, [roles, roleId]);
+  }, [roles, roleId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async (e) => {
     e.preventDefault();
@@ -5551,7 +5984,7 @@ function CreateUserOnRolesPage({ roles, canCreate, onToast }) {
     setBusy(false);
     if (res.error) { onToast(res.error, 'error'); return; }
     onToast(`Created user ${res.user.name}.`);
-    setName(''); setEmail(''); setTempPassword('');
+    clearDraft(); setTempPassword('');
   };
 
   return (
@@ -5563,19 +5996,19 @@ function CreateUserOnRolesPage({ roles, canCreate, onToast }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
         <div>
           <label style={S.label}>Full name</label>
-          <input value={name} onChange={e => setName(e.target.value)} disabled={!canCreate} required style={S.input} placeholder="Jane Doe" />
+          <input value={name} onChange={e => setField('name', e.target.value)} disabled={!canCreate} required style={S.input} placeholder="Jane Doe" />
         </div>
         <div>
           <label style={S.label}>Email</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={!canCreate} required style={S.input} placeholder="jane.doe@pomelo.com" />
+          <input type="email" value={email} onChange={e => setField('email', e.target.value)} disabled={!canCreate} required style={S.input} placeholder="jane.doe@pomelo.com" />
         </div>
         <div>
           <label style={S.label}>Department</label>
-          <input value={department} onChange={e => setDepartment(e.target.value)} disabled={!canCreate} style={S.input} />
+          <input value={department} onChange={e => setField('department', e.target.value)} disabled={!canCreate} style={S.input} />
         </div>
         <div>
           <label style={S.label}>Role</label>
-          <select value={roleId} onChange={e => setRoleId(e.target.value)} disabled={!canCreate} style={S.select}>
+          <select value={roleId} onChange={e => setField('roleId', e.target.value)} disabled={!canCreate} style={S.select}>
             {roles.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
           </select>
         </div>
@@ -5682,9 +6115,9 @@ function UsersPanelPage({ currentUserEmail }) {
   const [version, setVersion] = useState(0);
   useEffect(() => subscribeUsers(setVersion), []);
 
-  const [query, setQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [query, setQuery] = usePersistentState('users-query', '');
+  const [roleFilter, setRoleFilter] = usePersistentState('users-role', 'all');
+  const [statusFilter, setStatusFilter] = usePersistentState('users-status', 'all');
   const [editing, setEditing] = useState(null); // user object being edited
   const [creating, setCreating] = useState(false);
   const [resetting, setResetting] = useState(null); // user object whose password is being reset
@@ -6737,9 +7170,9 @@ function ChatLogsPage() {
 function AuditLogPage() {
   const [version, setVersion] = useState(0);
   useEffect(() => subscribeAudit(setVersion), []);
-  const [actionFilter, setActionFilter] = useState('all');
-  const [actorFilter, setActorFilter] = useState('all');
-  const [query, setQuery] = useState('');
+  const [actionFilter, setActionFilter] = usePersistentState('audit-action', 'all');
+  const [actorFilter, setActorFilter] = usePersistentState('audit-actor', 'all');
+  const [query, setQuery] = usePersistentState('audit-query', '');
 
   const entries = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -6998,6 +7431,7 @@ const tooltipContentStyle = {
 const WIDE_SECTIONS = new Set(['admin', 'users', 'audit', 'chatlogs', 'roles', 'devportal']);
 
 const ADMIN_TOOLS = [
+  { id: 'studio',   Icon: BookOpen,      label: 'Doc Studio',       hint: 'Author & edit documentation',       cap: 'docs.manage' },
   { id: 'admin',    Icon: Wrench,        label: 'Admin Console',   hint: 'Kanban + system controls',           cap: 'admin.kanban_view' },
   { id: 'roles',    Icon: Shield,        label: 'Roles & Access',  hint: 'Roles, capabilities, user creation', cap: 'roles.edit' },
   { id: 'users',    Icon: UsersIcon,     label: 'Users',            hint: 'Manage portal accounts',            cap: 'users.edit' },
@@ -7317,6 +7751,7 @@ function AppContent() {
       case 'sla':       page = <SLAPage />; break;
       case 'mytickets': page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'devportal': page = can('tickets.view_assigned') ? <DeveloperPortalPage currentUser={effectiveUser} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
+      case 'studio':    page = can('docs.manage') ? <DocStudioPage role={effectiveRole} currentUser={effectiveUser} onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'admin':     page = can('admin.kanban_view') ? <AdminPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'roles':     page = can('roles.edit') ? <RolesAccessPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'users':     page = can('users.edit') ? <UsersPanelPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;

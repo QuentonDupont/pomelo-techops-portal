@@ -137,21 +137,27 @@ test.describe('Backend QA — Ticket Submission & Default Assignment', () => {
   test('Submitted ticket persists to localStorage with all required fields', async ({ page }) => {
     await freshLogin(page, USER);
 
-    // Submit a new ticket
+    // Submit a new ticket. SubmitPage fields are labelled by placeholder, not aria-label.
     await page.click('button:has-text("Submit Ticket")');
-    await page.waitForSelector('input[aria-label="Email"]', { timeout: 5000 });
+    await page.waitForSelector('input[placeholder="your.name@pomelo.com"]', { timeout: 5000 });
 
     const ticketTitle = `QA Test Ticket ${Date.now()}`;
     const ticketEmail = 'test-qa@example.com';
 
-    await page.fill('input[aria-label="Email"]', ticketEmail);
-    await page.fill('input[aria-label="Ticket title"]', ticketTitle);
-    await page.fill('textarea[aria-label="Description"]', 'QA test ticket submission');
-    await page.fill('textarea[aria-label="Current result"]', 'Test current state');
-    await page.fill('textarea[aria-label="Expected result"]', 'Test expected state');
+    await page.fill('input[placeholder="your.name@pomelo.com"]', ticketEmail);
+    await page.fill('input[placeholder^="Short, direct summary"]', ticketTitle);
+    await page.fill('textarea[placeholder^="Describe your issue in full"]', 'QA test ticket submission');
+    await page.fill('textarea[placeholder^="What is happening right now"]', 'Test current state');
+    await page.fill('textarea[placeholder^="What should be happening"]', 'Test expected state');
 
-    // Submit
-    await page.click('button:has-text("Submit Ticket")');
+    // Required fields — without these, validation blocks submit/navigation.
+    await page.locator('label:has-text("Shopify")').first().click();
+    await page.locator('select', { has: page.locator('option:text-is("Select shop")') }).selectOption('Pomelo TH');
+    await page.locator('select', { has: page.locator('option:text-is("Select department")') }).selectOption('Tech & Engineering');
+    await page.locator('select', { has: page.locator('option:text-is("Select priority")') }).selectOption('Medium');
+
+    // The form's own submit button shares the "Submit Ticket" label with the nav — take the last.
+    await page.locator('button:has-text("Submit Ticket")').last().click();
 
     // Wait for navigation to My Tickets
     await page.waitForSelector('text=My Tickets', { timeout: 8000 });
@@ -178,19 +184,25 @@ test.describe('Backend QA — Ticket Submission & Default Assignment', () => {
     const settingsData = await getLocalStorage(page, 'pomelo:v1:settings');
     const defaultAssigneeEmail = settingsData?.defaultAssigneeEmail || 'quentond.d@pomelofashion.com';
 
-    // Submit a ticket
+    // Submit a ticket. SubmitPage fields are labelled by placeholder, not aria-label.
     await page.click('button:has-text("Submit Ticket")');
-    await page.waitForSelector('input[aria-label="Email"]', { timeout: 5000 });
+    await page.waitForSelector('input[placeholder="your.name@pomelo.com"]', { timeout: 5000 });
 
     const ticketTitle = `Default Assignment Test ${Date.now()}`;
 
-    await page.fill('input[aria-label="Email"]', 'qa@example.com');
-    await page.fill('input[aria-label="Ticket title"]', ticketTitle);
-    await page.fill('textarea[aria-label="Description"]', 'Test assignment');
-    await page.fill('textarea[aria-label="Current result"]', 'unassigned');
-    await page.fill('textarea[aria-label="Expected result"]', 'auto-assigned');
+    await page.fill('input[placeholder="your.name@pomelo.com"]', 'qa@example.com');
+    await page.fill('input[placeholder^="Short, direct summary"]', ticketTitle);
+    await page.fill('textarea[placeholder^="Describe your issue in full"]', 'Test assignment');
+    await page.fill('textarea[placeholder^="What is happening right now"]', 'unassigned');
+    await page.fill('textarea[placeholder^="What should be happening"]', 'auto-assigned');
 
-    await page.click('button:has-text("Submit Ticket")');
+    // Required fields — without these, validation blocks submit/navigation.
+    await page.locator('label:has-text("Shopify")').first().click();
+    await page.locator('select', { has: page.locator('option:text-is("Select shop")') }).selectOption('Pomelo TH');
+    await page.locator('select', { has: page.locator('option:text-is("Select department")') }).selectOption('Tech & Engineering');
+    await page.locator('select', { has: page.locator('option:text-is("Select priority")') }).selectOption('Medium');
+
+    await page.locator('button:has-text("Submit Ticket")').last().click();
     await page.waitForSelector('text=My Tickets', { timeout: 8000 });
 
     // Verify assignment

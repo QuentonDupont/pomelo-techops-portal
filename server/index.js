@@ -645,6 +645,78 @@ app.get('/api/v1/jira/issue/:key/sla', async (req, res, next) => {
   }
 });
 
+// ─── GET /api/v1/jira/issue/:key/pull-requests (PR) ───────────────────────────
+// Returns the GitHub pull requests linked to the issue, sourced from Jira's
+// dev-status API. The dev-status endpoint is keyed by the numeric issue id, so
+// we resolve that first. Normalises into the flat shape the portal renders.
+// Note: Jira's pullrequest dev-status payload does not carry CI/check rollups
+// (those live in the separate build dataType and aren't PR-keyed), so `checks`
+// is returned as null from live Jira — the client keeps any richer mock data.
+app.get('/api/v1/jira/issue/:key/pull-requests', async (req, res, next) => {
+  const token = requireJira(res);
+  if (!token) return;
+  const key = String(req.params.key || '').replace(/[^A-Z0-9-]/gi, '');
+  if (!key) return res.status(400).json({ error: 'Invalid issue key.' });
+
+  try {
+    // 1) Resolve the numeric issue id (dev-status is keyed by id, not key).
+    const issueRes = await fetch(`${jiraBaseUrl()}/rest/api/3/issue/${key}?fields=id`, {
+      headers: jiraAuthHeaders(token),
+    });
+    if (!issueRes.ok) return res.json({ available: false, key, note: 'Issue not reachable' });
+    const issue = await issueRes.json();
+    const issueId = issue.id;
+    if (!issueId) return res.json({ available: false, key, note: 'No issue id' });
+
+    // 2) Pull the GitHub PR detail from dev-status.
+    const devRes = await fetch(
+      `${jiraBaseUrl()}/rest/dev-status/latest/issue/detail?issueId=${encodeURIComponent(issueId)}&applicationType=GitHub&dataType=pullrequest`,
+      { headers: jiraAuthHeaders(token) }
+    );
+    if (!devRes.ok) return res.json({ available: false, key, note: 'Dev-status unavailable' });
+    const dev = await devRes.json();
+
+    const raw = (dev.detail || []).flatMap(d => d.pullRequests || []);
+    const pullRequests = raw.map(pr => {
+      const number = parseInt(String(pr.id || '').replace(/[^0-9]/g, ''), 10) || null;
+      return {
+        id: pr.id || `pr-${number}`,
+        number,
+        title: pr.name || `PR #${number}`,
+        url: pr.url || null,
+        repo:
+          pr.repositoryName ||
+          (pr.repositoryUrl || '').replace(/^https?:\/\/github\.com\//, '') ||
+          null,
+        status: String(pr.status || 'OPEN').toUpperCase(),
+        author: { name: pr.author?.name || null, login: pr.author?.name || null },
+        sourceBranch: pr.source?.branch || null,
+        targetBranch: pr.destination?.branch || null,
+        additions: null,
+        deletions: null,
+        changedFiles: null,
+        commentCount: pr.commentCount ?? 0,
+        reviews: (pr.reviewers || []).map(r => ({
+          reviewer: r.name,
+          state: r.approved ? 'APPROVED' : 'COMMENTED',
+        })),
+        checks: null,
+        lastUpdate: pr.lastUpdate || null,
+      };
+    });
+
+    res.json({
+      available: true,
+      key,
+      pullRequests,
+      source: 'jira',
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // ─── GET /api/v1/jira/users/assignable (U) ────────────────────────────────────
 app.get('/api/v1/jira/users/assignable', async (req, res) => {
   const token = process.env.JIRA_API_TOKEN;
