@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback, useContext, createCo
 import DocImportExportPage from './src/components/docs/DocImportExportPage.jsx';
 import { MarkdownView } from './src/components/docs/MarkdownView.jsx';
 import DocStudioPage from './src/components/docs/studio/DocStudioPage.jsx';
+import SuggestionsPage from './src/components/suggestions/SuggestionsPage.jsx';
 import { createJiraTicket, isJiraConfigured } from './src/api/jiraApi.js';
 import { listFeaturedDocs, listDocSummaries } from './src/api/docsApi.js';
 import FilePreviewCard, { fileToAttachment, ATTACHMENT_DATAURL_LIMIT as _ATT_LIMIT } from './src/components/FilePreviewCard.jsx'; // eslint-disable-line no-unused-vars
@@ -16,7 +17,7 @@ import {
 import {
   Search, Wrench, Users as UsersIcon, ScrollText, MessageCircle, BookOpen,
   Target, ClipboardList, Ticket, Home, PlusCircle, Moon, Sun, ChevronDown,
-  Star, User, Eye, Sparkles, X, Bell as BellIcon, Check, Shield, Briefcase,
+  Star, User, Eye, Sparkles, X, Bell as BellIcon, Check, Shield, Briefcase, Trash2,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
@@ -345,6 +346,9 @@ const updateTickets = (updater) => {
 const addTicket = (ticket) => {
   MOCK_TICKETS.unshift(ticket);
   bumpTickets();
+};
+const deleteTicket = (id) => {
+  updateTickets(ts => ts.filter(t => t.id !== id));
 };
 
 // Legacy fallback list. Live ticket UIs derive their options from
@@ -2261,9 +2265,11 @@ function LoginPage({ onLogin, onToast }) {
         </div>
       </div>
 
-      {/* Right panel */}
-      <div className="login-right" style={{ flex: 1, background: 'var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 40px' }}>
-        <div style={{ width: '100%', maxWidth: '400px' }}>
+      {/* Right panel — scroll-safe vertical centering: margin:auto keeps the form
+          centered when it fits, and overflowY:auto lets shorter viewports scroll
+          to the bottom CTA ("Sign up") instead of clipping it. */}
+      <div className="login-right" style={{ flex: 1, background: 'var(--bg-surface)', display: 'flex', overflowY: 'auto', padding: '48px 40px' }}>
+        <div style={{ width: '100%', maxWidth: '400px', margin: 'auto' }}>
           {renderRight()}
         </div>
       </div>
@@ -2759,6 +2765,8 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
   const canViewAll = can('tickets.view_all');
   const canSeeAudit = can('audit.view');
   const canChangeStatus = can('tickets.status_change_any') || (isAssignedToMe && can('tickets.status_change_own'));
+  const canDeleteTicket = can('tickets.delete');
+  const [confirmDel, setConfirmDel] = useState(false);
   const [newMsg, setNewMsg] = useState('');
   const [messages, setMessages] = useState(ticket.messages);
   const [internalNotes, setInternalNotes] = useState(ticket.internalNotes || []);
@@ -2874,9 +2882,23 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
 
   return (
     <div>
-      <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '14px', cursor: 'pointer', padding: 0, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-        ← Back to My Tickets
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '14px', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+          ← Back to My Tickets
+        </button>
+        {canDeleteTicket && (confirmDel ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '13px', color: '#DC2626', fontWeight: 700 }}>Delete this ticket permanently?</span>
+            <button onClick={() => { deleteTicket(ticket.id); onAddNotification?.({ type: 'ticket_deleted', title: `Ticket deleted: ${ticket.title}`, body: `${currentUser?.name || 'A staff member'} deleted ${ticket.id}.`, actorName: currentUser?.name || 'You' }); onBack(); }}
+              style={{ padding: '6px 12px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: '#DC2626', color: '#fff', fontWeight: 700, fontSize: '13px' }}>Yes, delete</button>
+            <button onClick={() => setConfirmDel(false)} style={{ padding: '6px 12px', borderRadius: '7px', border: '1px solid var(--border-default)', cursor: 'pointer', background: 'var(--bg-surface)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '13px' }}>Cancel</button>
+          </span>
+        ) : (
+          <button onClick={() => setConfirmDel(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '7px', border: '1px solid #FCA5A5', cursor: 'pointer', background: 'transparent', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
+            <Trash2 size={14} /> Delete ticket
+          </button>
+        ))}
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
@@ -3572,6 +3594,8 @@ function RecentActivityFeed({ role, onTicket, setSection }) { // eslint-disable-
 
 // ─── Ticket Popup Modal (Home Recent Activity) ────────────────────────────────
 function TicketPopupModal({ ticket, onClose }) {
+  const can = useCan();
+  const [confirmDel, setConfirmDel] = useState(false);
   useEffect(() => {
     const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handleKey);
@@ -3665,6 +3689,23 @@ function TicketPopupModal({ ticket, onClose }) {
             💬 {ticket.messages?.length || 0} message{ticket.messages?.length !== 1 ? 's' : ''} — open ticket in My Tickets to reply
           </div>
         </div>
+
+        {/* Footer — admin/developer delete (gated by tickets.delete) */}
+        {can('tickets.delete') && (
+          <div style={{ flexShrink: 0, borderTop: '1px solid var(--border-default)', padding: '12px 22px', background: 'var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+            {confirmDel ? (
+              <>
+                <span style={{ fontSize: '13px', color: '#DC2626', fontWeight: 700, marginRight: 'auto' }}>Delete this ticket permanently?</span>
+                <button onClick={() => { deleteTicket(ticket.id); onClose(); }} style={{ padding: '7px 14px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: '#DC2626', color: '#fff', fontWeight: 700, fontSize: '13px' }}>Yes, delete</button>
+                <button onClick={() => setConfirmDel(false)} style={{ padding: '7px 14px', borderRadius: '7px', border: '1px solid var(--border-default)', cursor: 'pointer', background: 'var(--bg-surface)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '13px' }}>Cancel</button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmDel(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: '1px solid #FCA5A5', cursor: 'pointer', background: 'transparent', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
+                <Trash2 size={14} /> Delete ticket
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </>
   );
@@ -5178,6 +5219,7 @@ function DeveloperPortalPage({ currentUser }) {
 
 // ─── Admin Kanban ─────────────────────────────────────────────────────────────
 function AdminPage() {
+  const can = useCan();
   const [, _setTicketsVersion] = useState(0);
   useEffect(() => subscribeTickets(_setTicketsVersion), []);
   const tickets = MOCK_TICKETS;
@@ -5194,6 +5236,8 @@ function AdminPage() {
   const [dragOver, setDragOver] = useState(null);
   const [detailTicket, setDetailTicket] = useState(null);
   const [editingAssignee, setEditingAssignee] = useState(null);
+  const [confirmDelId, setConfirmDelId] = useState(null);
+  const canDeleteTicket = can('tickets.delete');
 
   const visible = tickets.filter(t => {
     const okP = filterPriority === 'All' || t.priority === filterPriority;
@@ -5537,6 +5581,23 @@ function AdminPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Delete (admin/developer only — gated by tickets.delete) */}
+              {canDeleteTicket && (
+                <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                  {confirmDelId === detailTicket.id ? (
+                    <>
+                      <span style={{ fontSize: '13px', color: '#DC2626', fontWeight: 700, marginRight: 'auto' }}>Delete permanently?</span>
+                      <button onClick={() => { deleteTicket(detailTicket.id); setConfirmDelId(null); setDetailTicket(null); }} style={{ padding: '7px 14px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: '#DC2626', color: '#fff', fontWeight: 700, fontSize: '13px' }}>Yes, delete</button>
+                      <button onClick={() => setConfirmDelId(null)} style={{ padding: '7px 14px', borderRadius: '7px', border: '1px solid var(--border-default)', cursor: 'pointer', background: 'var(--bg-surface)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '13px' }}>Cancel</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setConfirmDelId(detailTicket.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: '1px solid #FCA5A5', cursor: 'pointer', background: 'transparent', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
+                      <Trash2 size={14} /> Delete ticket
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </>
@@ -7303,9 +7364,10 @@ function AuditLogPage() {
 
 // ─── Resources dropdown (groups reference pages) ─────────────────────────────
 const RESOURCE_ITEMS = [
-  { id: 'docs',     Icon: BookOpen,      label: 'Documentation',   hint: 'IT guides and how-tos' },
-  { id: 'priority', Icon: Target,        label: 'Priority Guide',  hint: 'P0–P3 definitions' },
-  { id: 'sla',      Icon: ClipboardList, label: 'SLA & Standards', hint: 'Response and resolution targets' },
+  { id: 'docs',        Icon: BookOpen,      label: 'Documentation',   hint: 'IT guides and how-tos' },
+  { id: 'suggestions', Icon: Sparkles,      label: 'Suggestions',     hint: 'Request features, docs & changes' },
+  { id: 'priority',    Icon: Target,        label: 'Priority Guide',  hint: 'P0–P3 definitions' },
+  { id: 'sla',         Icon: ClipboardList, label: 'SLA & Standards', hint: 'Response and resolution targets' },
 ];
 
 // ─── Shared style for Radix DropdownMenu surfaces ────────────────────────────
@@ -7565,6 +7627,65 @@ function useRoles()    { return useContext(RbacContext).roles; }
 function useRbacCtx()  { return useContext(RbacContext); }
 
 // ─── Main App (inner) ─────────────────────────────────────────────────────────
+// Theme design tokens (light + dark). Shared so BOTH the pre-auth login page
+// and the authenticated app define the CSS variables — otherwise the login page
+// renders before these are mounted and var(--accent-primary) etc. resolve to
+// nothing (invisible Sign In button, unstyled links).
+const THEME_TOKENS_CSS = `
+  :root, [data-theme="light"] {
+    --bg-page: #FAFAF9;
+    --bg-surface: #FFFFFF;
+    --bg-elevated: #FFFFFF;
+    --bg-input: #FAFAF9;
+    --bg-input-disabled: #F4F4F5;
+    --bg-hover: #F4F4F5;
+    --bg-overlay: rgba(15,15,18,0.45);
+    --bg-nav: #FFFFFF;
+    --border-default: #E4E4E7;
+    --border-subtle: #F4F4F5;
+    --border-strong: #D4D4D8;
+    --text-primary: #0A0A0B;
+    --text-secondary: #52525B;
+    --text-muted: #A1A1AA;
+    --text-inverse: #FFFFFF;
+    --accent-primary: #6366F1;
+    --accent-soft: #EEF2FF;
+    --shadow-card: 0 1px 2px rgba(15,15,18,0.04), 0 2px 6px rgba(15,15,18,0.06);
+    --shadow-dropdown: 0 1px 3px rgba(15,15,18,0.06), 0 8px 24px rgba(15,15,18,0.10), 0 16px 40px rgba(15,15,18,0.06);
+    --shadow-modal: 0 4px 12px rgba(15,15,18,0.08), 0 32px 80px rgba(15,15,18,0.15);
+    --focus-ring: 0 0 0 3px rgba(99,102,241,0.18);
+  }
+  [data-theme="dark"] {
+    --bg-page: #0B0B0E;
+    --bg-surface: #17171A;
+    --bg-elevated: #1C1C20;
+    --bg-input: #1C1C20;
+    --bg-input-disabled: #1C1C20;
+    --bg-hover: #232328;
+    --bg-overlay: rgba(0,0,0,0.7);
+    --bg-nav: #0F0F12;
+    --border-default: #2A2A2F;
+    --border-subtle: #1F1F23;
+    --border-strong: #3F3F46;
+    --text-primary: #FAFAFA;
+    --text-secondary: #A1A1AA;
+    --text-muted: #71717A;
+    --text-inverse: #FFFFFF;
+    --accent-primary: #818CF8;
+    --accent-soft: rgba(129,140,248,0.12);
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
+    --shadow-dropdown: 0 1px 3px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.6), 0 16px 48px rgba(0,0,0,0.3);
+    --shadow-modal: 0 4px 12px rgba(0,0,0,0.5), 0 32px 80px rgba(0,0,0,0.7);
+    --focus-ring: 0 0 0 3px rgba(129,140,248,0.30);
+  }
+  :root {
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 20px;
+  }
+`;
+
 function AppContent() {
   const { seedNotifications, addNotification } = useNotifications();
   const [section, setSection] = useState('home');
@@ -7714,7 +7835,7 @@ function AppContent() {
     }
     return items;
   }, [can]);
-  const RESOURCE_IDS = new Set(['docs', 'priority', 'sla']);
+  const RESOURCE_IDS = new Set(['docs', 'suggestions', 'priority', 'sla']);
 
   // Per-section capability requirements. A section without an entry is
   // public. When the effective view's `can` flips below the required
@@ -7747,6 +7868,7 @@ function AppContent() {
       case 'home':      page = <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
       case 'submit':    page = <SubmitPage setSection={setSection} showToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} currentUser={effectiveUser} />; break;
       case 'docs':      page = <DocImportExportPage role={effectiveRole} suggestions={suggestions} setSuggestions={setSuggestions} currentUser={effectiveUser} onDocEdit={(doc) => addNotification({ type: 'doc_edit', title: `Document updated: ${doc.title}`, body: `${effectiveUser?.name || 'You'} made changes to ${doc.title}.`, actorName: effectiveUser?.name || 'You', docId: doc.id })} />; break;
+      case 'suggestions': page = <SuggestionsPage currentUser={effectiveUser} can={can} onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} />; break;
       case 'priority':  page = <PriorityGuidePage />; break;
       case 'sla':       page = <SLAPage />; break;
       case 'mytickets': page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />; break;
@@ -7765,6 +7887,7 @@ function AppContent() {
   if (!isAuthenticated) {
     return (
       <>
+        <style>{THEME_TOKENS_CSS}</style>
         <LoginPage onLogin={handleLogin} onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} />
         {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
       </>
@@ -7801,59 +7924,7 @@ function AppContent() {
            Status colours (red/green/yellow/blue) are semantic and stay
            hardcoded throughout the codebase — not themed.
         ───────────────────────────────────────────────────────────────── */
-        :root, [data-theme="light"] {
-          /* Warmer neutrals — zinc family, Apple-leaning */
-          --bg-page: #FAFAF9;
-          --bg-surface: #FFFFFF;
-          --bg-elevated: #FFFFFF;
-          --bg-input: #FAFAF9;
-          --bg-input-disabled: #F4F4F5;
-          --bg-hover: #F4F4F5;
-          --bg-overlay: rgba(15,15,18,0.45);
-          --bg-nav: #FFFFFF;
-          --border-default: #E4E4E7;
-          --border-subtle: #F4F4F5;
-          --border-strong: #D4D4D8;
-          --text-primary: #0A0A0B;
-          --text-secondary: #52525B;
-          --text-muted: #A1A1AA;
-          --text-inverse: #FFFFFF;
-          --accent-primary: #6366F1;
-          --accent-soft: #EEF2FF;
-          --shadow-card: 0 1px 2px rgba(15,15,18,0.04), 0 2px 6px rgba(15,15,18,0.06);
-          --shadow-dropdown: 0 1px 3px rgba(15,15,18,0.06), 0 8px 24px rgba(15,15,18,0.10), 0 16px 40px rgba(15,15,18,0.06);
-          --shadow-modal: 0 4px 12px rgba(15,15,18,0.08), 0 32px 80px rgba(15,15,18,0.15);
-          --focus-ring: 0 0 0 3px rgba(99,102,241,0.18);
-        }
-        [data-theme="dark"] {
-          --bg-page: #0B0B0E;
-          --bg-surface: #17171A;
-          --bg-elevated: #1C1C20;
-          --bg-input: #1C1C20;
-          --bg-input-disabled: #1C1C20;
-          --bg-hover: #232328;
-          --bg-overlay: rgba(0,0,0,0.7);
-          --bg-nav: #0F0F12;
-          --border-default: #2A2A2F;
-          --border-subtle: #1F1F23;
-          --border-strong: #3F3F46;
-          --text-primary: #FAFAFA;
-          --text-secondary: #A1A1AA;
-          --text-muted: #71717A;
-          --text-inverse: #FFFFFF;
-          --accent-primary: #818CF8;
-          --accent-soft: rgba(129,140,248,0.12);
-          --shadow-card: 0 1px 2px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.3);
-          --shadow-dropdown: 0 1px 3px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.6), 0 16px 48px rgba(0,0,0,0.3);
-          --shadow-modal: 0 4px 12px rgba(0,0,0,0.5), 0 32px 80px rgba(0,0,0,0.7);
-          --focus-ring: 0 0 0 3px rgba(129,140,248,0.30);
-        }
-        :root {
-          --radius-sm: 6px;
-          --radius-md: 10px;
-          --radius-lg: 14px;
-          --radius-xl: 20px;
-        }
+        ${THEME_TOKENS_CSS}
         body {
           background: var(--bg-page);
           color: var(--text-primary);

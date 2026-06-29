@@ -240,6 +240,7 @@ export const SEED_ROLES = Object.freeze([
       'tickets.view_all',
       'tickets.view_assigned',
       'tickets.status_change_own',
+      'tickets.delete',
       'tickets.comment',
       'docs.manage',
     ]),
