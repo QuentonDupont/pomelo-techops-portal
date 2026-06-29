@@ -23,7 +23,16 @@ import { config as dotenvConfig } from 'dotenv';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { existsSync } from 'fs';
+import cookieParser from 'cookie-parser';
 import * as Sentry from '@sentry/node';
+import { dbHealth, dbEnabled } from './db.js';
+import authRouter from './routes/auth.js';
+import ticketsRouter from './routes/tickets.js';
+import usersRouter from './routes/users.js';
+import rolesRouter from './routes/roles.js';
+import auditRouter from './routes/audit.js';
+import docsRouter from './routes/docs.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenvConfig({ path: resolve(__dirname, '..', '.env.local') });
@@ -81,6 +90,13 @@ app.use(
 
 // 20 MB limit to accommodate base64-encoded PDF payloads
 app.use(express.json({ limit: '20mb' }));
+app.use(cookieParser());
+
+// Health probe — registered before the rate limiter so platform health checks
+// (Render, load balancers) are never throttled. Reports DB connectivity.
+app.get('/api/health', async (_req, res) => {
+  res.json({ status: 'ok', db: await dbHealth(), ts: new Date().toISOString() });
+});
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -90,6 +106,21 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests.' },
 });
 app.use('/api/', apiLimiter);
+
+// ─── DB-backed application routes (active only when DATABASE_URL is set) ───────
+// These provide real persistence (auth now; tickets/users/roles/docs next).
+// When unset, the app falls back to the existing mock/localStorage behaviour.
+if (dbEnabled) {
+  app.use('/api/auth', authRouter);
+  app.use('/api/tickets', ticketsRouter);
+  app.use('/api/users', usersRouter);
+  app.use('/api/roles', rolesRouter);
+  app.use('/api/audit', auditRouter);
+  app.use('/api/docs', docsRouter);
+  console.log(
+    '[BFF] DB-backed routes mounted: /api/auth, /api/tickets, /api/users, /api/roles, /api/audit, /api/docs'
+  );
+}
 
 // ─── Request schemas ──────────────────────────────────────────────────────────
 
@@ -1398,6 +1429,23 @@ app.post('/api/v1/chat', async (req, res, next) => {
   }
 });
 
+// ─── Static frontend (single-service deploy) ──────────────────────────────────
+// In production the built SPA is served by this same Node process. Mounted after
+// all /api routes so it never shadows them; only active when dist/ exists (so
+// local dev, where Vite serves the app on :5173, is unaffected).
+const distDir = resolve(__dirname, '..', 'dist');
+if (existsSync(resolve(distDir, 'index.html'))) {
+  app.use(express.static(distDir));
+  // SPA history fallback: any non-API GET returns index.html so client-side
+  // routing works on hard refresh. (Middleware form avoids Express 5 wildcard
+  // path syntax.)
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
+    res.sendFile(resolve(distDir, 'index.html'));
+  });
+  console.log('[BFF] Serving built frontend from dist/');
+}
+
 // ─── Central error handler ────────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
   log('error', 'Unhandled error', { error: err.message, stack: err.stack });
@@ -1409,4 +1457,7 @@ app.listen(PORT, () => {
   console.log(`[BFF] Pomelo TechOps API proxy → http://localhost:${PORT}`);
   console.log(`[BFF] NODE_ENV:             ${process.env.NODE_ENV || 'development'}`);
   console.log(`[BFF] Allowed origin:       ${allowedOrigin}`);
+  console.log(
+    `[BFF] Database:             ${dbEnabled ? 'configured' : 'not configured (DATABASE_URL unset)'}`
+  );
 });
