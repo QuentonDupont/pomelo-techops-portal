@@ -42,6 +42,8 @@ import {
   statusCategoryFor,
   BOARD_COLUMNS,
   ISSUE_TYPES,
+  labelColorFor,
+  PROBLEM_CATEGORIES,
   LEGACY_TO_JIRA_STATUS,
   mapLegacyStatus,
   SLA_DATA,
@@ -3687,12 +3689,53 @@ function TicketDetail({
   const canChangeStatus =
     can('tickets.status_change_any') || (isAssignedToMe && can('tickets.status_change_own'));
   const canDeleteTicket = can('tickets.delete');
+  // Field edits mirror the server's PATCH rule: staff or the assignee.
+  const canEditFields = canViewAll || isAssignedToMe;
   const [confirmDel, setConfirmDel] = useState(false);
   const [newMsg, setNewMsg] = useState('');
   const [messages, setMessages] = useState(ticket.messages);
   const [internalNotes, setInternalNotes] = useState(ticket.internalNotes || []);
   const [newNote, setNewNote] = useState('');
+  const [labelInput, setLabelInput] = useState('');
   const messagesEndRef = useRef(null);
+
+  // Patch pinned fields: optimistic local update + backend mirror. The parent
+  // re-derives `ticket` from the store on the next bump, so the UI refreshes.
+  const patchTicket = fields => {
+    updateTickets(ts =>
+      ts.map(t =>
+        t.id === ticket.id ? { ...t, ...fields, updated: new Date().toISOString().slice(0, 10) } : t
+      )
+    );
+    mirror(ticket.uuid && ticketsApi.updateTicket(ticket.uuid, fields));
+    recordAudit(
+      'ticket.update',
+      _currentActor,
+      { type: 'ticket', id: ticket.id, label: ticket.title },
+      { changedKeys: Object.keys(fields) }
+    );
+  };
+
+  // Local watch/unwatch. Kept out of the PATCH mirror on purpose — watching is
+  // self-service (server gets dedicated /watchers/me endpoints; until then the
+  // list lives client-side).
+  const myEmail = currentUser?.email || null;
+  const watching = !!myEmail && (ticket.watchers || []).includes(myEmail);
+  const toggleWatch = () => {
+    if (!myEmail) return;
+    updateTickets(ts =>
+      ts.map(t =>
+        t.id === ticket.id
+          ? {
+              ...t,
+              watchers: watching
+                ? (t.watchers || []).filter(w => w !== myEmail)
+                : [...(t.watchers || []), myEmail],
+            }
+          : t
+      )
+    );
+  };
   const jiraDetail = useJiraIssueDetail(ticket?.jiraKey);
   const jiraSla = useJiraSla(ticket?.jiraKey);
   const jiraChangelog = useJiraChangelog(ticket?.jiraKey);
@@ -3856,8 +3899,36 @@ function TicketDetail({
             gap: '4px',
           }}
         >
-          ← Back to My Tickets
+          ← Back
         </button>
+        {myEmail && (
+          <button
+            onClick={toggleWatch}
+            title={watching ? 'Stop watching this ticket' : 'Watch this ticket'}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '7px',
+              border: watching
+                ? '1px solid var(--accent-primary)'
+                : '1px solid var(--border-default)',
+              cursor: 'pointer',
+              background: watching ? 'var(--accent-soft)' : 'var(--bg-surface)',
+              color: watching ? 'var(--accent-primary)' : 'var(--text-secondary)',
+              fontWeight: 700,
+              fontSize: '13px',
+              marginLeft: 'auto',
+              marginRight: '10px',
+            }}
+          >
+            <Eye size={14} />
+            {watching ? 'Watching' : 'Watch'}
+            {(ticket.watchers?.length || 0) + (jiraWatchers?.watchCount || 0) > 0 &&
+              ` · ${(ticket.watchers?.length || 0) + (jiraWatchers?.watchCount || 0)}`}
+          </button>
+        )}
         {canDeleteTicket &&
           (confirmDel ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -4607,6 +4678,184 @@ function TicketDetail({
                 </span>
               )}
             </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Reporter</span>
+              <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                {ticket.requester?.name || '—'}
+              </span>
+            </div>
+
+            {/* Labels — chip editor for staff/assignee, chips otherwise */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                Labels
+              </span>
+              <span
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '4px',
+                  justifyContent: 'flex-end',
+                  alignItems: 'center',
+                }}
+              >
+                {(ticket.labels || []).map(l => {
+                  const { bg, fg } = labelColorFor(l);
+                  return (
+                    <span
+                      key={l}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        padding: '2px 7px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        textTransform: 'uppercase',
+                        background: bg,
+                        color: fg,
+                      }}
+                    >
+                      {l}
+                      {canEditFields && (
+                        <button
+                          onClick={() =>
+                            patchTicket({ labels: ticket.labels.filter(x => x !== l) })
+                          }
+                          aria-label={`Remove label ${l}`}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: fg,
+                            padding: 0,
+                            fontSize: '10px',
+                            lineHeight: 1,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </span>
+                  );
+                })}
+                {canEditFields && (
+                  <input
+                    value={labelInput}
+                    onChange={e => setLabelInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const l = labelInput.trim().toUpperCase();
+                        if (l && !(ticket.labels || []).includes(l)) {
+                          patchTicket({ labels: [...(ticket.labels || []), l] });
+                        }
+                        setLabelInput('');
+                      }
+                    }}
+                    placeholder="+ label"
+                    aria-label="Add label"
+                    style={{
+                      width: '76px',
+                      padding: '3px 6px',
+                      borderRadius: '5px',
+                      border: '1px dashed var(--border-default)',
+                      background: 'transparent',
+                      fontSize: '11px',
+                      color: 'var(--text-primary)',
+                      outline: 'none',
+                    }}
+                  />
+                )}
+                {!canEditFields && (ticket.labels || []).length === 0 && (
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>—</span>
+                )}
+              </span>
+            </div>
+
+            {/* Due date */}
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Due date</span>
+              {canEditFields ? (
+                <input
+                  type="date"
+                  value={ticket.dueDate || ''}
+                  onChange={e => patchTicket({ dueDate: e.target.value || null })}
+                  aria-label="Due date"
+                  style={{
+                    padding: '2px 6px',
+                    borderRadius: '5px',
+                    border: '1px solid var(--border-default)',
+                    background: 'var(--bg-page)',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              ) : (
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                  {ticket.dueDate || '—'}
+                </span>
+              )}
+            </div>
+
+            {/* Problem category */}
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                Problem Category
+              </span>
+              {canEditFields ? (
+                <select
+                  value={ticket.problemCategory || ''}
+                  onChange={e => patchTicket({ problemCategory: e.target.value || null })}
+                  aria-label="Problem category"
+                  style={{
+                    ...S.select,
+                    width: 'auto',
+                    padding: '3px 24px 3px 8px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                  }}
+                >
+                  <option value="">None</option>
+                  {PROBLEM_CATEGORIES.map(c => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                  {ticket.problemCategory || '—'}
+                </span>
+              )}
+            </div>
+
+            {/* Issue type */}
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Type</span>
+              {canEditFields ? (
+                <select
+                  value={ticket.issueType || 'Task'}
+                  onChange={e => patchTicket({ issueType: e.target.value })}
+                  aria-label="Issue type"
+                  style={{
+                    ...S.select,
+                    width: 'auto',
+                    padding: '3px 24px 3px 8px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {ISSUE_TYPES.map(t => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                  {ticket.issueType || 'Task'}
+                </span>
+              )}
+            </div>
+
             {[
               ['Category', ticket.category],
               ['Priority', ticket.priority],
@@ -4615,6 +4864,9 @@ function TicketDetail({
               ['Platforms', ticket.platforms?.join(', ') || '—'],
               ['Created', ticket.created],
               ['Last Updated', ticket.updated],
+              ...(statusCategoryFor(ticket.status) === 'done'
+                ? [['Date Completed', ticket.updated]]
+                : []),
             ].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{k}</span>
@@ -4798,17 +5050,51 @@ function TicketDetail({
           <div ref={messagesEndRef} />
         </div>
         {!DONE_STATUSES.has(ticket.status) && (
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              value={newMsg}
-              onChange={e => setNewMsg(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMsg()}
-              placeholder="Type a message…"
-              style={{ ...S.input, flex: 1 }}
-            />
-            <button onClick={sendMsg} style={{ ...S.orangeBtn, whiteSpace: 'nowrap' }}>
-              Send
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {canViewAll && (
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {[
+                  [
+                    'Suggest a reply…',
+                    `Hi ${ticket.requester?.name?.split(' ')[0] || 'there'}, thanks for the report — we're looking into this now and will update you here shortly.`,
+                  ],
+                  [
+                    'Can I get more info…?',
+                    'Could you share a bit more detail — exact steps to reproduce, the account or shop affected, and a screenshot if possible?',
+                  ],
+                  ['Status update…', `Quick update: this ticket is currently "${ticket.status}". `],
+                ].map(([label, template]) => (
+                  <button
+                    key={label}
+                    onClick={() => setNewMsg(template)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '100px',
+                      border: '1px solid var(--border-default)',
+                      background: 'var(--bg-page)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                value={newMsg}
+                onChange={e => setNewMsg(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMsg()}
+                placeholder="Type a message…"
+                style={{ ...S.input, flex: 1 }}
+              />
+              <button onClick={sendMsg} style={{ ...S.orangeBtn, whiteSpace: 'nowrap' }}>
+                Send
+              </button>
+            </div>
           </div>
         )}
         {DONE_STATUSES.has(ticket.status) && (
