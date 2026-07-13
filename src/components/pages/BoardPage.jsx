@@ -1,0 +1,219 @@
+// src/components/pages/BoardPage.jsx
+// The Jira-parity Kanban board: fixed 11-column PESD1 workflow, drag-to-
+// transition, Jira-style filter bar, quick create. Presentational — the shell
+// (PomeloTechOpsPortal.jsx) owns the ticket store and passes data + actions:
+//   tickets, currentUser, canDrag(t), canCreate, assignableUsers,
+//   onMoveTicket(id, status), onOpenTicket(t), onQuickCreate(payload),
+//   onOpenFullForm()
+// Filter state persists via the shared localStorage store (survives reloads).
+
+import { useMemo, useState } from 'react';
+import { BOARD_COLUMNS, PRIORITY_COLORS } from '../../lib/constants.js';
+import { loadStore, saveStore } from '../../lib/store.js';
+import { useBoardDnD } from '../board/useBoardDnD.js';
+import BoardColumn from '../board/BoardColumn.jsx';
+import BoardFilterBar from '../board/BoardFilterBar.jsx';
+import QuickCreateModal from '../board/QuickCreateModal.jsx';
+
+const PRIORITY_ORDER = Object.fromEntries(Object.keys(PRIORITY_COLORS).map((p, i) => [p, i]));
+const FILTERS_KEY = 'boardFilters';
+const DEFAULT_FILTERS = {
+  search: '',
+  assignees: [],
+  type: 'All',
+  label: 'All',
+  quick: { mine: false, recent: false, overdue: false },
+};
+
+export default function BoardPage({
+  tickets,
+  currentUser,
+  canDrag,
+  canCreate,
+  assignableUsers,
+  onMoveTicket,
+  onOpenTicket,
+  onQuickCreate,
+  onOpenFullForm,
+}) {
+  const [filters, setFiltersState] = useState(() => ({
+    ...DEFAULT_FILTERS,
+    ...loadStore(FILTERS_KEY, {}),
+    quick: { ...DEFAULT_FILTERS.quick, ...(loadStore(FILTERS_KEY, {}).quick || {}) },
+  }));
+  const [showCreate, setShowCreate] = useState(false);
+
+  const setFilters = updater => {
+    setFiltersState(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      saveStore(FILTERS_KEY, next);
+      return next;
+    });
+  };
+
+  const dnd = useBoardDnD((cardId, columnName) => onMoveTicket(cardId, columnName));
+
+  const assigneeOptions = useMemo(() => {
+    const set = new Set(tickets.map(t => t.assignee).filter(Boolean));
+    assignableUsers.forEach(u => set.add(u));
+    return [...Array.from(set).sort(), 'Unassigned'];
+  }, [tickets, assignableUsers]);
+
+  const labelOptions = useMemo(() => {
+    const set = new Set();
+    tickets.forEach(t => (t.labels || []).forEach(l => set.add(l)));
+    return Array.from(set).sort();
+  }, [tickets]);
+
+  const assigneeFilter = useMemo(() => new Set(filters.assignees), [filters.assignees]);
+
+  const visible = useMemo(() => {
+    const q = filters.search.trim().toLowerCase();
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    return tickets.filter(t => {
+      if (q) {
+        const hay = `${t.title} ${t.id} ${(t.labels || []).join(' ')}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (assigneeFilter.size > 0) {
+        const key = t.assignee || 'Unassigned';
+        if (!assigneeFilter.has(key)) return false;
+      }
+      if (filters.type !== 'All' && (t.issueType || 'Task') !== filters.type) return false;
+      if (filters.label !== 'All' && !(t.labels || []).includes(filters.label)) return false;
+      if (filters.quick.mine && t.assigneeEmail !== currentUser?.email) return false;
+      if (filters.quick.recent && (t.updated || t.created || '') < weekAgo) return false;
+      if (filters.quick.overdue && !(t.dueDate && t.dueDate < today)) return false;
+      return true;
+    });
+  }, [tickets, filters, assigneeFilter, currentUser?.email]);
+
+  const byColumn = useMemo(() => {
+    const map = Object.fromEntries(BOARD_COLUMNS.map(c => [c.name, []]));
+    for (const t of visible) (map[t.status] || (map[t.status] = [])).push(t);
+    for (const list of Object.values(map)) {
+      list.sort(
+        (a, b) =>
+          (a.rank ?? Infinity) - (b.rank ?? Infinity) ||
+          (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9) ||
+          String(b.created || '').localeCompare(String(a.created || ''))
+      );
+    }
+    return map;
+  }, [visible]);
+
+  const hasFilters =
+    filters.search !== '' ||
+    filters.assignees.length > 0 ||
+    filters.type !== 'All' ||
+    filters.label !== 'All' ||
+    Object.values(filters.quick).some(Boolean);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        height: 'calc(100vh - 150px)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)' }}>
+            Board
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+            {visible.length} of {tickets.length} tickets · drag cards to change status
+          </div>
+        </div>
+        <BoardFilterBar
+          search={filters.search}
+          setSearch={v => setFilters(f => ({ ...f, search: v }))}
+          assignees={assigneeOptions}
+          assigneeFilter={assigneeFilter}
+          toggleAssignee={a =>
+            setFilters(f => ({
+              ...f,
+              assignees: f.assignees.includes(a)
+                ? f.assignees.filter(x => x !== a)
+                : [...f.assignees, a],
+            }))
+          }
+          typeFilter={filters.type}
+          setTypeFilter={v => setFilters(f => ({ ...f, type: v }))}
+          labels={labelOptions}
+          labelFilter={filters.label}
+          setLabelFilter={v => setFilters(f => ({ ...f, label: v }))}
+          quick={filters.quick}
+          toggleQuick={k => setFilters(f => ({ ...f, quick: { ...f.quick, [k]: !f.quick[k] } }))}
+          hasFilters={hasFilters}
+          onClear={() => setFilters(DEFAULT_FILTERS)}
+        />
+      </div>
+
+      <div
+        ref={dnd.scrollRef}
+        style={{
+          display: 'flex',
+          gap: '10px',
+          overflowX: 'auto',
+          flex: 1,
+          paddingBottom: '8px',
+          alignItems: 'stretch',
+        }}
+      >
+        {BOARD_COLUMNS.map((col, i) => (
+          <BoardColumn
+            key={col.id}
+            column={col}
+            tickets={byColumn[col.name] || []}
+            isDragTarget={dnd.dragOver === col.name}
+            onDragOver={dnd.onColumnDragOver}
+            onDrop={dnd.onDrop}
+            dnd={dnd}
+            canDrag={canDrag}
+            onOpenTicket={onOpenTicket}
+            headerAction={
+              i === 0 && canCreate ? (
+                <button
+                  onClick={() => setShowCreate(true)}
+                  title="Create ticket"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    color: 'var(--accent-primary)',
+                    padding: '0 2px',
+                  }}
+                >
+                  ＋ Create
+                </button>
+              ) : null
+            }
+          />
+        ))}
+      </div>
+
+      {showCreate && (
+        <QuickCreateModal
+          onClose={() => setShowCreate(false)}
+          onCreate={onQuickCreate}
+          assignableUsers={assignableUsers}
+          onOpenFullForm={onOpenFullForm}
+        />
+      )}
+    </div>
+  );
+}

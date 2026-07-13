@@ -38,6 +38,8 @@ export default [
         TextEncoder: 'readonly',
         TextDecoder: 'readonly',
         Uint8Array: 'readonly',
+        requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
         navigator: 'readonly',
         performance: 'readonly',
         process: 'readonly',

@@ -53,6 +53,7 @@ import {
 } from './src/lib/constants.js';
 import { S } from './src/lib/styles.js';
 import PriorityGuidePage from './src/components/pages/PriorityGuidePage.jsx';
+import BoardPage from './src/components/pages/BoardPage.jsx';
 import SLAPage from './src/components/pages/SLAPage.jsx';
 import FilePreviewCard, { fileToAttachment } from './src/components/FilePreviewCard.jsx';
 import {
@@ -13169,11 +13170,173 @@ const tooltipContentStyle = {
   boxShadow: 'var(--shadow-card)',
 };
 
+// ─── Board section host ───────────────────────────────────────────────────────
+// Owns store wiring for the presentational BoardPage (src/components/pages):
+// ticket subscription, drag permissions, quick create, and the full
+// TicketDetail view when a card is opened. All mutations use the same
+// updateTickets + mirror + pushJiraTransition path as every other page.
+function BoardSectionHost({ currentUser, setSection }) {
+  const can = useCan();
+  const [, _setTicketsVersion] = useState(0);
+  useEffect(() => subscribeTickets(_setTicketsVersion), []);
+  const { addNotification } = useNotifications();
+  const [openId, setOpenId] = useState(null);
+
+  const moveTicket = (id, newStatus) => {
+    const ticket = MOCK_TICKETS.find(t => t.id === id);
+    if (!ticket || ticket.status === newStatus) return;
+    const prev = ticket.status;
+    updateTickets(ts =>
+      ts.map(t =>
+        t.id === id
+          ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) }
+          : t
+      )
+    );
+    mirror(ticket.uuid && ticketsApi.updateTicket(ticket.uuid, { status: newStatus }));
+    if (ticket.jiraKey) pushJiraTransition(ticket, newStatus).catch(() => {});
+    recordAudit(
+      'ticket.status_change',
+      _currentActor,
+      { type: 'ticket', id, label: ticket.title },
+      { from: prev, to: newStatus }
+    );
+    addNotification({
+      type: 'ticket_status',
+      title: `Status updated: ${id}`,
+      body: `${prev} → ${newStatus}`,
+      ticketId: id,
+    });
+  };
+
+  const assignTicket = (id, assignee) => {
+    const ticket = MOCK_TICKETS.find(t => t.id === id);
+    const assigneeEmail = assignee ? emailForAssignee(assignee) : null;
+    updateTickets(ts =>
+      ts.map(t => (t.id === id ? { ...t, assignee: assignee || null, assigneeEmail } : t))
+    );
+    mirror(
+      ticket?.uuid && ticketsApi.assignTicket(ticket.uuid, assigneeEmail, assignee || undefined)
+    );
+  };
+
+  const canDrag = t =>
+    can('tickets.status_change_any') ||
+    (can('tickets.status_change_own') &&
+      !!currentUser?.email &&
+      t.assigneeEmail === currentUser.email);
+
+  const quickCreate = payload => {
+    const today = new Date().toISOString().slice(0, 10);
+    const id = `TKT-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+    const ticket = {
+      id,
+      title: payload.title,
+      category: 'General',
+      priority: payload.priority,
+      status: 'To Do',
+      created: today,
+      updated: today,
+      description: '',
+      assignee: payload.assignee,
+      assigneeEmail: payload.assignee ? emailForAssignee(payload.assignee) : null,
+      requester: { name: currentUser?.name || 'Unknown', email: currentUser?.email || null },
+      department: currentUser?.department || null,
+      shop: null,
+      platforms: [],
+      labels: payload.labels || [],
+      dueDate: payload.dueDate,
+      issueType: payload.issueType || 'Task',
+      watchers: [],
+      timeline: [
+        {
+          date: new Date().toISOString().slice(0, 16).replace('T', ' '),
+          action: 'Ticket created',
+          actor: currentUser?.name || 'You',
+        },
+      ],
+      messages: [],
+      pullRequests: [],
+      jiraSyncState: 'local-only',
+    };
+    addTicket(ticket);
+    if (API_ENABLED) {
+      ticketsApi
+        .createTicket({
+          title: ticket.title,
+          description: '',
+          priority: ticket.priority,
+          platforms: [],
+          labels: ticket.labels,
+          issueType: ticket.issueType,
+          ...(ticket.dueDate ? { dueDate: ticket.dueDate } : {}),
+          ...(ticket.assigneeEmail
+            ? { assigneeEmail: ticket.assigneeEmail, assigneeName: ticket.assignee }
+            : {}),
+        })
+        .then(res => {
+          if (res.error) return console.warn('[api] backend mirror failed:', res.error);
+          const localId = ticket.id;
+          updateTickets(ts =>
+            ts.map(x =>
+              x.id === localId
+                ? { ...x, id: res.data.key, key: res.data.key, uuid: res.data.id }
+                : x
+            )
+          );
+        });
+    }
+    recordAudit('ticket.create', _currentActor, { type: 'ticket', id, label: ticket.title });
+    addNotification({
+      type: 'ticket_message',
+      title: `Ticket created: ${id}`,
+      body: ticket.title,
+      ticketId: id,
+    });
+  };
+
+  const selected = openId ? MOCK_TICKETS.find(t => t.id === openId) : null;
+  if (selected) {
+    return (
+      <TicketDetail
+        ticket={selected}
+        onBack={() => setOpenId(null)}
+        currentUser={currentUser}
+        onStatusChange={moveTicket}
+        onAssigneeChange={assignTicket}
+        onAddNotification={addNotification}
+      />
+    );
+  }
+
+  return (
+    <BoardPage
+      tickets={MOCK_TICKETS.slice()}
+      currentUser={currentUser}
+      canDrag={canDrag}
+      canCreate={can('tickets.view_all')}
+      assignableUsers={listAssignableUsers().map(u => u.name)}
+      onMoveTicket={moveTicket}
+      onOpenTicket={t => setOpenId(t.id)}
+      onQuickCreate={quickCreate}
+      onOpenFullForm={() => setSection('submit')}
+    />
+  );
+}
+
 // ─── Admin tools dropdown ────────────────────────────────────────────────────
 // Groups the four admin-only destinations behind a single nav button to
 // reclaim space and keep related actions together.
 // Sections that benefit from the wider main column (tables, kanban, matrices).
-const WIDE_SECTIONS = new Set(['admin', 'users', 'audit', 'chatlogs', 'roles', 'devportal']);
+const WIDE_SECTIONS = new Set([
+  'admin',
+  'users',
+  'audit',
+  'chatlogs',
+  'roles',
+  'devportal',
+  'board',
+]);
 
 const ADMIN_TOOLS = [
   {
@@ -13675,6 +13838,9 @@ function AppContent() {
       { id: 'submit', label: 'Submit Ticket', icon: PlusCircle },
       { id: 'mytickets', label: 'My Tickets', icon: Ticket },
     ];
+    if (can('tickets.view_all')) {
+      items.push({ id: 'board', label: 'Board', icon: ClipboardList });
+    }
     if (can('tickets.view_assigned')) {
       items.push({ id: 'devportal', label: 'Developer Portal', icon: Briefcase });
     }
@@ -13689,6 +13855,7 @@ function AppContent() {
   const SECTION_CAPS = useMemo(
     () => ({
       admin: 'admin.kanban_view',
+      board: 'tickets.view_all',
       users: 'users.edit',
       roles: 'roles.edit',
       audit: 'audit.view',
@@ -13763,6 +13930,9 @@ function AppContent() {
         break;
       case 'mytickets':
         page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />;
+        break;
+      case 'board':
+        page = <BoardSectionHost currentUser={effectiveUser} setSection={setSection} />;
         break;
       case 'devportal':
         page = can('tickets.view_assigned') ? (
