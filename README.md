@@ -19,20 +19,20 @@ notes, audit every admin action, and toggle a site-wide maintenance banner.
 ## Running locally
 
 ```bash
-npm install --legacy-peer-deps   # eslint-plugin-react peer compat
-npm run dev:all                  # starts BFF (:3001) + Vite (:5173) in parallel
+npm install      # clean install — no --legacy-peer-deps needed
+npm run dev:all  # starts BFF (:3001) + Vite (:5173) in parallel
 ```
 
 Open <http://localhost:5173>.
 
-Demo credentials (anything works in the OTP screen):
+Demo credentials — **dev builds only**; production bundles ship zero seeded
+accounts (real accounts come from the backend, or self-signup in mock mode).
+Anything works in the OTP screen:
 
 | Role        | Email                        | Password    |
 |-------------|------------------------------|-------------|
-| superadmin  | `alex.lee@pomelo.com`        | `Admin123!` |
-| superadmin  | `quentondupont@gmail.com`    | (set yours) |
-| user        | `kai.nguyen@pomelo.com`      | `User123!`  |
-| user        | `prim.srisawat@pomelo.com`   | `User123!`  |
+| superadmin  | `demo.admin@example.com`     | `Demo123!`  |
+| user        | `demo.user@example.com`      | `Demo123!`  |
 
 ## Scripts
 
@@ -42,10 +42,10 @@ Demo credentials (anything works in the OTP screen):
 | `npm run server`      | BFF only — needs the env vars below |
 | `npm run dev:all`     | Both, with prefixed concurrent output |
 | `npm run build`       | Production Vite build into `dist/` (code-split: `vendor-react`, `vendor-docx`, `pdf`, `pdf.worker`) |
-| `npm run lint`        | ESLint over `src/` and `server/` |
+| `npm run lint`        | ESLint over `src/`, `server/`, and `PomeloTechOpsPortal.jsx` |
 | `npm run lint:fix`    | Same with `--fix` |
-| `npm run format`      | Prettier write across `src/` and `server/` |
-| `npm run test:e2e`    | Playwright suite (headless by config, run with `--headed` to watch) |
+| `npm run format`      | Prettier write across `src/`, `server/`, and `PomeloTechOpsPortal.jsx` |
+| `npm run test:e2e`    | Playwright suite (headed by config — see `playwright.config.js`) |
 | `npm run test:e2e:ui` | Playwright UI mode |
 
 ## Required env (in `.env.local`, never committed)
@@ -54,9 +54,18 @@ Demo credentials (anything works in the OTP screen):
 ANTHROPIC_API_KEY=sk-ant-…    # chat assistant + AI doc extraction
 JIRA_API_TOKEN=…              # base64 of "user:apikey" — used by submit-ticket
 JIRA_BASE_URL=https://pomelofashion.atlassian.net   # optional override
-ALLOWED_ORIGIN=https://…      # REQUIRED in production (no localhost fallback)
+JIRA_WEBHOOK_SECRET=…         # REQUIRED in production — webhook rejects all traffic without it
+ALLOWED_ORIGIN=https://…      # REQUIRED in production; comma-separated list allowed
 NODE_ENV=production           # enables CORS hard-fail
+COOKIE_SECURE=true            # session-cookie Secure flag override (defaults to true in prod)
+
+# Backend mode (optional — app runs on mock/localStorage without these)
+DATABASE_URL=postgres://…     # activates the DB-backed /api/{auth,tickets,users,roles,audit,docs}
+JWT_SECRET=…                  # REQUIRED once DATABASE_URL is set
+VITE_API_BASE_URL=https://…   # client-side switch: point the SPA at the BFF
 ```
+
+See `.env.example` (committed) for the full annotated reference.
 
 The BFF **refuses to start** if `VITE_ANTHROPIC_API_KEY` or `VITE_JIRA_API_TOKEN`
 are set — those prefixes are bundled into the client by Vite and would leak the
@@ -65,12 +74,17 @@ secret. Use the non-VITE names above.
 ## Project layout
 
 ```
-/PomeloTechOpsPortal.jsx       # monolithic shell — auth, nav, App router, all admin pages,
-                               # mock data stores (MOCK_USERS, MOCK_TICKETS, AUDIT_LOG, CHAT_SESSIONS),
-                               # persistence helpers, password hashing, view-mode pill, chat widget
-/server/index.js               # Express BFF: helmet, rate-limit, zod-validated /api/v1/* routes,
+/PomeloTechOpsPortal.jsx       # app shell — nav, section switch, page components, mock data
+                               # stores (MOCK_USERS, MOCK_TICKETS, AUDIT_LOG, CHAT_SESSIONS);
+                               # being decomposed into src/ slice by slice
+/server/index.js               # Express BFF entrypoint: helmet, CORS, rate-limit, router mounting,
                                # central error handler
-/src/api/                      # client-side API modules: docsApi, jiraApi, claudeApi
+/server/routes/                # jira.js, webhooks.js, anthropic.js (proxy) + DB-backed
+                               # auth/tickets/users/roles/audit/docs (active with DATABASE_URL)
+/server/lib/                   # shared log + Jira helpers
+/src/api/                      # client API modules: client (shared base), authApi, ticketsApi,
+                               # usersApi, rolesApi, auditApi, docsApi, jiraApi, claudeApi
+/src/lib/                      # store (localStorage), localAuth, constants, styles
 /src/components/               # broken-out components: docs/, NotificationBell
 /src/context/                  # NotificationContext (in-memory notifications + bell)
 /src/hooks/                    # useDocumentManager

@@ -37,8 +37,6 @@
     ]
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.658.0",
-    "@aws-sdk/s3-request-presigner": "^3.658.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-tooltip": "^1.2.8",
@@ -69,11 +67,11 @@
     "@xmldom/xmldom": "^0.8.13"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "^9.39.0",
     "@playwright/test": "^1.58.2",
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^9.2.1",
-    "eslint": "^10.2.0",
+    "eslint": "^9.39.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "husky": "^9.1.7",
