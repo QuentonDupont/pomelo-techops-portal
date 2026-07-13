@@ -41,6 +41,7 @@ import {
   statusColorFor,
   statusCategoryFor,
   BOARD_COLUMNS,
+  ISSUE_TYPES,
   LEGACY_TO_JIRA_STATUS,
   mapLegacyStatus,
   SLA_DATA,
@@ -184,6 +185,9 @@ const MOCK_TICKETS = [
     department: 'Operations',
     shop: 'Pomelo TH',
     platforms: ['Shopify'],
+    labels: ['OMEGA'],
+    issueType: 'Bug',
+    dueDate: '2026-07-18',
     timeline: [
       { date: '2026-03-24 09:15', action: 'Ticket submitted', actor: 'You' },
       { date: '2026-03-24 09:22', action: 'Ticket assigned to IT Support', actor: 'System' },
@@ -281,6 +285,8 @@ const MOCK_TICKETS = [
     department: 'Marketing',
     shop: 'Not Applicable',
     platforms: ['Internal Tools'],
+    labels: ['NETSUITE SUPPORT TICKET'],
+    issueType: 'Support Request',
     timeline: [
       { date: '2026-03-20 14:00', action: 'Ticket submitted', actor: 'You' },
       { date: '2026-03-20 14:10', action: 'Ticket assigned to IT Support', actor: 'System' },
@@ -343,6 +349,8 @@ const MOCK_TICKETS = [
     department: 'HR & People',
     shop: 'Not Applicable',
     platforms: ['Internal Tools'],
+    labels: ['OMEGA'],
+    issueType: 'Task',
     timeline: [
       { date: '2026-03-10 10:00', action: 'Ticket submitted', actor: 'You' },
       { date: '2026-03-10 10:15', action: 'Ticket assigned to IT Support', actor: 'System' },
@@ -381,6 +389,9 @@ const MOCK_TICKETS = [
     department: 'Merchandising',
     shop: 'Pomelo TH',
     platforms: ['Shopee'],
+    labels: ["MARKETPLACE TICKET'S"],
+    issueType: 'Bug',
+    dueDate: '2026-07-05',
     timeline: [
       { date: '2026-03-26 08:10', action: 'Ticket submitted', actor: 'Sara M.' },
       { date: '2026-03-26 08:12', action: 'Ticket assigned to IT Support', actor: 'System' },
@@ -428,6 +439,9 @@ const MOCK_TICKETS = [
     department: 'Marketing',
     shop: 'Pomelo TH',
     platforms: ['TikTok Shop'],
+    labels: ['DATA ENGINEERING SUPPORT'],
+    issueType: 'Task',
+    dueDate: '2026-07-25',
     timeline: [
       { date: '2026-03-25 13:00', action: 'Ticket submitted', actor: 'Fern P.' },
       { date: '2026-03-25 13:05', action: 'Ticket assigned to IT Support', actor: 'System' },
@@ -613,6 +627,15 @@ const ticketFromApi = t => ({
   department: t.department,
   shop: t.shop,
   platforms: t.platforms || [],
+  labels: t.labels || [],
+  dueDate: t.dueDate || null,
+  problemCategory: t.problemCategory || null,
+  issueType: t.issueType || 'Task',
+  rank: t.rank ?? null,
+  watchers: t.watchers || [],
+  parentId: t.parentId || null,
+  currentResult: t.currentResult || null,
+  expectedResult: t.expectedResult || null,
   jiraKey: t.jiraKey,
   jiraSyncState: t.jiraSyncState,
   jiraSyncedAt: t.jiraSyncedAt,
@@ -1616,12 +1639,19 @@ for (const t of MOCK_TICKETS) {
   }
 
   // Migrate any legacy status names (Open / Pending / Closed) on persisted or
-  // seed tickets to the canonical Jira Service Management names so the new
-  // dynamic status list doesn't fight with stale data.
+  // seed tickets to the canonical board workflow names, and default-fill the
+  // board v1 fields so stale persisted data never crashes the new UI.
   for (const t of MOCK_TICKETS) {
     if (t.status && LEGACY_TO_JIRA_STATUS[t.status]) {
       t.status = mapLegacyStatus(t.status);
     }
+    t.labels ??= [];
+    t.watchers ??= [];
+    t.issueType ??= 'Task';
+    t.dueDate ??= null;
+    t.problemCategory ??= null;
+    t.parentId ??= null;
+    t.rank ??= null;
   }
 })();
 
@@ -6913,6 +6943,10 @@ function SubmitPage({ setSection, showToast, currentUser }) {
           ...(ticket.department ? { department: ticket.department } : {}),
           ...(ticket.shop ? { shop: ticket.shop } : {}),
           platforms: ticket.platforms || [],
+          labels: ticket.labels || [],
+          ...(ISSUE_TYPES.includes(ticket.issueType) ? { issueType: ticket.issueType } : {}),
+          ...(ticket.currentResult ? { currentResult: ticket.currentResult } : {}),
+          ...(ticket.expectedResult ? { expectedResult: ticket.expectedResult } : {}),
         })
         .then(res => {
           if (res.error) return console.warn('[api] backend mirror failed:', res.error);

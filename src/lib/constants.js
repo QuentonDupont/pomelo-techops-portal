@@ -113,6 +113,51 @@ export const SLA_TARGETS_HOURS = {
 // persisted data can never regress SLA math or CSAT gating mid-transition.
 export const DONE_STATUSES = new Set(['Live', "Closed - Won't Do", 'Resolved', 'Done', 'Closed']);
 
+// ─── Ticket labels ────────────────────────────────────────────────────────────
+// Well-known labels get a fixed chip color (mirrors the real PESD1 board);
+// anything else hashes onto the fallback palette so ad-hoc labels stay stable.
+export const TICKET_LABELS = {
+  OMEGA: { bg: '#DCFCE7', fg: '#15803D' },
+  'NETSUITE SUPPORT TICKET': { bg: '#D1FAE5', fg: '#047857' },
+  "MARKETPLACE TICKET'S": { bg: '#F3E8FF', fg: '#7E22CE' },
+  'DATA ENGINEERING SUPPORT': { bg: '#DBEAFE', fg: '#1D4ED8' },
+};
+const LABEL_FALLBACKS = [
+  { bg: '#FEF3C7', fg: '#92400E' },
+  { bg: '#FFE4E6', fg: '#BE123C' },
+  { bg: '#E0E7FF', fg: '#4338CA' },
+  { bg: '#CCFBF1', fg: '#0F766E' },
+  { bg: '#FCE7F3', fg: '#BE185D' },
+];
+export const labelColorFor = label => {
+  if (TICKET_LABELS[label]) return TICKET_LABELS[label];
+  let h = 0;
+  for (const ch of String(label)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return LABEL_FALLBACKS[h % LABEL_FALLBACKS.length];
+};
+
+// Issue types (card icon + quick-create select). Sub-task is set automatically
+// when a ticket is created from a parent.
+export const ISSUE_TYPES = ['Task', 'Bug', 'Support Request', 'Sub-task'];
+export const ISSUE_TYPE_ICONS = {
+  Task: '✅',
+  Bug: '🐞',
+  'Support Request': '🛟',
+  'Sub-task': '🧩',
+};
+
+// Problem categories (pinned-fields sidebar, mirrors Jira's field).
+export const PROBLEM_CATEGORIES = [
+  'Access & Permissions',
+  'Data Issue',
+  'Integration Failure',
+  'Performance',
+  'Bug / Defect',
+  'Configuration',
+  'Feature Request',
+  'Other',
+];
+
 export const PLATFORMS = [
   'Shopify',
   'Lazada',

@@ -41,6 +41,15 @@ const serializeTicket = (r, extra = {}) => ({
   department: r.department,
   shop: r.shop,
   platforms: r.platforms || [],
+  labels: r.labels || [],
+  dueDate: r.due_date,
+  problemCategory: r.problem_category,
+  issueType: r.issue_type || 'Task',
+  rank: r.rank,
+  watchers: r.watchers || [],
+  parentId: r.parent_id,
+  currentResult: r.current_result,
+  expectedResult: r.expected_result,
   jiraKey: r.jira_key,
   jiraSyncState: r.jira_sync_state,
   jiraSyncedAt: r.jira_synced_at,
@@ -165,6 +174,14 @@ router.get('/:id', async (req, res, next) => {
 });
 
 // ─── Create (any authenticated user) ──────────────────────────────────────────
+const labelsSchema = z.array(z.string().min(1).max(60)).max(20);
+const issueTypeSchema = z.enum(['Task', 'Bug', 'Support Request', 'Sub-task']);
+// ISO date (YYYY-MM-DD); nullable so PATCH can clear it.
+const dueDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .nullable();
+
 const createSchema = z
   .object({
     title: z.string().min(1).max(300),
@@ -176,6 +193,13 @@ const createSchema = z
     platforms: z.array(z.string().max(60)).max(40).default([]),
     assigneeEmail: z.string().email().optional(),
     assigneeName: z.string().max(120).optional(),
+    labels: labelsSchema.default([]),
+    dueDate: dueDateSchema.optional(),
+    problemCategory: z.string().max(120).optional(),
+    issueType: issueTypeSchema.default('Task'),
+    parentId: z.string().uuid().optional(),
+    currentResult: z.string().max(4000).optional(),
+    expectedResult: z.string().max(4000).optional(),
   })
   .strict();
 
@@ -189,14 +213,20 @@ router.post('/', async (req, res, next) => {
     // (the /:id/assign route already enforces it).
     if ((d.assigneeEmail || d.assigneeName) && !can(req.user, 'tickets.assign'))
       return res.status(403).json({ error: 'Insufficient permissions to assign tickets.' });
+    if (d.parentId) {
+      const parent = await query('SELECT 1 FROM tickets WHERE id=$1', [d.parentId]);
+      if (!parent.rows.length) return res.status(400).json({ error: 'Parent ticket not found.' });
+    }
     const key = await generateKey();
     const ticket = await withTransaction(async client => {
       const { rows } = await client.query(
         `INSERT INTO tickets
            (key, title, description, category, priority, status,
             requester_name, requester_email, assignee_name, assignee_email,
-            department, shop, platforms, jira_sync_state)
-         VALUES ($1,$2,$3,$4,$5,'To Do',$6,$7,$8,$9,$10,$11,$12::jsonb,'local-only')
+            department, shop, platforms, labels, due_date, problem_category,
+            issue_type, parent_id, current_result, expected_result, jira_sync_state)
+         VALUES ($1,$2,$3,$4,$5,'To Do',$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,
+                 $14,$15,$16,$17,$18,$19,'local-only')
          RETURNING *`,
         [
           key,
@@ -211,6 +241,13 @@ router.post('/', async (req, res, next) => {
           d.department || req.user.department || null,
           d.shop || null,
           JSON.stringify(d.platforms),
+          JSON.stringify(d.labels),
+          d.dueDate || null,
+          d.problemCategory || null,
+          d.parentId ? 'Sub-task' : d.issueType,
+          d.parentId || null,
+          d.currentResult || null,
+          d.expectedResult || null,
         ]
       );
       const t = rows[0];
@@ -235,6 +272,14 @@ const patchSchema = z
     category: z.string().max(120).optional(),
     priority: z.enum(['Critical', 'High', 'Medium', 'Low']).optional(),
     status: z.string().max(60).optional(),
+    labels: labelsSchema.optional(),
+    dueDate: dueDateSchema.optional(),
+    problemCategory: z.string().max(120).nullable().optional(),
+    issueType: issueTypeSchema.optional(),
+    rank: z.number().finite().optional(),
+    parentId: z.string().uuid().nullable().optional(),
+    currentResult: z.string().max(4000).nullable().optional(),
+    expectedResult: z.string().max(4000).nullable().optional(),
   })
   .strict();
 
@@ -258,9 +303,27 @@ router.patch('/:id', async (req, res, next) => {
       if (!allowed) return res.status(403).json({ error: 'Cannot change status of this ticket.' });
     }
     // Editing content requires staff-level access (view_all) or being the assignee.
-    const editsContent = d.title || d.description || d.category || d.priority;
+    const editsContent =
+      d.title ||
+      d.description ||
+      d.category ||
+      d.priority ||
+      d.labels !== undefined ||
+      d.dueDate !== undefined ||
+      d.problemCategory !== undefined ||
+      d.issueType !== undefined ||
+      d.rank !== undefined ||
+      d.parentId !== undefined ||
+      d.currentResult !== undefined ||
+      d.expectedResult !== undefined;
     if (editsContent && !can(req.user, 'tickets.view_all') && !isAssignee) {
       return res.status(403).json({ error: 'Insufficient permissions to edit this ticket.' });
+    }
+    if (d.parentId) {
+      if (d.parentId === ticket.id)
+        return res.status(400).json({ error: 'A ticket cannot be its own parent.' });
+      const parent = await query('SELECT 1 FROM tickets WHERE id=$1', [d.parentId]);
+      if (!parent.rows.length) return res.status(400).json({ error: 'Parent ticket not found.' });
     }
 
     const sets = [];
@@ -271,11 +334,22 @@ router.patch('/:id', async (req, res, next) => {
       ['category', d.category],
       ['priority', d.priority],
       ['status', d.status],
+      ['due_date', d.dueDate],
+      ['problem_category', d.problemCategory],
+      ['issue_type', d.issueType],
+      ['rank', d.rank],
+      ['parent_id', d.parentId],
+      ['current_result', d.currentResult],
+      ['expected_result', d.expectedResult],
     ]) {
       if (val !== undefined) {
         params.push(val);
         sets.push(`${col} = $${params.length}`);
       }
+    }
+    if (d.labels !== undefined) {
+      params.push(JSON.stringify(d.labels));
+      sets.push(`labels = $${params.length}::jsonb`);
     }
     if (!sets.length) return res.json(serializeTicket(ticket));
     sets.push('updated_at = now()');
