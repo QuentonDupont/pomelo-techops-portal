@@ -1650,6 +1650,7 @@ for (const t of MOCK_TICKETS) {
     }
     t.labels ??= [];
     t.watchers ??= [];
+    t.links ??= [];
     t.issueType ??= 'Task';
     t.dueDate ??= null;
     t.problemCategory ??= null;
@@ -3680,6 +3681,7 @@ function TicketDetail({
   onStatusChange,
   onAssigneeChange,
   onAddNotification,
+  onOpenTicket,
   currentUser,
 }) {
   const can = useCan();
@@ -3697,7 +3699,133 @@ function TicketDetail({
   const [internalNotes, setInternalNotes] = useState(ticket.internalNotes || []);
   const [newNote, setNewNote] = useState('');
   const [labelInput, setLabelInput] = useState('');
+  const [newSubtask, setNewSubtask] = useState('');
+  const [linkRelation, setLinkRelation] = useState('relates to');
+  const [linkTarget, setLinkTarget] = useState('');
   const messagesEndRef = useRef(null);
+
+  const subtasks = MOCK_TICKETS.filter(t => t.parentId === ticket.id);
+  const parentTicket = ticket.parentId ? MOCK_TICKETS.find(t => t.id === ticket.parentId) : null;
+
+  const addSubtask = title => {
+    const today = new Date().toISOString().slice(0, 10);
+    const id = `TKT-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+    const sub = {
+      id,
+      title,
+      category: ticket.category,
+      priority: 'Medium',
+      status: 'To Do',
+      created: today,
+      updated: today,
+      description: '',
+      assignee: null,
+      assigneeEmail: null,
+      requester: { name: currentUser?.name || 'Unknown', email: currentUser?.email || null },
+      department: ticket.department,
+      shop: ticket.shop,
+      platforms: [],
+      labels: [],
+      dueDate: null,
+      issueType: 'Sub-task',
+      watchers: [],
+      parentId: ticket.id,
+      timeline: [
+        {
+          date: new Date().toISOString().slice(0, 16).replace('T', ' '),
+          action: `Created as subtask of ${ticket.id}`,
+          actor: currentUser?.name || 'You',
+        },
+      ],
+      messages: [],
+      pullRequests: [],
+      jiraSyncState: 'local-only',
+    };
+    addTicket(sub);
+    if (API_ENABLED && ticket.uuid) {
+      ticketsApi
+        .createTicket({
+          title,
+          description: '',
+          priority: 'Medium',
+          platforms: [],
+          labels: [],
+          issueType: 'Sub-task',
+          parentId: ticket.uuid,
+        })
+        .then(res => {
+          if (res.error) return console.warn('[api] backend mirror failed:', res.error);
+          updateTickets(ts =>
+            ts.map(x =>
+              x.id === id ? { ...x, id: res.data.key, key: res.data.key, uuid: res.data.id } : x
+            )
+          );
+        });
+    }
+    recordAudit('ticket.subtask_create', _currentActor, {
+      type: 'ticket',
+      id: ticket.id,
+      label: ticket.title,
+    });
+  };
+
+  // Local links are written to BOTH tickets (canonical + inverse label) so
+  // each side renders its own view; the server stores one row and derives
+  // the inverse (server linkId is stashed for mirrored deletes).
+  const LINK_INVERSE = {
+    blocks: 'is blocked by',
+    clones: 'is cloned by',
+    duplicates: 'is duplicated by',
+    'relates to': 'relates to',
+  };
+
+  const addTicketLink = (otherId, relation) => {
+    const other = MOCK_TICKETS.find(t => t.id === otherId);
+    if (!other) return;
+    const linkId = 'lnk' + Date.now();
+    updateTickets(ts =>
+      ts.map(t => {
+        if (t.id === ticket.id)
+          return { ...t, links: [...(t.links || []), { id: linkId, otherId, relation }] };
+        if (t.id === otherId)
+          return {
+            ...t,
+            links: [
+              ...(t.links || []),
+              { id: linkId, otherId: ticket.id, relation: LINK_INVERSE[relation] || relation },
+            ],
+          };
+        return t;
+      })
+    );
+    if (API_ENABLED && ticket.uuid && other.uuid) {
+      ticketsApi.addLink(ticket.uuid, other.uuid, relation).then(res => {
+        if (res.error) return console.warn('[api] backend mirror failed:', res.error);
+        updateTickets(ts =>
+          ts.map(t => ({
+            ...t,
+            links: (t.links || []).map(l =>
+              l.id === linkId ? { ...l, serverId: res.data.linkId } : l
+            ),
+          }))
+        );
+      });
+    }
+    recordAudit(
+      'ticket.link',
+      _currentActor,
+      { type: 'ticket', id: ticket.id, label: ticket.title },
+      { otherId, relation }
+    );
+  };
+
+  const removeTicketLink = linkId => {
+    const link = (ticket.links || []).find(l => l.id === linkId);
+    updateTickets(ts =>
+      ts.map(t => ({ ...t, links: (t.links || []).filter(l => l.id !== linkId) }))
+    );
+    mirror(ticket.uuid && link?.serverId && ticketsApi.removeLink(ticket.uuid, link.serverId));
+  };
 
   // Patch pinned fields: optimistic local update + backend mirror. The parent
   // re-derives `ticket` from the store on the next bump, so the UI refreshes.
@@ -3716,9 +3844,8 @@ function TicketDetail({
     );
   };
 
-  // Local watch/unwatch. Kept out of the PATCH mirror on purpose — watching is
-  // self-service (server gets dedicated /watchers/me endpoints; until then the
-  // list lives client-side).
+  // Watch/unwatch is self-service, so it mirrors to the dedicated
+  // /watchers/me endpoints rather than the capability-gated PATCH.
   const myEmail = currentUser?.email || null;
   const watching = !!myEmail && (ticket.watchers || []).includes(myEmail);
   const toggleWatch = () => {
@@ -3734,6 +3861,10 @@ function TicketDetail({
             }
           : t
       )
+    );
+    mirror(
+      ticket.uuid &&
+        (watching ? ticketsApi.unwatchTicket(ticket.uuid) : ticketsApi.watchTicket(ticket.uuid))
     );
   };
   const jiraDetail = useJiraIssueDetail(ticket?.jiraKey);
@@ -4551,6 +4682,231 @@ function TicketDetail({
         </div>
       </div>
 
+      {/* Subtasks */}
+      {(subtasks.length > 0 || canEditFields) && (
+        <div style={{ ...S.card, marginBottom: '20px' }}>
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              marginBottom: '12px',
+            }}
+          >
+            Subtasks {subtasks.length > 0 && `(${subtasks.length})`}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {subtasks.map(st => (
+              <div
+                key={st.id}
+                onClick={() => onOpenTicket?.(st.id)}
+                role={onOpenTicket ? 'button' : undefined}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '8px 10px',
+                  borderRadius: '7px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--bg-page)',
+                  cursor: onOpenTicket ? 'pointer' : 'default',
+                }}
+              >
+                <span style={{ fontSize: '12px' }}>🧩</span>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  {st.id}
+                </span>
+                <span
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--text-primary)',
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {st.title}
+                </span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    padding: '2px 8px',
+                    borderRadius: '100px',
+                    color: statusColorFor(st.status),
+                    background: STATUS_BG[statusColorFor(st.status)] || 'var(--bg-hover)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {st.status}
+                </span>
+              </div>
+            ))}
+            {canEditFields && (
+              <input
+                value={newSubtask}
+                onChange={e => setNewSubtask(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newSubtask.trim()) {
+                    addSubtask(newSubtask.trim());
+                    setNewSubtask('');
+                  }
+                }}
+                placeholder="+ Add subtask (press Enter)"
+                aria-label="Add subtask"
+                style={{ ...S.input, fontSize: '13px' }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Linked work items (local tickets; Jira-side links render separately) */}
+      {((ticket.links || []).length > 0 || canViewAll) && (
+        <div style={{ ...S.card, marginBottom: '20px' }}>
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              marginBottom: '12px',
+            }}
+          >
+            Linked work items
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {(ticket.links || []).map(link => {
+              const other = MOCK_TICKETS.find(t => t.id === link.otherId);
+              if (!other) return null;
+              return (
+                <div
+                  key={link.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 10px',
+                    borderRadius: '7px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-page)',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontStyle: 'italic',
+                      color: 'var(--text-muted)',
+                      minWidth: '92px',
+                    }}
+                  >
+                    {link.relation}
+                  </span>
+                  <span
+                    onClick={() => onOpenTicket?.(other.id)}
+                    role={onOpenTicket ? 'button' : undefined}
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: 'var(--accent-primary)',
+                      cursor: onOpenTicket ? 'pointer' : 'default',
+                    }}
+                  >
+                    {other.id}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '13px',
+                      color: 'var(--text-primary)',
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {other.title}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: '100px',
+                      color: statusColorFor(other.status),
+                      background: STATUS_BG[statusColorFor(other.status)] || 'var(--bg-hover)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {other.status}
+                  </span>
+                  {canViewAll && (
+                    <button
+                      onClick={() => removeTicketLink(link.id)}
+                      aria-label="Remove link"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-muted)',
+                        fontSize: '12px',
+                        padding: 0,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            {canViewAll && (
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <select
+                  value={linkRelation}
+                  onChange={e => setLinkRelation(e.target.value)}
+                  aria-label="Link relation"
+                  style={{
+                    ...S.select,
+                    width: 'auto',
+                    fontSize: '12px',
+                    padding: '6px 26px 6px 8px',
+                  }}
+                >
+                  {['blocks', 'clones', 'duplicates', 'relates to'].map(r => (
+                    <option key={r}>{r}</option>
+                  ))}
+                </select>
+                <select
+                  value={linkTarget}
+                  onChange={e => setLinkTarget(e.target.value)}
+                  aria-label="Link target ticket"
+                  style={{ ...S.select, flex: 1, fontSize: '12px', padding: '6px 26px 6px 8px' }}
+                >
+                  <option value="">Select a ticket…</option>
+                  {MOCK_TICKETS.filter(
+                    t => t.id !== ticket.id && !(ticket.links || []).some(l => l.otherId === t.id)
+                  ).map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.id} — {t.title.slice(0, 60)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => {
+                    if (linkTarget) {
+                      addTicketLink(linkTarget, linkRelation);
+                      setLinkTarget('');
+                    }
+                  }}
+                  style={{ ...S.ghostBtn, fontSize: '12px', whiteSpace: 'nowrap' }}
+                >
+                  Add link
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div
         style={{
           display: 'grid',
@@ -4855,6 +5211,24 @@ function TicketDetail({
                 </span>
               )}
             </div>
+
+            {parentTicket && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Parent</span>
+                <span
+                  onClick={() => onOpenTicket?.(parentTicket.id)}
+                  role={onOpenTicket ? 'button' : undefined}
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: 'var(--accent-primary)',
+                    cursor: onOpenTicket ? 'pointer' : 'default',
+                  }}
+                >
+                  🧩 {parentTicket.id}
+                </span>
+              </div>
+            )}
 
             {[
               ['Category', ticket.category],
@@ -7999,6 +8373,7 @@ function MyTicketsPage({ role, currentUser }) {
         onStatusChange={handleStatusChange}
         onAssigneeChange={handleAssigneeChange}
         onAddNotification={addNotification}
+        onOpenTicket={setSelectedId}
       />
     );
   }
@@ -8413,6 +8788,7 @@ function DeveloperPortalPage({ currentUser }) {
         onStatusChange={handleStatusChange}
         onAssigneeChange={handleAssigneeChange}
         onAddNotification={addNotification}
+        onOpenTicket={setSelectedId}
       />
     );
   }
@@ -13591,6 +13967,7 @@ function BoardSectionHost({ currentUser, setSection }) {
         onStatusChange={moveTicket}
         onAssigneeChange={assignTicket}
         onAddNotification={addNotification}
+        onOpenTicket={setOpenId}
       />
     );
   }

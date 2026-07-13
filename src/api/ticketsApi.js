@@ -39,3 +39,18 @@ export const addComment = (id, body, internal = false) =>
   wrap(async () => (await api.post(`/api/tickets/${id}/comments`, { body, internal })).data);
 
 export const deleteTicket = id => wrap(async () => (await api.delete(`/api/tickets/${id}`)).data);
+
+// Typed links between tickets (staff only). relation: blocks | clones |
+// duplicates | relates to — the server renders the inverse on the target side.
+export const addLink = (id, targetId, relation) =>
+  wrap(async () => (await api.post(`/api/tickets/${id}/links`, { targetId, relation })).data);
+
+export const removeLink = (id, linkId) =>
+  wrap(async () => (await api.delete(`/api/tickets/${id}/links/${linkId}`)).data);
+
+// Self-service watch/unwatch for the signed-in user.
+export const watchTicket = id =>
+  wrap(async () => (await api.put(`/api/tickets/${id}/watchers/me`)).data);
+
+export const unwatchTicket = id =>
+  wrap(async () => (await api.delete(`/api/tickets/${id}/watchers/me`)).data);

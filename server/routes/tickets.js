@@ -145,6 +145,41 @@ async function loadVisible(req, id) {
 }
 
 // ─── Read one (with comments + timeline) ──────────────────────────────────────
+// Typed link relations. One row is stored per link; viewed from the target
+// side the inverse label applies.
+const LINK_RELATIONS = ['blocks', 'clones', 'duplicates', 'relates to'];
+const INVERSE_RELATION = {
+  blocks: 'is blocked by',
+  clones: 'is cloned by',
+  duplicates: 'is duplicated by',
+  'relates to': 'relates to',
+};
+
+const summarizeLinked = r => ({
+  id: r.id,
+  key: r.key,
+  title: r.title,
+  status: r.status,
+  priority: r.priority,
+  assignee: r.assignee_name,
+});
+
+async function loadLinks(ticketId) {
+  const { rows } = await query(
+    `SELECT l.id AS link_id, l.relation, l.source_id, t.*
+       FROM ticket_links l
+       JOIN tickets t ON t.id = CASE WHEN l.source_id = $1 THEN l.target_id ELSE l.source_id END
+      WHERE l.source_id = $1 OR l.target_id = $1
+      ORDER BY l.created_at ASC`,
+    [ticketId]
+  );
+  return rows.map(r => ({
+    linkId: r.link_id,
+    relation: r.source_id === ticketId ? r.relation : INVERSE_RELATION[r.relation] || r.relation,
+    ticket: summarizeLinked(r),
+  }));
+}
+
 router.get('/:id', async (req, res, next) => {
   try {
     const { ticket, notFound, forbidden } = await loadVisible(req, req.params.id);
@@ -158,6 +193,10 @@ router.get('/:id', async (req, res, next) => {
       'SELECT * FROM ticket_timeline WHERE ticket_id=$1 ORDER BY created_at ASC',
       [ticket.id]
     );
+    const subtasks = await query(
+      'SELECT * FROM tickets WHERE parent_id=$1 ORDER BY created_at ASC',
+      [ticket.id]
+    );
     // Internal notes are staff-only.
     const visibleComments = can(req.user, 'tickets.view_all')
       ? comments.rows
@@ -166,8 +205,93 @@ router.get('/:id', async (req, res, next) => {
       serializeTicket(ticket, {
         comments: visibleComments.map(serializeComment),
         timeline: timeline.rows.map(serializeTimeline),
+        links: await loadLinks(ticket.id),
+        subtasks: subtasks.rows.map(summarizeLinked),
       })
     );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Links (staff) ────────────────────────────────────────────────────────────
+router.post('/:id/links', async (req, res, next) => {
+  try {
+    if (!can(req.user, 'tickets.view_all'))
+      return res.status(403).json({ error: 'Insufficient permissions.' });
+    const schema = z
+      .object({ targetId: z.string().uuid(), relation: z.enum(LINK_RELATIONS) })
+      .strict();
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid input.' });
+    const { targetId, relation } = parsed.data;
+    if (targetId === req.params.id)
+      return res.status(400).json({ error: 'A ticket cannot link to itself.' });
+    const both = await query('SELECT id FROM tickets WHERE id = ANY($1::uuid[])', [
+      [req.params.id, targetId],
+    ]);
+    if (both.rows.length !== 2) return res.status(404).json({ error: 'Ticket not found.' });
+    const { rows } = await query(
+      `INSERT INTO ticket_links (source_id, target_id, relation, created_by)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (source_id, target_id, relation) DO UPDATE SET relation = EXCLUDED.relation
+       RETURNING id`,
+      [req.params.id, targetId, relation, req.user.email]
+    );
+    await writeAudit(req.user.email, 'ticket.link', req.params.id, { targetId, relation });
+    res.status(201).json({ linkId: rows[0].id, links: await loadLinks(req.params.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id/links/:linkId', async (req, res, next) => {
+  try {
+    if (!can(req.user, 'tickets.view_all'))
+      return res.status(403).json({ error: 'Insufficient permissions.' });
+    const { rows } = await query(
+      'DELETE FROM ticket_links WHERE id=$1 AND (source_id=$2 OR target_id=$2) RETURNING id',
+      [req.params.linkId, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Link not found.' });
+    await writeAudit(req.user.email, 'ticket.unlink', req.params.id, {
+      linkId: req.params.linkId,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Watchers (self-service: any user who can read the ticket) ────────────────
+router.put('/:id/watchers/me', async (req, res, next) => {
+  try {
+    const { ticket, notFound, forbidden } = await loadVisible(req, req.params.id);
+    if (notFound) return res.status(404).json({ error: 'Ticket not found.' });
+    if (forbidden) return res.status(403).json({ error: 'Insufficient permissions.' });
+    const watchers = new Set(ticket.watchers || []);
+    watchers.add(req.user.email);
+    const { rows } = await query(
+      'UPDATE tickets SET watchers=$1::jsonb WHERE id=$2 RETURNING watchers',
+      [JSON.stringify([...watchers]), ticket.id]
+    );
+    res.json({ watchers: rows[0].watchers });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id/watchers/me', async (req, res, next) => {
+  try {
+    const { ticket, notFound, forbidden } = await loadVisible(req, req.params.id);
+    if (notFound) return res.status(404).json({ error: 'Ticket not found.' });
+    if (forbidden) return res.status(403).json({ error: 'Insufficient permissions.' });
+    const watchers = (ticket.watchers || []).filter(w => w !== req.user.email);
+    const { rows } = await query(
+      'UPDATE tickets SET watchers=$1::jsonb WHERE id=$2 RETURNING watchers',
+      [JSON.stringify(watchers), ticket.id]
+    );
+    res.json({ watchers: rows[0].watchers });
   } catch (err) {
     next(err);
   }
