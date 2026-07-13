@@ -767,7 +767,10 @@ const pollJira = async (project = 'PESD1') => {
         const incoming = byKey.get(t.jiraKey);
         if (!incoming) return t;
         const next = { ...t };
-        if (incoming.status && incoming.status !== t.status) next.status = incoming.status;
+        // Inbound Jira statuses are PESD1-native (a no-op through the map);
+        // the map guards against foreign-project names like Resolved/Done.
+        if (incoming.status && mapLegacyStatus(incoming.status) !== t.status)
+          next.status = mapLegacyStatus(incoming.status);
         if (incoming.assignee !== undefined && incoming.assignee !== t.assignee)
           next.assignee = incoming.assignee;
         next.jiraSyncState = 'synced';
@@ -916,8 +919,8 @@ const pollWebhookEvents = async () => {
         const relevant = data.events.find(e => e.issueKey === t.jiraKey);
         if (!relevant) return t;
         const next = { ...t };
-        if (relevant.issueStatus && relevant.issueStatus !== t.status)
-          next.status = relevant.issueStatus;
+        if (relevant.issueStatus && mapLegacyStatus(relevant.issueStatus) !== t.status)
+          next.status = mapLegacyStatus(relevant.issueStatus);
         if (relevant.issueAssignee !== undefined && relevant.issueAssignee !== t.assignee) {
           next.assignee = relevant.issueAssignee;
           next.assigneeEmail = emailForAssignee(relevant.issueAssignee);

@@ -7,11 +7,15 @@ notes, audit every admin action, and toggle a site-wide maintenance banner.
 
 ## Stack
 
+- **Board:** staff-only Jira-parity Kanban (`src/components/pages/BoardPage.jsx`)
+  mirroring the PESD1 workflow — 11 fixed columns, drag-to-transition, label/
+  type/assignee/quick filters, quick create; ticket detail adds pinned fields,
+  subtasks, typed links, watchers, and canned replies
 - **Frontend:** React 18 + Vite 5, vanilla CSS-in-JS, no framework theming
 - **BFF:** Express 5 (`server/index.js`) — proxies Jira and Anthropic so secrets
   never reach the client bundle
-- **Auth (demo):** in-memory `MOCK_USERS` with SHA-256 + per-user salt; legacy
-  btoa hashes are accepted once and auto-upgraded on login
+- **Auth (demo):** in-memory `MOCK_USERS` with SHA-256 + per-user salt
+  (dev-only seeds; production bundles ship zero accounts)
 - **Persistence (demo):** `localStorage` under `pomelo:v1:*` keys for users,
   tickets, audit log, chat sessions, and maintenance state
 - **Tests:** Playwright (headed by default — see `playwright.config.js`)
