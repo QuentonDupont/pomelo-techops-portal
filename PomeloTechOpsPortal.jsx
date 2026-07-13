@@ -39,6 +39,8 @@ import {
   STATUS_COLORS,
   STATUS_BG,
   statusColorFor,
+  statusCategoryFor,
+  BOARD_COLUMNS,
   LEGACY_TO_JIRA_STATUS,
   mapLegacyStatus,
   SLA_DATA,
@@ -270,7 +272,7 @@ const MOCK_TICKETS = [
     title: 'Slack notifications not working on mobile',
     category: 'Software & Apps',
     priority: 'Medium',
-    status: 'Resolved',
+    status: 'Live',
     created: '2026-03-20',
     updated: '2026-03-22',
     description:
@@ -333,7 +335,7 @@ const MOCK_TICKETS = [
     title: 'New laptop setup request',
     category: 'Hardware',
     priority: 'Low',
-    status: 'Resolved',
+    status: 'Live',
     created: '2026-03-10',
     updated: '2026-03-15',
     description: 'Need a new MacBook Pro set up for the new marketing hire starting March 17.',
@@ -370,7 +372,7 @@ const MOCK_TICKETS = [
     title: 'Shopee product sync failing for TH store',
     category: 'Software & Apps',
     priority: 'Critical',
-    status: 'Open',
+    status: 'To Do',
     created: '2026-03-26',
     updated: '2026-03-26',
     description:
@@ -417,7 +419,7 @@ const MOCK_TICKETS = [
     title: 'TikTok Shop banner images not displaying',
     category: 'Software & Apps',
     priority: 'High',
-    status: 'Open',
+    status: 'To Do',
     created: '2026-03-25',
     updated: '2026-03-25',
     description:
@@ -443,7 +445,7 @@ const MOCK_TICKETS = [
     title: 'Lazada order export missing shipping fields',
     category: 'Data & Storage',
     priority: 'Medium',
-    status: 'Pending',
+    status: 'Waiting for Customer',
     created: '2026-03-24',
     updated: '2026-03-25',
     description:
@@ -517,7 +519,7 @@ const MOCK_TICKETS = [
     title: 'Google Analytics 4 missing Shopee traffic data',
     category: 'Software & Apps',
     priority: 'Low',
-    status: 'Pending',
+    status: 'Waiting for Customer',
     created: '2026-03-21',
     updated: '2026-03-23',
     description:
@@ -601,7 +603,7 @@ const ticketFromApi = t => ({
   title: t.title,
   category: t.category,
   priority: t.priority,
-  status: t.status,
+  status: mapLegacyStatus(t.status), // ingress safety net for a not-yet-migrated DB
   created: t.created,
   updated: t.updated,
   description: t.description,
@@ -634,17 +636,11 @@ const slaStateFor = ticket => {
 };
 
 // ─── Jira workflow (live, with fallback) ──────────────────────────────────────
-// Loaded from the BFF on app boot; cached in memory. The fallback list ships
-// with the BFF so a stale cache or a startup race never breaks the UI.
-const JIRA_DEFAULT_STATUSES = [
-  { name: 'To Do', category: 'new' },
-  { name: 'In Progress', category: 'indeterminate' },
-  { name: 'Blocked', category: 'indeterminate' },
-  { name: 'Waiting for Customer', category: 'indeterminate' },
-  { name: 'Waiting for Support', category: 'indeterminate' },
-  { name: 'Resolved', category: 'done' },
-  { name: 'Done', category: 'done' },
-];
+// Loaded from the BFF on app boot; cached in memory. The fallback is the
+// canonical 11-status board workflow (BOARD_COLUMNS) so a stale cache or a
+// startup race never breaks the UI. Note: the Board page always renders the
+// fixed BOARD_COLUMNS — the live fetch informs transition displays only.
+const JIRA_DEFAULT_STATUSES = BOARD_COLUMNS.map(c => ({ name: c.name, category: c.category }));
 let JIRA_WORKFLOW = {
   statuses: JIRA_DEFAULT_STATUSES,
   source: 'fallback',
@@ -3549,6 +3545,101 @@ function PrioritySuggester({ onSelect }) {
   );
 }
 
+// ─── Status dropdown (Jira-style) ────────────────────────────────────────────
+// Colored status pill that opens the full board workflow grouped by category,
+// exactly like Jira's transition button. Renders a read-only pill when the
+// viewer cannot change status.
+function StatusDropdown({ status, onChange, disabled }) {
+  const color = statusColorFor(status);
+  const pill = (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '5px 12px',
+        borderRadius: '6px',
+        background: STATUS_BG[color] || 'var(--bg-hover)',
+        color,
+        fontSize: '13px',
+        fontWeight: 800,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {status}
+      {!disabled && <ChevronDown size={14} />}
+    </span>
+  );
+  if (disabled) return pill;
+  const groups = [
+    { label: 'Not started', items: BOARD_COLUMNS.filter(c => c.category === 'new') },
+    { label: 'In flight', items: BOARD_COLUMNS.filter(c => c.category === 'indeterminate') },
+    { label: 'Done', items: BOARD_COLUMNS.filter(c => c.category === 'done') },
+  ];
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          aria-label="Change status"
+          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          {pill}
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          style={{ ...radixMenuContentStyle, minWidth: '240px' }}
+          sideOffset={6}
+          align="start"
+        >
+          {groups.map(g => (
+            <div key={g.label}>
+              <div
+                style={{
+                  padding: '6px 10px 4px',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                {g.label}
+              </div>
+              {g.items.map(c => (
+                <DropdownMenu.Item
+                  key={c.name}
+                  onSelect={() => c.name !== status && onChange(c.name)}
+                  style={{
+                    ...radixMenuItemStyle,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontWeight: c.name === status ? 800 : 500,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '9px',
+                      height: '9px',
+                      borderRadius: '50%',
+                      background: c.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  {c.name}
+                  {c.name === status && <Check size={13} style={{ marginLeft: 'auto' }} />}
+                </DropdownMenu.Item>
+              ))}
+            </div>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
 // ─── Ticket Detail ────────────────────────────────────────────────────────────
 function TicketDetail({
   ticket,
@@ -3578,16 +3669,13 @@ function TicketDetail({
   const jiraCsat = useJiraCsat(ticket?.jiraKey, ticket?.status);
   const jiraWorklog = useJiraWorklog(ticket?.jiraKey);
 
-  const statusOrder = ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
-  const currentIdx = statusOrder.indexOf(ticket.status);
-
   // Context about the assignee (department + workload) — shown to anyone with
   // full ticket visibility, not just superadmins.
   const assigneeContext = useMemo(() => {
     if (!canViewAll || !ticket.assignee) return null;
     const u = MOCK_USERS.find(u => u.name === ticket.assignee);
     const open = MOCK_TICKETS.filter(
-      t => t.assignee === ticket.assignee && (t.status === 'Open' || t.status === 'In Progress')
+      t => t.assignee === ticket.assignee && statusCategoryFor(t.status) !== 'done'
     ).length;
     const total = MOCK_TICKETS.filter(t => t.assignee === ticket.assignee).length;
     return { dept: u?.department || 'Unknown', email: u?.email || null, open, total };
@@ -4332,78 +4420,32 @@ function TicketDetail({
         </div>
       )}
 
-      {/* Status Tracker */}
+      {/* Status (Jira-style transition control) */}
       <div style={{ ...S.card, marginBottom: '20px' }}>
         <div
           style={{
-            fontSize: '13px',
-            fontWeight: 700,
-            color: 'var(--text-secondary)',
-            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap',
           }}
         >
-          Status Tracker
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          {statusOrder.map((s, i) => (
-            <div
-              key={s}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                flex: i < statusOrder.length - 1 ? 1 : 0,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <div
-                  style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '50%',
-                    background: i <= currentIdx ? 'var(--accent-primary)' : 'var(--border-default)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: i <= currentIdx ? '#fff' : 'var(--text-muted)',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    border: i === currentIdx ? '3px solid #FDBA74' : '3px solid transparent',
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  {i < currentIdx ? '✓' : i + 1}
-                </div>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    color: i <= currentIdx ? 'var(--accent-primary)' : 'var(--text-muted)',
-                    fontWeight: i === currentIdx ? 700 : 400,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {s}
-                </div>
-              </div>
-              {i < statusOrder.length - 1 && (
-                <div
-                  style={{
-                    flex: 1,
-                    height: '2px',
-                    background: i < currentIdx ? 'var(--accent-primary)' : 'var(--border-default)',
-                    margin: '0 4px',
-                    marginBottom: '20px',
-                  }}
-                />
-              )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+              Status
             </div>
-          ))}
+            <StatusDropdown
+              status={ticket.status}
+              disabled={!canChangeStatus}
+              onChange={s => onStatusChange(ticket.id, s)}
+            />
+          </div>
+          {!canChangeStatus && (
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              🔒 Status updates are managed by the IT team.
+            </div>
+          )}
         </div>
       </div>
 
@@ -4640,64 +4682,7 @@ function TicketDetail({
             </div>
           )}
           {/* Attachment summary line is replaced by the dedicated preview card above. */}
-          <div
-            style={{
-              marginTop: '14px',
-              paddingTop: '14px',
-              borderTop: '1px solid var(--border-subtle)',
-            }}
-          >
-            {canChangeStatus ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flexShrink: 0 }}>
-                  Change Status
-                </span>
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <select
-                    value={ticket.status}
-                    onChange={e => onStatusChange(ticket.id, e.target.value)}
-                    style={{ ...S.select, padding: '6px 28px 6px 10px', fontSize: '13px' }}
-                  >
-                    {statusOrder.map(s => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                  <span
-                    style={{
-                      position: 'absolute',
-                      right: '8px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      pointerEvents: 'none',
-                      color: 'var(--text-muted)',
-                      fontSize: '11px',
-                    }}
-                  >
-                    ▾
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 10px',
-                  background: 'var(--bg-page)',
-                  borderRadius: '7px',
-                  border: '1px solid var(--border-default)',
-                }}
-              >
-                <span style={{ fontSize: '14px' }}>🔒</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Status updates are managed by the IT team.
-                </span>
-              </div>
-            )}
-          </div>
+          {/* Status changes live in the Status card's dropdown above. */}
         </div>
       </div>
 
@@ -4781,7 +4766,7 @@ function TicketDetail({
           })}
           <div ref={messagesEndRef} />
         </div>
-        {ticket.status !== 'Closed' && (
+        {!DONE_STATUSES.has(ticket.status) && (
           <div style={{ display: 'flex', gap: '8px' }}>
             <input
               value={newMsg}
@@ -4795,7 +4780,7 @@ function TicketDetail({
             </button>
           </div>
         )}
-        {ticket.status === 'Closed' && (
+        {DONE_STATUSES.has(ticket.status) && (
           <div
             style={{
               fontSize: '13px',
@@ -6210,10 +6195,8 @@ function ProfileModal({ currentUser, setCurrentUser, onClose, onLogout }) {
 function HomePage({ setSection, role }) {
   const can = useCan();
   const canViewAll = can('tickets.view_all');
-  const open = MOCK_TICKETS.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
-  const resolved = MOCK_TICKETS.filter(
-    t => t.status === 'Resolved' || t.status === 'Closed'
-  ).length;
+  const open = MOCK_TICKETS.filter(t => statusCategoryFor(t.status) !== 'done').length;
+  const resolved = MOCK_TICKETS.filter(t => statusCategoryFor(t.status) === 'done').length;
   const [activeTicket, setActiveTicket] = useState(null);
 
   // Admin-only stats: critical open, oldest unresolved age, p50 resolution time, SLA breaches
@@ -7607,7 +7590,7 @@ function MyTicketsPage({ role, currentUser }) {
         if (assigneeFilter !== 'Unassigned' && t.assignee !== assigneeFilter) return false;
       }
       if (isAdmin && staleOnly) {
-        if (t.status === 'Resolved' || t.status === 'Closed') return false;
+        if (statusCategoryFor(t.status) === 'done') return false;
         const ageDays = (now - new Date(t.updated).getTime()) / 86400000;
         if (ageDays < 7) return false;
       }
@@ -7943,7 +7926,7 @@ function MyTicketsPage({ role, currentUser }) {
         {filtered.map(t => {
           const checked = bulkIds.has(t.id);
           const ageDays = Math.floor((Date.now() - new Date(t.updated).getTime()) / 86400000);
-          const isStale = ageDays >= 7 && t.status !== 'Resolved' && t.status !== 'Closed';
+          const isStale = ageDays >= 7 && statusCategoryFor(t.status) !== 'done';
           return (
             <div
               key={t.id}
@@ -8409,9 +8392,9 @@ function AdminPage() {
   // computed fresh on every render (cheap — small list).
   const agentOptions = listAssignableUsers().map(u => u.name);
 
-  const totalOpen = tickets.filter(t => t.status === 'Open').length;
+  const totalOpen = tickets.filter(t => statusCategoryFor(t.status) === 'new').length;
   const totalCritical = tickets.filter(
-    t => t.priority === 'Critical' && (t.status === 'Open' || t.status === 'In Progress')
+    t => t.priority === 'Critical' && statusCategoryFor(t.status) !== 'done'
   ).length;
 
   return (
@@ -10410,9 +10393,7 @@ function UsersPanelPage({ currentUserEmail }) {
   }, [query, roleFilter, statusFilter, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openTicketCount = name =>
-    MOCK_TICKETS.filter(
-      t => t.assignee === name && (t.status === 'Open' || t.status === 'In Progress')
-    ).length;
+    MOCK_TICKETS.filter(t => t.assignee === name && statusCategoryFor(t.status) !== 'done').length;
 
   const fmtLogin = iso => {
     if (!iso) return 'Never';
@@ -12222,7 +12203,7 @@ function ChatAssistantWidget({ effectiveUser, effectiveRole }) {
   const buildUserContext = () => {
     if (!effectiveUser) return undefined;
     const openTickets = MOCK_TICKETS.filter(
-      t => t.assignee === effectiveUser.name && (t.status === 'Open' || t.status === 'In Progress')
+      t => t.assignee === effectiveUser.name && statusCategoryFor(t.status) !== 'done'
     )
       .slice(0, 10)
       .map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority }));

@@ -196,7 +196,7 @@ router.post('/', async (req, res, next) => {
            (key, title, description, category, priority, status,
             requester_name, requester_email, assignee_name, assignee_email,
             department, shop, platforms, jira_sync_state)
-         VALUES ($1,$2,$3,$4,$5,'Open',$6,$7,$8,$9,$10,$11,$12::jsonb,'local-only')
+         VALUES ($1,$2,$3,$4,$5,'To Do',$6,$7,$8,$9,$10,$11,$12::jsonb,'local-only')
          RETURNING *`,
         [
           key,

@@ -11,21 +11,57 @@ export const PRIORITY_COLORS = {
   Low: '#16A34A',
 };
 
+// ─── Board workflow ───────────────────────────────────────────────────────────
+// The canonical ticket workflow, mirroring the real PESD1 Jira board 1:1 —
+// column order IS board order. `category` follows Jira's status categories:
+// 'new' (not started), 'indeterminate' (in flight), 'done' (terminal).
+// These names are PESD1-native, so pushJiraTransition can resolve transitions
+// by name with no mapping layer.
+export const BOARD_COLUMNS = [
+  { id: 'waiting-support', name: 'Waiting for Support', color: '#F97316', category: 'new' },
+  { id: 'blocked', name: 'Blocked', color: '#DC2626', category: 'indeterminate' },
+  {
+    id: 'waiting-customer',
+    name: 'Waiting for Customer',
+    color: '#F59E0B',
+    category: 'indeterminate',
+  },
+  { id: 'todo', name: 'To Do', color: '#3B82F6', category: 'new' },
+  { id: 'in-progress', name: 'In Progress', color: '#8B5CF6', category: 'indeterminate' },
+  { id: 'ready-qa', name: 'Ready for QA', color: '#06B6D4', category: 'indeterminate' },
+  { id: 'in-qa', name: 'In QA', color: '#0E7490', category: 'indeterminate' },
+  {
+    id: 'ready-review',
+    name: 'Ready for Code Review',
+    color: '#EC4899',
+    category: 'indeterminate',
+  },
+  { id: 'ready-release', name: 'Ready to Release', color: '#10B981', category: 'indeterminate' },
+  {
+    id: 'closed-wont-do',
+    name: "Closed - Won't Do",
+    color: 'var(--text-secondary)',
+    category: 'done',
+  },
+  { id: 'live', name: 'Live', color: '#16A34A', category: 'done' },
+];
+export const BOARD_STATUS_NAMES = BOARD_COLUMNS.map(c => c.name);
+const STATUS_CATEGORY = Object.fromEntries(BOARD_COLUMNS.map(c => [c.name, c.category]));
+// Legacy names resolve through their canonical mapping; unknowns count as in flight.
+export const statusCategoryFor = name =>
+  STATUS_CATEGORY[name] || STATUS_CATEGORY[mapLegacyStatus(name)] || 'indeterminate';
+
 // Color mapping covers both the legacy local names and the Jira Service
 // Management workflow names. Unknown statuses fall back to slate gray.
 export const STATUS_COLORS = {
   // Legacy local names
   Open: '#3B82F6',
-  'In Progress': '#8B5CF6',
   Pending: '#F59E0B',
   Resolved: '#16A34A',
   Closed: 'var(--text-secondary)',
-  // Jira Service Management canonical names
-  'To Do': '#3B82F6',
-  Blocked: '#DC2626',
-  'Waiting for Customer': '#F59E0B',
-  'Waiting for Support': '#F97316',
   Done: 'var(--text-secondary)',
+  // Canonical board workflow names
+  ...Object.fromEntries(BOARD_COLUMNS.map(c => [c.name, c.color])),
 };
 
 export const STATUS_BG = {
@@ -35,18 +71,25 @@ export const STATUS_BG = {
   '#F59E0B': '#FFFBEB',
   '#F97316': '#FFF7ED',
   '#16A34A': '#F0FDF4',
+  '#06B6D4': '#ECFEFF',
+  '#0E7490': '#ECFEFF',
+  '#EC4899': '#FDF2F8',
+  '#10B981': '#ECFDF5',
   'var(--text-secondary)': 'var(--bg-hover)',
 };
 
 export const statusColorFor = name => STATUS_COLORS[name] || 'var(--text-secondary)';
 
-// Maps legacy local statuses → canonical Jira Service Management names.
+// Maps legacy local statuses → canonical board workflow names. Completed work
+// maps to Live optimistically — "Closed - Won't Do" is reserved for tickets
+// explicitly closed as won't-do (no historical signal distinguishes the two).
 export const LEGACY_TO_JIRA_STATUS = {
   Open: 'To Do',
   'In Progress': 'In Progress',
   Pending: 'Waiting for Customer',
-  Resolved: 'Resolved',
-  Closed: 'Done',
+  Resolved: 'Live',
+  Done: 'Live',
+  Closed: 'Live',
 };
 export const mapLegacyStatus = name => LEGACY_TO_JIRA_STATUS[name] || name;
 
@@ -66,7 +109,9 @@ export const SLA_TARGETS_HOURS = {
   Low: { response: 8, resolution: 40 },
 };
 
-export const DONE_STATUSES = new Set(['Resolved', 'Done', 'Closed']);
+// Terminal statuses. Canonical names first; legacy names kept so stale
+// persisted data can never regress SLA math or CSAT gating mid-transition.
+export const DONE_STATUSES = new Set(['Live', "Closed - Won't Do", 'Resolved', 'Done', 'Closed']);
 
 export const PLATFORMS = [
   'Shopify',
