@@ -5,6 +5,20 @@ import DocStudioPage from './src/components/docs/studio/DocStudioPage.jsx';
 import SuggestionsPage from './src/components/suggestions/SuggestionsPage.jsx';
 import { createJiraTicket, isJiraConfigured } from './src/api/jiraApi.js';
 import { listFeaturedDocs, listDocSummaries } from './src/api/docsApi.js';
+import { API_ENABLED } from './src/api/client.js';
+import * as authApi from './src/api/authApi.js';
+import * as ticketsApi from './src/api/ticketsApi.js';
+import * as usersApi from './src/api/usersApi.js';
+import * as rolesApi from './src/api/rolesApi.js';
+import { loadStore, saveStore, clearStore } from './src/lib/store.js';
+import {
+  MAX_ATTEMPTS, LOCKOUT_MS, AUTH_DELAY, REMEMBER_KEY,
+  validateCredentials as localValidateCredentials,
+  setPassword as setUserPassword,
+  writeSession, getSession, clearSession,
+  getLockState, setLockState, clearLockState,
+} from './src/lib/localAuth.js';
+import { DEMO_SEED_USERS } from './src/mocks/seedUsers.js';
 import FilePreviewCard, { fileToAttachment, ATTACHMENT_DATAURL_LIMIT as _ATT_LIMIT } from './src/components/FilePreviewCard.jsx'; // eslint-disable-line no-unused-vars
 import { NotificationProvider, useNotifications, buildSeedNotifications } from './src/context/NotificationContext.jsx';
 import NotificationBell from './src/components/NotificationBell.jsx';
@@ -348,8 +362,49 @@ const addTicket = (ticket) => {
   bumpTickets();
 };
 const deleteTicket = (id) => {
-  updateTickets(ts => ts.filter(t => t.id !== id));
+  const t = MOCK_TICKETS.find(x => x.id === id);
+  updateTickets(ts => ts.filter(x => x.id !== id));
+  mirror(t?.uuid && ticketsApi.deleteTicket(t.uuid));
 };
+
+// ─── Backend mirroring (API mode) ─────────────────────────────────────────────
+// In backend mode the local stores act as an optimistic cache: mutations apply
+// locally first (exactly as in mock mode) and are mirrored to the BFF. The
+// server remains authoritative — hydrateFromBackend() re-syncs after login.
+// mirror() swallows a false-y argument so call sites can guard inline:
+//   mirror(t.uuid && ticketsApi.updateTicket(t.uuid, {...}))
+const mirror = (promise) => {
+  if (!API_ENABLED || !promise || typeof promise.then !== 'function') return;
+  promise.then(res => {
+    if (res?.error) console.warn('[api] backend mirror failed:', res.error);
+  });
+};
+
+// Server ticket → UI ticket. The human key drives display and local lookups
+// (mock tickets use it as their id); the row uuid is kept for API calls.
+const ticketFromApi = (t) => ({
+  id: t.key || t.id,
+  uuid: t.id,
+  title: t.title,
+  category: t.category,
+  priority: t.priority,
+  status: t.status,
+  created: t.created,
+  updated: t.updated,
+  description: t.description,
+  assignee: t.assignee || null,
+  assigneeEmail: t.assigneeEmail || null,
+  requester: t.requester,
+  department: t.department,
+  shop: t.shop,
+  platforms: t.platforms || [],
+  jiraKey: t.jiraKey,
+  jiraSyncState: t.jiraSyncState,
+  jiraSyncedAt: t.jiraSyncedAt,
+  timeline: (t.timeline || []).map(x => ({ date: x.date, action: x.action, actor: x.actor })),
+  messages: (t.comments || []).filter(c => !c.internal).map(c => ({ from: c.author, time: c.time, text: c.body })),
+  pullRequests: [],
+});
 
 // Legacy fallback list. Live ticket UIs derive their options from
 // listAssignableUsers() (role-registry-driven); ALL_AGENTS is only used by
@@ -703,25 +758,7 @@ const loadJiraWorkflow = async (project = 'PESD1') => {
   return getJiraWorkflow();
 };
 
-// ─── localStorage persistence helpers ─────────────────────────────────────────
-// Versioned keys so a future schema change can ignore stale payloads cleanly.
-const STORE_PREFIX = 'pomelo:v1:';
-const __safeLocal = typeof window !== 'undefined' && window.localStorage;
-const loadStore = (key, fallback) => {
-  if (!__safeLocal) return fallback;
-  try {
-    const raw = window.localStorage.getItem(STORE_PREFIX + key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch { return fallback; }
-};
-const saveStore = (key, value) => {
-  if (!__safeLocal) return;
-  try { window.localStorage.setItem(STORE_PREFIX + key, JSON.stringify(value)); } catch { /* quota / private mode — drop silently */ }
-};
-const clearStore = (key) => {
-  if (!__safeLocal) return;
-  try { window.localStorage.removeItem(STORE_PREFIX + key); } catch { /* ignore */ }
-};
+// localStorage persistence helpers live in src/lib/store.js (imported above).
 
 // ─── Form draft persistence hook ──────────────────────────────────────────────
 // Drop-in replacement for useState that mirrors the value to localStorage so a
@@ -1133,21 +1170,11 @@ function useModalFocusTrap(ref) {
   }, [ref]);
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-const SESSION_KEY  = 'pomelo_techops_session';
-const LOCK_KEY     = 'pomelo_login_lock';
-const REMEMBER_KEY = 'pomelo_remember_email';
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS   = 30_000;
-const AUTH_DELAY   = 600;
-
-// Demo accounts exist only in dev builds — production bundles ship zero seeded
-// users (accounts come from the backend, or self-signup in mock mode).
-// Both dev accounts use the password: Demo123!
-let MOCK_USERS = import.meta.env.DEV ? [
-  { id: 'u1', name: 'Demo Admin', email: 'demo.admin@example.com', passwordSalt: 'demo-seed-admin', passwordHash: '7dd344ffa2c9acd92b007af8be210b264382b19411f3dd1e3aca96450376c702', role: 'superadmin', roleId: 'role_superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-09-01' },
-  { id: 'u2', name: 'Demo User',  email: 'demo.user@example.com',  passwordSalt: 'demo-seed-user',  passwordHash: 'a30ea2c34ea6382c72d061626bc21bee50e1f657823b9f88de76484c365dde10', role: 'user',       roleId: 'role_user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-11-12' },
-] : [];
+// ─── Auth (mock mode) ─────────────────────────────────────────────────────────
+// Constants + password/session primitives live in src/lib/localAuth.js; the
+// dev-only demo accounts in src/mocks/seedUsers.js. When API_ENABLED, real
+// authentication happens in src/api/authApi.js against the BFF instead.
+let MOCK_USERS = [...DEMO_SEED_USERS];
 
 // ─── Chat log store (in-memory) ───────────────────────────────────────────────
 // Sessions captured for future training / cap tuning. Each session is one
@@ -1293,7 +1320,10 @@ for (const t of MOCK_TICKETS) {
 (() => {
   const storedUsers = loadStore('users', null);
   if (Array.isArray(storedUsers) && storedUsers.length) {
-    MOCK_USERS = storedUsers;
+    // Drop users persisted under the removed legacy btoa hash scheme — they
+    // can no longer authenticate. If nothing valid remains, keep the seeds.
+    const valid = storedUsers.filter(u => u.passwordSalt);
+    if (valid.length) MOCK_USERS = valid;
   }
   const storedTickets = loadStore('tickets', null);
   if (Array.isArray(storedTickets) && storedTickets.length) {
@@ -1410,6 +1440,15 @@ const createRole = ({ name, label, description, color, capabilities }) => {
   };
   ROLES_REGISTRY = [...ROLES_REGISTRY, role];
   bumpRoles();
+  // Server assigns its own role id — refresh the registry so later edits to
+  // this role target the server's id, not the optimistic local one.
+  if (API_ENABLED) {
+    rolesApi.createRole({ label: trimmedLabel, description: description || '', color: role.color, capabilities: caps })
+      .then(res => {
+        if (res.error) console.warn('[api] backend mirror failed:', res.error);
+        else hydrateFromBackend();
+      });
+  }
   recordAudit('role.create', _currentActor, { type: 'role', id: role.id, label: role.label }, { capabilities: caps });
   return role;
 };
@@ -1428,6 +1467,13 @@ const updateRole = (id, updates) => {
   if (role.isSystem) next.name = role.name;
   ROLES_REGISTRY = ROLES_REGISTRY.map(r => r.id === id ? next : r);
   bumpRoles();
+  {
+    const { label, description, color, capabilities } = updates;
+    const serverPatch = Object.fromEntries(
+      Object.entries({ label, description, color, capabilities }).filter(([, v]) => v !== undefined)
+    );
+    mirror(Object.keys(serverPatch).length && rolesApi.updateRole(id, serverPatch));
+  }
   const capChange = updates.capabilities
     ? {
         added: updates.capabilities.filter(c => !role.capabilities.includes(c)),
@@ -1449,6 +1495,7 @@ const deleteRole = (id) => {
   if (countUsersInRole(id) > 0) return { error: 'Reassign users in this role before deleting it.' };
   ROLES_REGISTRY = ROLES_REGISTRY.filter(r => r.id !== id);
   bumpRoles();
+  mirror(rolesApi.deleteRole(id));
   recordAudit('role.delete', _currentActor, { type: 'role', id, label: role.label });
   return { ok: true };
 };
@@ -1479,6 +1526,7 @@ const setUserRoleId = (userId, nextRoleId) => {
   if (targetRole.name === 'superadmin' || targetRole.name === 'user') u.role = targetRole.name;
   else u.role = targetRole.name;
   bumpUsers();
+  mirror(usersApi.updateUser(userId, { roleId: nextRoleId }));
   recordAudit('user.role_change', _currentActor, { type: 'user', id: u.id, label: u.name }, { from: prev, to: nextRoleId });
   return sanitiseUser(u);
 };
@@ -1545,12 +1593,47 @@ const sanitiseUser = ({ passwordHash: _, ...u }) => u;
 const listUsers = () => MOCK_USERS.map(sanitiseUser);
 const findUserById = (id) => MOCK_USERS.find(u => u.id === id);
 
+// ─── Backend hydration (API mode) ─────────────────────────────────────────────
+// After login the server becomes the source of truth: replace the local
+// roles/users/tickets caches with server state. Non-admins get a 403 from
+// /api/users — their cache simply keeps whatever the session already knows.
+const userFromApi = (u) => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  role: findRole(u.roleId)?.name || 'user', // legacy string some components read
+  roleId: u.roleId,
+  department: u.department,
+  active: u.active,
+  lastLoginAt: u.lastLoginAt,
+  forceReOtp: false,
+  createdAt: u.createdAt,
+});
+
+const hydrateFromBackend = async () => {
+  if (!API_ENABLED) return;
+  // Roles first so userFromApi can resolve role names.
+  const r = await rolesApi.listRoles();
+  if (r.data?.roles?.length) { ROLES_REGISTRY = r.data.roles; bumpRoles(); }
+  const [u, t] = await Promise.all([
+    usersApi.listUsers(),
+    ticketsApi.listTickets({ limit: 200 }),
+  ]);
+  if (u.data?.users) { MOCK_USERS = u.data.users.map(userFromApi); bumpUsers(); }
+  if (t.data?.tickets) updateTickets(t.data.tickets.map(ticketFromApi));
+};
+
 const updateUser = (id, updates) => {
   const u = findUserById(id);
   if (!u) return null;
   const before = { ...u };
   Object.assign(u, updates);
   bumpUsers();
+  const { name, email, department } = updates;
+  const serverPatch = Object.fromEntries(
+    Object.entries({ name, email, department }).filter(([, v]) => v !== undefined)
+  );
+  mirror(Object.keys(serverPatch).length && usersApi.updateUser(id, serverPatch));
   recordAudit('user.update', _currentActor, { type: 'user', id: u.id, label: u.name },
     { changedKeys: Object.keys(updates), before: Object.fromEntries(Object.keys(updates).map(k => [k, before[k]])), after: updates });
   return sanitiseUser(u);
@@ -1562,6 +1645,7 @@ const setUserRole = (id, role) => {
   const prev = u.role;
   u.role = role;
   bumpUsers();
+  mirror(LEGACY_ROLE_TO_ROLE_ID[role] && usersApi.updateUser(id, { roleId: LEGACY_ROLE_TO_ROLE_ID[role] }));
   recordAudit(role === 'superadmin' ? 'user.promote' : 'user.demote', _currentActor,
     { type: 'user', id: u.id, label: u.name }, { from: prev, to: role });
   return sanitiseUser(u);
@@ -1572,6 +1656,7 @@ const setUserActive = (id, active) => {
   if (!u) return null;
   u.active = active;
   bumpUsers();
+  mirror(usersApi.updateUser(id, { active }));
   recordAudit(active ? 'user.reactivate' : 'user.deactivate', _currentActor,
     { type: 'user', id: u.id, label: u.name });
   return sanitiseUser(u);
@@ -1589,7 +1674,7 @@ const forceUserReOtp = (id) => {
 const resetUserPassword = async (id, tempPassword) => {
   const u = findUserById(id);
   if (!u) return null;
-  await setPassword(u, tempPassword);
+  await setUserPassword(u, tempPassword);
   u.forceReOtp = true;
   bumpUsers();
   recordAudit('user.reset_password', _currentActor, { type: 'user', id: u.id, label: u.name });
@@ -1615,75 +1700,27 @@ const adminCreateUser = async ({ name, email, role, roleId, department = 'IT & T
     active: true, lastLoginAt: null, forceReOtp: true,
     createdAt: new Date().toISOString().slice(0, 10),
   };
-  await setPassword(u, tempPassword);
+  await setUserPassword(u, tempPassword);
   MOCK_USERS.push(u);
   bumpUsers();
+  mirror(usersApi.createUser({
+    name: u.name, email: sanitisedEmail, password: tempPassword,
+    roleId: resolvedRoleId, department,
+  }));
   recordAudit('user.create', _currentActor, { type: 'user', id, label: u.name }, { role: legacyRoleStr, roleId: resolvedRoleId, department });
   return { user: sanitiseUser(u) };
 };
 
 const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
-// ─── Password hashing ─────────────────────────────────────────────────────────
-// Web Crypto SHA-256 with a per-user random 128-bit salt. Legacy btoa-based
-// hashes are accepted once on login and auto-upgraded to the new scheme.
-const _subtle = typeof crypto !== 'undefined' && crypto.subtle;
-const randomSalt = () => {
-  const a = new Uint8Array(16);
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(a);
-  else for (let i = 0; i < 16; i++) a[i] = Math.floor(Math.random() * 256);
-  return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
-};
-const sha256Hex = async (text) => {
-  if (!_subtle) return null;
-  const data = new TextEncoder().encode(text);
-  const hash = await _subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-};
-const hashPassword = (salt, password) => sha256Hex(salt + ':' + password);
-
-const verifyPassword = async (user, password) => {
-  if (!user) return false;
-  if (user.passwordSalt) {
-    const h = await hashPassword(user.passwordSalt, password);
-    return h === user.passwordHash;
-  }
-  // Legacy btoa scheme (reversible — kept only for migration of seed users)
-  const legacy = btoa('salt_' + user.id + '_' + password);
-  return legacy === user.passwordHash;
-};
-
-const upgradePassword = async (user, password) => {
-  const salt = randomSalt();
-  const h = await hashPassword(salt, password);
-  if (!h) return;
-  user.passwordSalt = salt;
-  user.passwordHash = h;
-  bumpUsers();
-};
-
-const setPassword = async (user, password) => {
-  const salt = randomSalt();
-  const h = await hashPassword(salt, password);
-  if (!h) return;
-  user.passwordSalt = salt;
-  user.passwordHash = h;
-};
-
+// ─── Mock-mode credential wrappers ────────────────────────────────────────────
+// Primitives come from src/lib/localAuth.js; these wrappers own the MOCK_USERS
+// list and the persistence bump. The legacy reversible btoa hash scheme is
+// gone — all mock users are salted SHA-256.
 const validateCredentials = async (email, password) => {
-  const sanitised = email.trim().toLowerCase();
-  const user = MOCK_USERS.find(u => u.email === sanitised);
-  if (!user) {
-    // Compute a dummy hash so timing is comparable across hit/miss
-    await hashPassword('dummy_salt_' + sanitised, password).catch(() => null);
-    return null;
-  }
-  const ok = await verifyPassword(user, password);
-  if (!ok) return null;
-  if (!user.passwordSalt) await upgradePassword(user, password);
-  if (user.active === false) return { _deactivated: true };
-  const { passwordHash: _, passwordSalt: __, ...safe } = user;
-  return safe;
+  const { user, deactivated } = await localValidateCredentials(MOCK_USERS, email, password);
+  if (deactivated) return { _deactivated: true };
+  return user;
 };
 
 const createSession = (user) => {
@@ -1691,13 +1728,8 @@ const createSession = (user) => {
   // Record lastLoginAt on the canonical record so the admin Users panel reflects it
   const canonical = MOCK_USERS.find(u => u.id === user.id);
   if (canonical) { canonical.lastLoginAt = new Date().toISOString(); bumpUsers(); }
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...safe, loginAt: Date.now() }));
+  writeSession(safe);
 };
-const getSession = () => { try { const r = sessionStorage.getItem(SESSION_KEY); return r ? JSON.parse(r) : null; } catch { return null; } };
-const clearSession = () => sessionStorage.removeItem(SESSION_KEY);
-const getLockState = () => { try { const r = sessionStorage.getItem(LOCK_KEY); return r ? JSON.parse(r) : { attempts: 0, lockedUntil: 0 }; } catch { return { attempts: 0, lockedUntil: 0 }; } };
-const setLockState = (attempts, lockedUntil) => sessionStorage.setItem(LOCK_KEY, JSON.stringify({ attempts, lockedUntil }));
-const clearLockState = () => sessionStorage.removeItem(LOCK_KEY);
 
 const registerUser = async (firstName, lastName, email, password) => {
   const sanitisedEmail = email.trim().toLowerCase();
@@ -1714,7 +1746,7 @@ const registerUser = async (firstName, lastName, email, password) => {
     active: true, lastLoginAt: null, forceReOtp: false,
     createdAt: new Date().toISOString().slice(0, 10),
   };
-  await setPassword(u, password);
+  await setUserPassword(u, password);
   MOCK_USERS.push(u);
   bumpUsers();
   return null;
@@ -1758,11 +1790,22 @@ function SignupModal({ onClose, onToast }) {
       setError('Passwords do not match.'); return;
     }
     setIsLoading(true);
-    await delay(AUTH_DELAY);
-    const registrationError = await registerUser(firstName, lastName, email, password);
+    let registrationError;
+    if (API_ENABLED) {
+      // Backend signup requires email verification before first login.
+      const { error: err } = await authApi.register(
+        `${firstName.trim()} ${lastName.trim()}`, email.trim().toLowerCase(), password
+      );
+      registrationError = err;
+    } else {
+      await delay(AUTH_DELAY);
+      registrationError = await registerUser(firstName, lastName, email, password);
+    }
     setIsLoading(false);
     if (registrationError) { setError(registrationError); return; }
-    onToast?.('Welcome To Pomelo TechOps Portal');
+    onToast?.(API_ENABLED
+      ? 'Account created — check your email to verify your address before signing in.'
+      : 'Welcome To Pomelo TechOps Portal');
     onClose();
   };
 
@@ -1995,16 +2038,26 @@ function LoginPage({ onLogin, onToast }) {
     e.preventDefault();
     if (isLocked || isLoading) return;
     setIsLoading(true); setError('');
-    await delay(AUTH_DELAY);
     const sanitised = email.trim().toLowerCase();
-    const user = await validateCredentials(sanitised, password);
+    let user, apiError = null;
+    if (API_ENABLED) {
+      // Real session: httpOnly cookie set by the BFF. The server enforces
+      // its own rate limits; the local lockout below still slows brute force
+      // in the UI. Server role is an object — flatten to the legacy string.
+      const res = await authApi.login(sanitised, password);
+      user = res.data ? { ...res.data, role: res.data.role?.name || 'user' } : null;
+      apiError = res.error;
+    } else {
+      await delay(AUTH_DELAY);
+      user = await validateCredentials(sanitised, password);
+    }
     if (!user) {
       const current = getLockState();
       const newAttempts = current.attempts + 1;
       const lockedUntil = newAttempts >= MAX_ATTEMPTS ? Date.now() + LOCKOUT_MS : 0;
       setLockState(newAttempts, lockedUntil);
       setLockStateLocal({ attempts: newAttempts, lockedUntil });
-      setError('Invalid email or password');
+      setError(apiError || 'Invalid email or password');
       setIsLoading(false); return;
     }
     if (user._deactivated) {
@@ -2014,7 +2067,7 @@ function LoginPage({ onLogin, onToast }) {
     clearLockState();
     if (rememberMe) localStorage.setItem(REMEMBER_KEY, sanitised);
     else localStorage.removeItem(REMEMBER_KEY);
-    createSession(user);
+    if (!API_ENABLED) createSession(user);
     setIsLoading(false);
     onLogin(user);
   };
@@ -2829,6 +2882,9 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
       actorName: _currentActor?.name || 'You',
       ticketId: ticket.id,
     });
+
+    // Persist the comment to the backend when this ticket is a server row.
+    mirror(ticket.uuid && ticketsApi.addComment(ticket.uuid, text));
 
     // Fire-and-forget push to Jira when the ticket is linked
     if (ticket.jiraKey) {
@@ -4415,6 +4471,25 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
       ticket.attachments = await Promise.all(form.files.slice(0, 10).map(fileToAttachment));
     }
     addTicket(ticket);
+    if (API_ENABLED) {
+      // Persist to the backend; adopt the server's identity (uuid + canonical
+      // key) on the local copy so later mutations target the real row.
+      ticketsApi.createTicket({
+        title: ticket.title,
+        description: ticket.description || '',
+        ...(ticket.category ? { category: ticket.category } : {}),
+        priority: ticket.priority || 'Medium',
+        ...(ticket.department ? { department: ticket.department } : {}),
+        ...(ticket.shop ? { shop: ticket.shop } : {}),
+        platforms: ticket.platforms || [],
+      }).then(res => {
+        if (res.error) return console.warn('[api] backend mirror failed:', res.error);
+        const localId = ticket.id;
+        updateTickets(ts => ts.map(x => x.id === localId
+          ? { ...x, id: res.data.key, key: res.data.key, uuid: res.data.id }
+          : x));
+      });
+    }
     showToast(`Your ticket ${ticketId} has been submitted.${extraNote}`);
     clearDraft();
     setErrors({});
@@ -4936,11 +5011,14 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
   const handleStatusChange = (id, newStatus) => {
     const ticket = tickets.find(t => t.id === id);
     updateTickets(ts => ts.map(t => t.id === id ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) } : t));
+    mirror(ticket?.uuid && ticketsApi.updateTicket(ticket.uuid, { status: newStatus }));
     if (ticket?.jiraKey) pushJiraTransition(ticket, newStatus);
   };
 
   const handleAssigneeChange = (id, assignee) => {
+    const ticket = tickets.find(t => t.id === id);
     updateTickets(ts => ts.map(t => t.id === id ? { ...t, assignee } : t));
+    mirror(ticket?.uuid && ticketsApi.assignTicket(ticket.uuid, emailForAssignee(assignee) || null, assignee || undefined));
   };
 
   const toggleBulk = (id) => {
@@ -4956,6 +5034,7 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
     const today = new Date().toISOString().slice(0, 10);
     const affected = tickets.filter(t => bulkIds.has(t.id));
     updateTickets(ts => ts.map(t => bulkIds.has(t.id) ? { ...t, status: newStatus, updated: today } : t));
+    affected.forEach(t => mirror(t.uuid && ticketsApi.updateTicket(t.uuid, { status: newStatus })));
     recordAudit('ticket.bulk_status', _currentActor, null, { count: bulkIds.size, status: newStatus });
     // Push Jira transitions for any linked tickets (best-effort, parallel).
     affected.filter(t => t.jiraKey).forEach(t => pushJiraTransition(t, newStatus));
@@ -4965,7 +5044,9 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
   const bulkReassign = (assignee) => {
     if (bulkIds.size === 0) return;
     const assigneeEmail = emailForAssignee(assignee);
+    const affected = tickets.filter(t => bulkIds.has(t.id));
     updateTickets(ts => ts.map(t => bulkIds.has(t.id) ? { ...t, assignee, assigneeEmail } : t));
+    affected.forEach(t => mirror(t.uuid && ticketsApi.assignTicket(t.uuid, assigneeEmail || null, assignee || undefined)));
     recordAudit('ticket.bulk_reassign', _currentActor, null, { count: bulkIds.size, assignee, assigneeEmail });
     setBulkIds(new Set());
   };
@@ -5133,6 +5214,7 @@ function DeveloperPortalPage({ currentUser }) {
     t.status = newStatus;
     t.updated = new Date().toISOString().slice(0, 10);
     bumpTickets();
+    mirror(t.uuid && ticketsApi.updateTicket(t.uuid, { status: newStatus }));
     recordAudit('ticket.status_change', _currentActor, { type: 'ticket', id: t.id, label: t.title }, { from: prev, to: newStatus });
     if (t.jiraKey) pushJiraTransition(t, newStatus).catch(() => {});
     addNotification({ type: 'ticket_status', title: `Status updated: ${t.id}`, body: `${prev} → ${newStatus}`, ticketId: t.id });
@@ -5256,12 +5338,15 @@ function AdminPage() {
       ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) }
       : t
     ));
+    mirror(ticket?.uuid && ticketsApi.updateTicket(ticket.uuid, { status: newStatus }));
     if (ticket?.jiraKey) pushJiraTransition(ticket, newStatus);
   };
 
   const assignTicket = (id, assignee) => {
+    const ticket = tickets.find(t => t.id === id);
     const assigneeEmail = assignee ? emailForAssignee(assignee) : null;
     updateTickets(ts => ts.map(t => t.id === id ? { ...t, assignee: assignee || null, assigneeEmail } : t));
+    mirror(ticket?.uuid && ticketsApi.assignTicket(ticket.uuid, assigneeEmail, assignee || undefined));
     setEditingAssignee(null);
   };
 
@@ -7746,19 +7831,25 @@ function AppContent() {
   );
 
   useEffect(() => {
-    const session = getSession();
-    if (session) {
+    const restore = (u, roleName) => {
+      const roleId = u.roleId || LEGACY_ROLE_TO_ROLE_ID[roleName] || getDefaultRoleId();
+      setCurrentUser({ name: u.name, email: u.email, department: u.department, roleId });
+      setRole(roleName);
+      setIsAuthenticated(true);
+      setAuditActor({ name: u.name, email: u.email });
+      seedNotifications(buildSeedNotifications(u.name));
+    };
+    if (API_ENABLED) {
+      // The session is an httpOnly cookie — ask the server who we are.
+      authApi.me().then(({ data: u }) => {
+        if (u) { restore(u, u.role?.name || 'user'); hydrateFromBackend(); }
+      });
+    } else {
+      const session = getSession();
       // Back-fill roleId for sessions created before the RBAC migration
       // landed — derive from the legacy role string. Once the user logs in
       // again, the createSession write will carry roleId natively.
-      const roleId = session.roleId
-        || LEGACY_ROLE_TO_ROLE_ID[session.role]
-        || getDefaultRoleId();
-      setCurrentUser({ name: session.name, email: session.email, department: session.department, roleId });
-      setRole(session.role);
-      setIsAuthenticated(true);
-      setAuditActor({ name: session.name, email: session.email });
-      seedNotifications(buildSeedNotifications(session.name));
+      if (session) restore(session, session.role);
     }
     // Load the live Jira project metadata on boot — all fall back silently.
     loadJiraWorkflow();
@@ -7790,6 +7881,7 @@ function AppContent() {
     setRole(user.role);
     setIsAuthenticated(true);
     setViewAs(null);
+    hydrateFromBackend();
     setAuditActor({ name: user.name, email: user.email });
     if (hasPermission({ roleId }, 'audit.view', listRoles())) recordAudit('session.login', { name: user.name, email: user.email });
     seedNotifications(buildSeedNotifications(user.name));
@@ -7799,6 +7891,7 @@ function AppContent() {
     if (currentUser && hasPermission(currentUser, 'audit.view', listRoles())) {
       recordAudit('session.logout', { name: currentUser.name, email: currentUser.email });
     }
+    if (API_ENABLED) authApi.logout(); // clears the httpOnly cookie server-side
     clearSession();
     setIsAuthenticated(false);
     setCurrentUser(null);

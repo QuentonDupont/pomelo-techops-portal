@@ -2,47 +2,9 @@
 // REST API service layer for the Pomelo TechOps Documentation system.
 // All functions fall back to mock data when no backend is available.
 
-import axios from 'axios';
 import { MOCK_DOCS } from '../mocks/docsMockData.js';
 import { extractDocumentContent } from './claudeApi.js';
-
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-const USE_MOCK = !BASE_URL;
-
-// ─── Axios instance ────────────────────────────────────────────────────────────
-const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-const simulateDelay = (ms = 400) => new Promise(r => setTimeout(r, ms));
-
-// The backend's error envelope is { error: string } (legacy shapes used
-// message); fall through so real server messages reach the user instead of
-// axios's generic "Request failed with status code N".
-const errorMessage = err => {
-  const data = err?.response?.data;
-  if (typeof data?.error === 'string') return data.error;
-  if (typeof data?.message === 'string') return data.message;
-  if (err?.message) return err.message;
-  return 'An unexpected error occurred. Please try again.';
-};
-
-/**
- * Wraps an async operation and returns { data, loading, error }.
- * @param {() => Promise<any>} fn
- * @returns {Promise<{ data: any, error: string|null }>}
- */
-const wrap = async fn => {
-  try {
-    const data = await fn();
-    return { data, error: null };
-  } catch (err) {
-    return { data: null, error: errorMessage(err) };
-  }
-};
+import { api, USE_MOCK, wrap, simulateDelay } from './client.js';
 
 // ─── In-memory mock store (mutated on upload/update/delete) ───────────────────
 let mockStore = [...MOCK_DOCS];

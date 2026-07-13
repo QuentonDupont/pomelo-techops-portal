@@ -35,6 +35,9 @@ export default [
         atob: 'readonly',
         btoa: 'readonly',
         crypto: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+        Uint8Array: 'readonly',
         navigator: 'readonly',
         performance: 'readonly',
         process: 'readonly',
@@ -60,7 +63,7 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
 
       // General
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', ignoreRestSiblings: true }],
       'no-console': 'off',                  // intentional console usage in server
       'no-undef': 'error',
     },
