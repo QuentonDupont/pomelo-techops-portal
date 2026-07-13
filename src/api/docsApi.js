@@ -19,8 +19,13 @@ const api = axios.create({
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 const simulateDelay = (ms = 400) => new Promise(r => setTimeout(r, ms));
 
+// The backend's error envelope is { error: string } (legacy shapes used
+// message); fall through so real server messages reach the user instead of
+// axios's generic "Request failed with status code N".
 const errorMessage = err => {
-  if (err?.response?.data?.message) return err.response.data.message;
+  const data = err?.response?.data;
+  if (typeof data?.error === 'string') return data.error;
+  if (typeof data?.message === 'string') return data.message;
   if (err?.message) return err.message;
   return 'An unexpected error occurred. Please try again.';
 };

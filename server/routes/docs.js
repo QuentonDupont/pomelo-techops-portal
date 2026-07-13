@@ -42,6 +42,7 @@ const serialize = (d, versions) => ({
   author: d.author,
   status: d.status,
   featured: d.featured,
+  review: d.review,
   version: d.version,
   createdAt: d.created_at,
   updatedAt: d.updated_at,
@@ -178,9 +179,20 @@ router.post('/', requireCapability('docs.manage'), async (req, res, next) => {
 });
 
 // ─── Update ───────────────────────────────────────────────────────────────────
+// Extends the create schema with update-only fields the client sends:
+// restoreDoc → status, pinDoc → featured, markNeedsReview/clearReview → review.
+const updateSchema = writeSchema
+  .extend({
+    status: z.enum(['Active', 'Archived']),
+    featured: z.boolean(),
+    review: z.object({}).passthrough().nullable(),
+  })
+  .partial()
+  .strict();
+
 router.put('/:id', requireCapability('docs.manage'), async (req, res, next) => {
   try {
-    const parsed = writeSchema.partial().safeParse(req.body);
+    const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success)
       return res.status(400).json({ error: 'Invalid input.', details: parsed.error.flatten() });
     const d = parsed.data;
@@ -197,6 +209,8 @@ router.put('/:id', requireCapability('docs.manage'), async (req, res, next) => {
       ['description', d.description],
       ['icon', d.icon],
       ['author', d.author],
+      ['status', d.status],
+      ['featured', d.featured],
     ]) {
       if (val !== undefined) {
         params.push(val);
@@ -206,6 +220,10 @@ router.put('/:id', requireCapability('docs.manage'), async (req, res, next) => {
     if (d.tags !== undefined) {
       params.push(JSON.stringify(normalizeTags(d.tags)));
       sets.push(`tags = $${params.length}::jsonb`);
+    }
+    if (d.review !== undefined) {
+      params.push(d.review === null ? null : JSON.stringify(d.review));
+      sets.push(`review = $${params.length}::jsonb`);
     }
     params.push(req.params.id);
     const { rows } = await query(

@@ -83,8 +83,11 @@ export default function DocEditModal({ doc, onSave, onClose }) {
     }
     setSaving(true);
     setError('');
+    // version is server-managed (incremented on every update) — never send it.
+    const fields = { ...form };
+    delete fields.version;
     const updates = {
-      ...form,
+      ...fields,
       tags: form.tags
         .split(',')
         .map(t => t.trim())

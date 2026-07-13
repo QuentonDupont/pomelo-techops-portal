@@ -220,11 +220,6 @@ const extractContentSchema = z
   })
   .strict();
 
-// ─── Health check ─────────────────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
-});
-
 // ─── Admin status (returns credential-presence booleans for the admin UI) ─────
 // DB mode: requires an authenticated session with admin settings capability.
 // No DB: there is no session to validate, so the route only exists in dev.
@@ -1478,10 +1473,17 @@ if (existsSync(resolve(distDir, 'index.html'))) {
 }
 
 // ─── Central error handler ────────────────────────────────────────────────────
+// Response envelope is always { error: string } — same shape every route uses.
+// Status reflects the failure class instead of blanket 502: bad input is the
+// caller's fault (400), a failed Jira/Anthropic call is upstream (502),
+// anything else is our bug (500). Details stay in the log, never the response.
 app.use((err, _req, res, _next) => {
   log('error', 'Unhandled error', { error: err.message, stack: err.stack });
   if (process.env.SENTRY_DSN) Sentry.captureException(err);
-  res.status(502).json({ error: 'Upstream request failed.' });
+  if (err?.name === 'ZodError') return res.status(400).json({ error: 'Invalid input.' });
+  if (err?.isAxiosError) return res.status(502).json({ error: 'Upstream request failed.' });
+  const status = Number.isInteger(err?.status) ? err.status : 500;
+  res.status(status).json({ error: status >= 500 ? 'Internal server error.' : err.message });
 });
 
 app.listen(PORT, () => {
