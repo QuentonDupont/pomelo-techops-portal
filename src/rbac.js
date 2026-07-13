@@ -145,8 +145,8 @@ export const CAPABILITIES = Object.freeze([
   {
     id: 'admin.kanban_view',
     group: 'Admin',
-    label: 'View admin Kanban',
-    description: 'Open the Admin Console with the full Kanban board.',
+    label: 'View admin console',
+    description: 'Open the Admin Console (system health, maintenance mode, queue stats).',
   },
 
   // System

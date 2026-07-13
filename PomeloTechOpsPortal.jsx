@@ -7494,7 +7494,7 @@ function SubmitPage({ setSection, showToast, currentUser }) {
       expectedResult: form.expectedResult.trim(),
       // Every new ticket lands with the configured default assignee
       // (typically the admin who triages incoming requests) so nothing
-      // sits unassigned. Admin re-routes from the Kanban inline dropdown.
+      // sits unassigned. Admin re-routes from the Board.
       assignee: defaults.defaultAssigneeName,
       assigneeEmail: defaults.defaultAssigneeEmail,
       department: form.department,
@@ -9000,99 +9000,17 @@ function DeveloperPortalPage({ currentUser }) {
   );
 }
 
-// ─── Admin Kanban ─────────────────────────────────────────────────────────────
-function AdminPage() {
-  const can = useCan();
+// ─── Admin Console ────────────────────────────────────────────────────────────
+function AdminPage({ setSection }) {
   const [, _setTicketsVersion] = useState(0);
   useEffect(() => subscribeTickets(_setTicketsVersion), []);
   const tickets = MOCK_TICKETS;
-  const workflow = useJiraWorkflow();
-  const kanbanColumns = workflow.statuses.map(s => ({
-    id: s.name,
-    label: s.name,
-    color: statusColorFor(s.name),
-    bg: STATUS_BG[statusColorFor(s.name)] || 'var(--bg-hover)',
-  }));
-  const [filterPriority, setFilterPriority] = usePersistentState('admin-priority', 'All');
-  const [filterAssignee, setFilterAssignee] = usePersistentState('admin-assignee', 'All');
-  const [dragId, setDragId] = useState(null);
-  const [dragOver, setDragOver] = useState(null);
-  const [detailTicket, setDetailTicket] = useState(null);
-  const [editingAssignee, setEditingAssignee] = useState(null);
-  const [confirmDelId, setConfirmDelId] = useState(null);
-  const canDeleteTicket = can('tickets.delete');
-
-  const visible = tickets.filter(t => {
-    const okP = filterPriority === 'All' || t.priority === filterPriority;
-    const okA =
-      filterAssignee === 'All' ||
-      (filterAssignee === 'Unassigned' && !t.assignee) ||
-      t.assignee === filterAssignee;
-    return okP && okA;
-  });
-
-  const columnTickets = colId => visible.filter(t => t.status === colId);
-
-  const moveTicket = (id, newStatus) => {
-    const ticket = tickets.find(t => t.id === id);
-    updateTickets(ts =>
-      ts.map(t =>
-        t.id === id
-          ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) }
-          : t
-      )
-    );
-    mirror(ticket?.uuid && ticketsApi.updateTicket(ticket.uuid, { status: newStatus }));
-    if (ticket?.jiraKey) pushJiraTransition(ticket, newStatus);
-  };
-
-  const assignTicket = (id, assignee) => {
-    const ticket = tickets.find(t => t.id === id);
-    const assigneeEmail = assignee ? emailForAssignee(assignee) : null;
-    updateTickets(ts =>
-      ts.map(t => (t.id === id ? { ...t, assignee: assignee || null, assigneeEmail } : t))
-    );
-    mirror(
-      ticket?.uuid && ticketsApi.assignTicket(ticket.uuid, assigneeEmail, assignee || undefined)
-    );
-    setEditingAssignee(null);
-  };
-
-  const onDragStart = (e, id) => {
-    setDragId(id);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const onDragOver = (e, colId) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOver(colId);
-  };
-
-  const onDrop = (e, colId) => {
-    e.preventDefault();
-    if (dragId) moveTicket(dragId, colId);
-    setDragId(null);
-    setDragOver(null);
-  };
-
-  const onDragEnd = () => {
-    setDragId(null);
-    setDragOver(null);
-  };
-
-  // Derived from the role registry — anyone whose role grants
-  // tickets.view_assigned is pickable here, so adding a new Developer
-  // through Roles & Access immediately shows up in the dropdown. The
-  // tickets-version state already triggers re-render on most relevant
-  // changes; users/roles edits also bump the registry so this is
-  // computed fresh on every render (cheap — small list).
-  const agentOptions = listAssignableUsers().map(u => u.name);
 
   const totalOpen = tickets.filter(t => statusCategoryFor(t.status) === 'new').length;
   const totalCritical = tickets.filter(
     t => t.priority === 'Critical' && statusCategoryFor(t.status) !== 'done'
   ).length;
+  const totalActive = tickets.filter(t => statusCategoryFor(t.status) !== 'done').length;
 
   return (
     <div>
@@ -9110,732 +9028,54 @@ function AdminPage() {
         <MaintenanceToggleCard />
       </div>
 
-      {/* Admin Header Banner */}
+      {/* Admin header banner — ticket work now lives on the Board */}
       <div
         style={{
           background: 'linear-gradient(135deg, #111111 0%, #000000 100%)',
           borderRadius: '14px',
           padding: '18px 24px',
-          marginBottom: '22px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: '16px',
           flexWrap: 'wrap',
-          gap: '12px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
+        <div>
+          <div style={{ color: '#fff', fontSize: '16px', fontWeight: 800 }}>Admin Console</div>
+          <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', marginTop: '2px' }}>
+            System health &amp; controls · ticket management moved to the Board
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '22px', flexWrap: 'wrap' }}>
+          {[
+            [totalOpen, 'Open', '#818CF8'],
+            [totalCritical, 'Critical Active', '#F87171'],
+            [totalActive, 'Active', '#FBBF24'],
+            [tickets.length, 'Total', '#fff'],
+          ].map(([num, label, color]) => (
+            <div key={label} style={{ textAlign: 'center' }}>
+              <div style={{ color, fontSize: '20px', fontWeight: 900 }}>{num}</div>
+              <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px' }}>{label}</div>
+            </div>
+          ))}
+          <button
+            onClick={() => setSection?.('board')}
             style={{
-              background: 'var(--accent-primary)',
+              padding: '9px 16px',
               borderRadius: '8px',
-              width: '36px',
-              height: '36px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '18px',
+              border: '1px solid rgba(255,255,255,0.25)',
+              background: 'rgba(255,255,255,0.08)',
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: '13px',
+              cursor: 'pointer',
             }}
           >
-            🛠
-          </div>
-          <div>
-            <div style={{ color: '#fff', fontWeight: 900, fontSize: '16px' }}>
-              IT Admin — Kanban Board
-            </div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', marginTop: '2px' }}>
-              Drag cards between columns to update status · Click a card to view details
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '16px' }}>
-          <div style={{ textAlign: 'center' }}>
-            <div
-              style={{
-                color: 'var(--accent-primary)',
-                fontWeight: 900,
-                fontSize: '22px',
-                lineHeight: 1,
-              }}
-            >
-              {totalOpen}
-            </div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>
-              Open
-            </div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>
-              {totalCritical}
-            </div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>
-              Critical Active
-            </div>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ color: '#fff', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>
-              {tickets.length}
-            </div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>
-              Total
-            </div>
-          </div>
+            Open Board →
+          </button>
         </div>
       </div>
-
-      {/* Filters */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '10px',
-          marginBottom: '18px',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-        }}
-      >
-        <div
-          style={{
-            fontSize: '12px',
-            fontWeight: 700,
-            color: 'var(--text-secondary)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.06em',
-          }}
-        >
-          Filter:
-        </div>
-        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-          {['All', 'Critical', 'High', 'Medium', 'Low'].map(p => (
-            <button
-              key={p}
-              onClick={() => setFilterPriority(p)}
-              style={{
-                padding: '5px 12px',
-                borderRadius: '100px',
-                border: '1.5px solid',
-                borderColor:
-                  filterPriority === p ? PRIORITY_COLORS[p] || '#111111' : 'var(--border-default)',
-                background:
-                  filterPriority === p
-                    ? (PRIORITY_COLORS[p] || '#111111') + '15'
-                    : 'var(--bg-surface)',
-                color:
-                  filterPriority === p ? PRIORITY_COLORS[p] || '#111111' : 'var(--text-secondary)',
-                fontFamily: "'Inter', sans-serif",
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-        <div style={{ width: '1px', height: '18px', background: 'var(--border-default)' }} />
-        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-          {['All', ...agentOptions, 'Unassigned'].map(a => (
-            <button
-              key={a}
-              onClick={() => setFilterAssignee(a)}
-              style={{
-                padding: '5px 12px',
-                borderRadius: '100px',
-                border: '1.5px solid',
-                borderColor: filterAssignee === a ? 'var(--text-primary)' : 'var(--border-default)',
-                background: filterAssignee === a ? 'var(--accent-soft)' : 'var(--bg-surface)',
-                color: filterAssignee === a ? 'var(--text-primary)' : 'var(--text-secondary)',
-                fontFamily: "'Inter', sans-serif",
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {a}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Kanban Board */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '14px',
-          alignItems: 'start',
-        }}
-      >
-        {kanbanColumns.map(col => {
-          const colTickets = columnTickets(col.id);
-          const isDragTarget = dragOver === col.id;
-          return (
-            <div
-              key={col.id}
-              onDragOver={e => onDragOver(e, col.id)}
-              onDrop={e => onDrop(e, col.id)}
-              style={{
-                background: isDragTarget ? col.bg : 'var(--bg-hover)',
-                borderRadius: '12px',
-                border: `2px dashed ${isDragTarget ? col.color : 'transparent'}`,
-                minHeight: '400px',
-                transition: 'all 0.15s',
-              }}
-            >
-              {/* Column Header */}
-              <div
-                style={{
-                  padding: '12px 14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                  <div
-                    style={{
-                      width: '9px',
-                      height: '9px',
-                      borderRadius: '50%',
-                      background: col.color,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {col.label}
-                  </span>
-                </div>
-                <span
-                  style={{
-                    background: col.color + '20',
-                    color: col.color,
-                    fontWeight: 700,
-                    fontSize: '12px',
-                    padding: '2px 8px',
-                    borderRadius: '100px',
-                  }}
-                >
-                  {colTickets.length}
-                </span>
-              </div>
-
-              {/* Cards */}
-              <div
-                style={{
-                  padding: '0 10px 10px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                }}
-              >
-                {colTickets.length === 0 && (
-                  <div
-                    style={{
-                      padding: '20px',
-                      textAlign: 'center',
-                      color: 'var(--border-strong)',
-                      fontSize: '12px',
-                    }}
-                  >
-                    {isDragTarget ? 'Drop here' : 'No tickets'}
-                  </div>
-                )}
-                {colTickets.map(t => (
-                  <div
-                    key={t.id}
-                    draggable
-                    onDragStart={e => onDragStart(e, t.id)}
-                    onDragEnd={onDragEnd}
-                    onClick={() => setDetailTicket(t)}
-                    style={{
-                      background: dragId === t.id ? 'rgba(255,255,255,0.5)' : 'var(--bg-surface)',
-                      borderRadius: '9px',
-                      border: '1.5px solid var(--border-default)',
-                      padding: '12px 13px',
-                      cursor: 'grab',
-                      opacity: dragId === t.id ? 0.5 : 1,
-                      transition: 'opacity 0.15s, box-shadow 0.15s',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                      e.currentTarget.style.borderColor = 'var(--border-strong)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
-                      e.currentTarget.style.borderColor = 'var(--border-default)';
-                    }}
-                  >
-                    {/* Priority + ID */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '7px',
-                      }}
-                    >
-                      <span style={{ ...S.badge(PRIORITY_COLORS[t.priority]), fontSize: '10px' }}>
-                        {t.priority}
-                      </span>
-                      <span
-                        style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700 }}
-                      >
-                        {t.id}
-                      </span>
-                    </div>
-
-                    {/* Title */}
-                    <div
-                      style={{
-                        fontSize: '13px',
-                        fontWeight: 700,
-                        color: 'var(--text-primary)',
-                        lineHeight: 1.4,
-                        marginBottom: '8px',
-                      }}
-                    >
-                      {t.title}
-                    </div>
-
-                    {/* Meta */}
-                    <div
-                      style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '9px' }}
-                    >
-                      {t.category}
-                      {t.shop && t.shop !== 'Not Applicable' && ` · ${t.shop}`}
-                    </div>
-
-                    {/* Assignee */}
-                    <div
-                      onClick={e => {
-                        e.stopPropagation();
-                        setEditingAssignee(editingAssignee === t.id ? null : t.id);
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {t.assignee ? (
-                        <>
-                          <div
-                            style={{
-                              width: '20px',
-                              height: '20px',
-                              borderRadius: '50%',
-                              background: '#111111',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#fff',
-                              fontSize: '9px',
-                              fontWeight: 700,
-                              flexShrink: 0,
-                            }}
-                          >
-                            {t.assignee
-                              .split(' ')
-                              .map(n => n[0])
-                              .join('')}
-                          </div>
-                          <span
-                            style={{
-                              fontSize: '11px',
-                              color: 'var(--text-secondary)',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {t.assignee}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <div
-                            style={{
-                              width: '20px',
-                              height: '20px',
-                              borderRadius: '50%',
-                              background: 'var(--bg-hover)',
-                              border: '1.5px dashed var(--border-strong)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: 'var(--text-muted)',
-                              fontSize: '11px',
-                              flexShrink: 0,
-                            }}
-                          >
-                            +
-                          </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            Unassigned
-                          </span>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Assignee Dropdown */}
-                    {editingAssignee === t.id && (
-                      <div
-                        onClick={e => e.stopPropagation()}
-                        style={{
-                          marginTop: '8px',
-                          background: 'var(--bg-surface)',
-                          border: '1.5px solid var(--border-default)',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-                          overflow: 'hidden',
-                        }}
-                      >
-                        {[...agentOptions, null].map(a => (
-                          <button
-                            key={a || 'unassign'}
-                            onClick={() => assignTicket(t.id, a)}
-                            style={{
-                              width: '100%',
-                              textAlign: 'left',
-                              padding: '8px 12px',
-                              background: t.assignee === a ? '#F0F4FF' : 'transparent',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontFamily: "'Inter', sans-serif",
-                              fontSize: '12px',
-                              color: a ? '#111111' : 'var(--text-muted)',
-                              fontWeight: t.assignee === a ? 700 : 400,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '7px',
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: '18px',
-                                height: '18px',
-                                borderRadius: '50%',
-                                flexShrink: 0,
-                                background: a ? '#111111' : 'var(--bg-hover)',
-                                border: a ? 'none' : '1.5px dashed var(--border-strong)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: a ? '#fff' : 'var(--text-muted)',
-                                fontSize: '8px',
-                                fontWeight: 700,
-                              }}
-                            >
-                              {a
-                                ? a
-                                    .split(' ')
-                                    .map(n => n[0])
-                                    .join('')
-                                : '—'}
-                            </div>
-                            {a || 'Unassign'}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Updated date */}
-                    <div
-                      style={{
-                        marginTop: '8px',
-                        paddingTop: '8px',
-                        borderTop: '1px solid var(--border-subtle)',
-                        fontSize: '10px',
-                        color: 'var(--border-strong)',
-                      }}
-                    >
-                      Updated {t.updated}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Quick-move modal on card click */}
-      {detailTicket && (
-        <>
-          <div
-            onClick={() => setDetailTicket(null)}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'var(--bg-overlay)',
-              zIndex: 300,
-              animation: 'fadeIn 0.15s ease',
-            }}
-          />
-          <div
-            style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%,-50%)',
-              background: 'var(--bg-surface)',
-              borderRadius: '16px',
-              zIndex: 301,
-              width: '480px',
-              maxWidth: '95vw',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-              animation: 'slideUp 0.2s ease',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Modal header */}
-            <div
-              style={{
-                background: '#111111',
-                padding: '16px 20px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    color: 'rgba(255,255,255,0.45)',
-                    marginBottom: '3px',
-                    fontWeight: 700,
-                  }}
-                >
-                  {detailTicket.id}
-                </div>
-                <div style={{ fontSize: '15px', fontWeight: 900, color: '#fff', lineHeight: 1.3 }}>
-                  {detailTicket.title}
-                </div>
-              </div>
-              <button
-                onClick={() => setDetailTicket(null)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'rgba(255,255,255,0.5)',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  lineHeight: 1,
-                  padding: 0,
-                  flexShrink: 0,
-                  marginLeft: '12px',
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            <div style={{ padding: '18px 20px' }}>
-              {/* Badges */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
-                <span style={S.badge(PRIORITY_COLORS[detailTicket.priority])}>
-                  {detailTicket.priority}
-                </span>
-                <span style={S.badge(STATUS_COLORS[detailTicket.status])}>
-                  {detailTicket.status}
-                </span>
-                <span style={{ ...S.badge('var(--text-secondary)'), fontSize: '11px' }}>
-                  {detailTicket.category}
-                </span>
-              </div>
-
-              {/* Description */}
-              <div
-                style={{
-                  fontSize: '13px',
-                  color: 'var(--text-secondary)',
-                  lineHeight: 1.6,
-                  marginBottom: '16px',
-                }}
-              >
-                {detailTicket.description}
-              </div>
-
-              {/* Meta grid */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '8px',
-                  marginBottom: '16px',
-                  background: 'var(--bg-page)',
-                  borderRadius: '8px',
-                  padding: '12px',
-                }}
-              >
-                {[
-                  ['Assignee', detailTicket.assignee || 'Unassigned'],
-                  ['Department', detailTicket.department || '—'],
-                  ['Shop', detailTicket.shop || '—'],
-                  ['Submitted', detailTicket.created],
-                ].map(([k, v]) => (
-                  <div key={k}>
-                    <div
-                      style={{
-                        fontSize: '10px',
-                        fontWeight: 700,
-                        color: 'var(--text-muted)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        marginBottom: '2px',
-                      }}
-                    >
-                      {k}
-                    </div>
-                    <div
-                      style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}
-                    >
-                      {v}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Move to column */}
-              <div style={{ marginBottom: '4px' }}>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: 'var(--text-muted)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    marginBottom: '8px',
-                  }}
-                >
-                  Move to
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {kanbanColumns.map(col => (
-                    <button
-                      key={col.id}
-                      onClick={() => {
-                        moveTicket(detailTicket.id, col.id);
-                        setDetailTicket(t => ({ ...t, status: col.id }));
-                      }}
-                      style={{
-                        padding: '7px 14px',
-                        borderRadius: '7px',
-                        border: '1.5px solid',
-                        borderColor:
-                          detailTicket.status === col.id ? col.color : 'var(--border-default)',
-                        background: detailTicket.status === col.id ? col.bg : 'var(--bg-surface)',
-                        color: detailTicket.status === col.id ? col.color : 'var(--text-secondary)',
-                        fontFamily: "'Inter', sans-serif",
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: '7px',
-                          height: '7px',
-                          borderRadius: '50%',
-                          background: col.color,
-                          flexShrink: 0,
-                        }}
-                      />
-                      {col.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Delete (admin/developer only — gated by tickets.delete) */}
-              {canDeleteTicket && (
-                <div
-                  style={{
-                    marginTop: '16px',
-                    paddingTop: '14px',
-                    borderTop: '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    gap: '8px',
-                  }}
-                >
-                  {confirmDelId === detailTicket.id ? (
-                    <>
-                      <span
-                        style={{
-                          fontSize: '13px',
-                          color: '#DC2626',
-                          fontWeight: 700,
-                          marginRight: 'auto',
-                        }}
-                      >
-                        Delete permanently?
-                      </span>
-                      <button
-                        onClick={() => {
-                          deleteTicket(detailTicket.id);
-                          setConfirmDelId(null);
-                          setDetailTicket(null);
-                        }}
-                        style={{
-                          padding: '7px 14px',
-                          borderRadius: '7px',
-                          border: 'none',
-                          cursor: 'pointer',
-                          background: '#DC2626',
-                          color: '#fff',
-                          fontWeight: 700,
-                          fontSize: '13px',
-                        }}
-                      >
-                        Yes, delete
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelId(null)}
-                        style={{
-                          padding: '7px 14px',
-                          borderRadius: '7px',
-                          border: '1px solid var(--border-default)',
-                          cursor: 'pointer',
-                          background: 'var(--bg-surface)',
-                          color: 'var(--text-secondary)',
-                          fontWeight: 700,
-                          fontSize: '13px',
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => setConfirmDelId(detailTicket.id)}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '7px 14px',
-                        borderRadius: '7px',
-                        border: '1px solid #FCA5A5',
-                        cursor: 'pointer',
-                        background: 'transparent',
-                        color: '#DC2626',
-                        fontWeight: 700,
-                        fontSize: '13px',
-                      }}
-                    >
-                      <Trash2 size={14} /> Delete ticket
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -14013,7 +13253,7 @@ const ADMIN_TOOLS = [
     id: 'admin',
     Icon: Wrench,
     label: 'Admin Console',
-    hint: 'Kanban + system controls',
+    hint: 'System health & controls',
     cap: 'admin.kanban_view',
   },
   {
@@ -14617,7 +13857,7 @@ function AppContent() {
         break;
       case 'admin':
         page = can('admin.kanban_view') ? (
-          <AdminPage />
+          <AdminPage setSection={setSection} />
         ) : (
           <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
         );
