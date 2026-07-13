@@ -1,6 +1,14 @@
-import { useState, useEffect, useRef, useMemo, useCallback, useContext, createContext, Component } from 'react';
+import {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+  useContext,
+  createContext,
+  Component,
+} from 'react';
 import DocImportExportPage from './src/components/docs/DocImportExportPage.jsx';
-import { MarkdownView } from './src/components/docs/MarkdownView.jsx';
 import DocStudioPage from './src/components/docs/studio/DocStudioPage.jsx';
 import SuggestionsPage from './src/components/suggestions/SuggestionsPage.jsx';
 import { createJiraTicket, isJiraConfigured } from './src/api/jiraApi.js';
@@ -12,26 +20,62 @@ import * as usersApi from './src/api/usersApi.js';
 import * as rolesApi from './src/api/rolesApi.js';
 import { loadStore, saveStore, clearStore } from './src/lib/store.js';
 import {
-  MAX_ATTEMPTS, LOCKOUT_MS, AUTH_DELAY, REMEMBER_KEY,
+  MAX_ATTEMPTS,
+  LOCKOUT_MS,
+  AUTH_DELAY,
+  REMEMBER_KEY,
   validateCredentials as localValidateCredentials,
   setPassword as setUserPassword,
-  writeSession, getSession, clearSession,
-  getLockState, setLockState, clearLockState,
+  writeSession,
+  getSession,
+  clearSession,
+  getLockState,
+  setLockState,
+  clearLockState,
 } from './src/lib/localAuth.js';
 import { DEMO_SEED_USERS } from './src/mocks/seedUsers.js';
-import FilePreviewCard, { fileToAttachment, ATTACHMENT_DATAURL_LIMIT as _ATT_LIMIT } from './src/components/FilePreviewCard.jsx'; // eslint-disable-line no-unused-vars
-import { NotificationProvider, useNotifications, buildSeedNotifications } from './src/context/NotificationContext.jsx';
+import FilePreviewCard, { fileToAttachment } from './src/components/FilePreviewCard.jsx';
+import {
+  NotificationProvider,
+  useNotifications,
+  buildSeedNotifications,
+} from './src/context/NotificationContext.jsx';
 import NotificationBell from './src/components/NotificationBell.jsx';
 import { useTheme } from './src/context/ThemeContext.jsx';
 import {
-  CAPABILITIES, SEED_ROLES, DEFAULT_ASSIGNEE,
-  LEGACY_ROLE_TO_ROLE_ID, SEED_EMAIL_REWRITE, DEFAULT_ROLE_ID,
-  RBAC_SCHEMA_VERSION, hasPermission,
+  CAPABILITIES,
+  SEED_ROLES,
+  DEFAULT_ASSIGNEE,
+  LEGACY_ROLE_TO_ROLE_ID,
+  SEED_EMAIL_REWRITE,
+  DEFAULT_ROLE_ID,
+  RBAC_SCHEMA_VERSION,
+  hasPermission,
 } from './src/rbac.js';
 import {
-  Search, Wrench, Users as UsersIcon, ScrollText, MessageCircle, BookOpen,
-  Target, ClipboardList, Ticket, Home, PlusCircle, Moon, Sun, ChevronDown,
-  Star, User, Eye, Sparkles, X, Bell as BellIcon, Check, Shield, Briefcase, Trash2,
+  Search,
+  Wrench,
+  Users as UsersIcon,
+  ScrollText,
+  MessageCircle,
+  BookOpen,
+  Target,
+  ClipboardList,
+  Ticket,
+  Home,
+  PlusCircle,
+  Moon,
+  Sun,
+  ChevronDown,
+  Star,
+  User,
+  Eye,
+  Sparkles,
+  X,
+  Check,
+  Shield,
+  Briefcase,
+  Trash2,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
@@ -57,17 +101,44 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: '40px 28px', textAlign: 'center', fontFamily: "'Inter', sans-serif" }}>
+        <div
+          style={{ padding: '40px 28px', textAlign: 'center', fontFamily: "'Inter', sans-serif" }}
+        >
           <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
-          <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+          <div
+            style={{
+              fontSize: '16px',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              marginBottom: '8px',
+            }}
+          >
             Something went wrong
           </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', maxWidth: '420px', margin: '0 auto 20px' }}>
+          <div
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-secondary)',
+              marginBottom: '20px',
+              maxWidth: '420px',
+              margin: '0 auto 20px',
+            }}
+          >
             {this.state.message}
           </div>
           <button
             onClick={() => this.setState({ hasError: false, message: '' })}
-            style={{ padding: '9px 20px', background: 'var(--accent-primary)', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+            style={{
+              padding: '9px 20px',
+              background: 'var(--accent-primary)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontFamily: "'Inter', sans-serif",
+              fontWeight: 700,
+              fontSize: '13px',
+              cursor: 'pointer',
+            }}
           >
             Try again
           </button>
@@ -88,7 +159,8 @@ const MOCK_TICKETS = [
     status: 'In Progress',
     created: '2026-03-24',
     updated: '2026-03-25',
-    description: 'Getting 403 error when trying to access the Shopify admin. Was working fine yesterday.',
+    description:
+      'Getting 403 error when trying to access the Shopify admin. Was working fine yesterday.',
     assignee: 'Kai Nguyen',
     department: 'Operations',
     shop: 'Pomelo TH',
@@ -99,18 +171,37 @@ const MOCK_TICKETS = [
       { date: '2026-03-24 11:30', action: 'Status changed to In Progress', actor: 'Kai Nguyen' },
     ],
     messages: [
-      { from: 'You', time: '2026-03-24 09:15', text: 'I cannot access the Shopify admin panel. Getting a 403 forbidden error.' },
-      { from: 'Kai Nguyen', time: '2026-03-24 11:32', text: 'Hi, I\'ve received your ticket. Can you confirm which Shopify store you\'re trying to access?' },
-      { from: 'You', time: '2026-03-24 11:45', text: 'It\'s the main Pomelo store — pomelo-fashion.myshopify.com' },
+      {
+        from: 'You',
+        time: '2026-03-24 09:15',
+        text: 'I cannot access the Shopify admin panel. Getting a 403 forbidden error.',
+      },
+      {
+        from: 'Kai Nguyen',
+        time: '2026-03-24 11:32',
+        text: "Hi, I've received your ticket. Can you confirm which Shopify store you're trying to access?",
+      },
+      {
+        from: 'You',
+        time: '2026-03-24 11:45',
+        text: "It's the main Pomelo store — pomelo-fashion.myshopify.com",
+      },
     ],
     pullRequests: [
       {
-        id: 'pr-482', number: 482, title: 'Fix 403 on Shopify admin SSO callback',
+        id: 'pr-482',
+        number: 482,
+        title: 'Fix 403 on Shopify admin SSO callback',
         url: 'https://github.com/pomelofashion/shopify-admin/pull/482',
-        repo: 'pomelofashion/shopify-admin', status: 'OPEN',
+        repo: 'pomelofashion/shopify-admin',
+        status: 'OPEN',
         author: { name: 'Kai Nguyen', login: 'kai-nguyen' },
-        sourceBranch: 'fix/sso-callback-403', targetBranch: 'main',
-        additions: 124, deletions: 38, changedFiles: 6, commentCount: 4,
+        sourceBranch: 'fix/sso-callback-403',
+        targetBranch: 'main',
+        additions: 124,
+        deletions: 38,
+        changedFiles: 6,
+        commentCount: 4,
         reviews: [
           { reviewer: 'Prim Srisawat', state: 'CHANGES_REQUESTED' },
           { reviewer: 'Alex Lee', state: 'COMMENTED' },
@@ -119,23 +210,37 @@ const MOCK_TICKETS = [
         lastUpdate: '2026-03-25T10:32:00Z',
       },
       {
-        id: 'pr-475', number: 475, title: 'Add structured logging to auth middleware',
+        id: 'pr-475',
+        number: 475,
+        title: 'Add structured logging to auth middleware',
         url: 'https://github.com/pomelofashion/shopify-admin/pull/475',
-        repo: 'pomelofashion/shopify-admin', status: 'MERGED',
+        repo: 'pomelofashion/shopify-admin',
+        status: 'MERGED',
         author: { name: 'Kai Nguyen', login: 'kai-nguyen' },
-        sourceBranch: 'chore/auth-logging', targetBranch: 'main',
-        additions: 61, deletions: 9, changedFiles: 3, commentCount: 2,
+        sourceBranch: 'chore/auth-logging',
+        targetBranch: 'main',
+        additions: 61,
+        deletions: 9,
+        changedFiles: 3,
+        commentCount: 2,
         reviews: [{ reviewer: 'Alex Lee', state: 'APPROVED' }],
         checks: { status: 'success', passed: 11, failed: 0, pending: 0, total: 11 },
         lastUpdate: '2026-03-24 16:05',
       },
       {
-        id: 'pr-488', number: 488, title: 'WIP: regression test for SSO 403 path',
+        id: 'pr-488',
+        number: 488,
+        title: 'WIP: regression test for SSO 403 path',
         url: 'https://github.com/pomelofashion/shopify-admin/pull/488',
-        repo: 'pomelofashion/shopify-admin', status: 'DRAFT',
+        repo: 'pomelofashion/shopify-admin',
+        status: 'DRAFT',
         author: { name: 'Prim Srisawat', login: 'prim-s' },
-        sourceBranch: 'test/sso-403-regression', targetBranch: 'main',
-        additions: 47, deletions: 0, changedFiles: 2, commentCount: 0,
+        sourceBranch: 'test/sso-403-regression',
+        targetBranch: 'main',
+        additions: 47,
+        deletions: 0,
+        changedFiles: 2,
+        commentCount: 0,
         reviews: [],
         checks: { status: 'pending', passed: 4, failed: 0, pending: 3, total: 7 },
         lastUpdate: '2026-03-25T09:12:00Z',
@@ -151,7 +256,8 @@ const MOCK_TICKETS = [
     status: 'Resolved',
     created: '2026-03-20',
     updated: '2026-03-22',
-    description: 'Push notifications from Slack stopped arriving on my iPhone after the latest iOS update.',
+    description:
+      'Push notifications from Slack stopped arriving on my iPhone after the latest iOS update.',
     assignee: 'Prim Srisawat',
     department: 'Marketing',
     shop: 'Not Applicable',
@@ -163,19 +269,38 @@ const MOCK_TICKETS = [
       { date: '2026-03-22 15:30', action: 'Status changed to Resolved', actor: 'Prim Srisawat' },
     ],
     messages: [
-      { from: 'You', time: '2026-03-20 14:00', text: 'Slack push notifications stopped working on my iPhone after updating to iOS 18.3.' },
-      { from: 'Prim Srisawat', time: '2026-03-21 10:05', text: 'Please go to Settings > Notifications > Slack and toggle notifications off, then back on.' },
+      {
+        from: 'You',
+        time: '2026-03-20 14:00',
+        text: 'Slack push notifications stopped working on my iPhone after updating to iOS 18.3.',
+      },
+      {
+        from: 'Prim Srisawat',
+        time: '2026-03-21 10:05',
+        text: 'Please go to Settings > Notifications > Slack and toggle notifications off, then back on.',
+      },
       { from: 'You', time: '2026-03-21 10:20', text: 'That worked! Thank you so much.' },
-      { from: 'Prim Srisawat', time: '2026-03-22 15:30', text: 'Glad that resolved it! Marking this ticket as resolved. Let us know if the issue recurs.' },
+      {
+        from: 'Prim Srisawat',
+        time: '2026-03-22 15:30',
+        text: 'Glad that resolved it! Marking this ticket as resolved. Let us know if the issue recurs.',
+      },
     ],
     pullRequests: [
       {
-        id: 'pr-310', number: 310, title: 'Re-register Slack push tokens after iOS upgrade',
+        id: 'pr-310',
+        number: 310,
+        title: 'Re-register Slack push tokens after iOS upgrade',
         url: 'https://github.com/pomelofashion/mobile-notifications/pull/310',
-        repo: 'pomelofashion/mobile-notifications', status: 'MERGED',
+        repo: 'pomelofashion/mobile-notifications',
+        status: 'MERGED',
         author: { name: 'Prim Srisawat', login: 'prim-s' },
-        sourceBranch: 'fix/slack-push-ios18', targetBranch: 'main',
-        additions: 88, deletions: 21, changedFiles: 4, commentCount: 3,
+        sourceBranch: 'fix/slack-push-ios18',
+        targetBranch: 'main',
+        additions: 88,
+        deletions: 21,
+        changedFiles: 4,
+        commentCount: 3,
         reviews: [
           { reviewer: 'Kai Nguyen', state: 'APPROVED' },
           { reviewer: 'Alex Lee', state: 'APPROVED' },
@@ -206,9 +331,21 @@ const MOCK_TICKETS = [
       { date: '2026-03-15 16:00', action: 'Status changed to Resolved', actor: 'Kai Nguyen' },
     ],
     messages: [
-      { from: 'You', time: '2026-03-10 10:00', text: 'New hire Amara Lee starting March 17 — needs MacBook Pro with standard software bundle.' },
-      { from: 'Kai Nguyen', time: '2026-03-12 09:05', text: "Confirmed. We'll have it ready by March 16." },
-      { from: 'You', time: '2026-03-15 16:30', text: 'Laptop received and looks great. Thank you!' },
+      {
+        from: 'You',
+        time: '2026-03-10 10:00',
+        text: 'New hire Amara Lee starting March 17 — needs MacBook Pro with standard software bundle.',
+      },
+      {
+        from: 'Kai Nguyen',
+        time: '2026-03-12 09:05',
+        text: "Confirmed. We'll have it ready by March 16.",
+      },
+      {
+        from: 'You',
+        time: '2026-03-15 16:30',
+        text: 'Laptop received and looks great. Thank you!',
+      },
     ],
   },
   {
@@ -219,7 +356,8 @@ const MOCK_TICKETS = [
     status: 'Open',
     created: '2026-03-26',
     updated: '2026-03-26',
-    description: 'Product data is not syncing from our PIM to Shopee TH. Last successful sync was 6 hours ago. 200+ SKUs are out of date.',
+    description:
+      'Product data is not syncing from our PIM to Shopee TH. Last successful sync was 6 hours ago. 200+ SKUs are out of date.',
     assignee: null,
     department: 'Merchandising',
     shop: 'Pomelo TH',
@@ -229,16 +367,27 @@ const MOCK_TICKETS = [
       { date: '2026-03-26 08:12', action: 'Ticket assigned to IT Support', actor: 'System' },
     ],
     messages: [
-      { from: 'Sara M.', time: '2026-03-26 08:10', text: 'Shopee TH sync has been failing since 2 AM. Our inventory is out of date for 200+ SKUs.' },
+      {
+        from: 'Sara M.',
+        time: '2026-03-26 08:10',
+        text: 'Shopee TH sync has been failing since 2 AM. Our inventory is out of date for 200+ SKUs.',
+      },
     ],
     pullRequests: [
       {
-        id: 'pr-901', number: 901, title: 'Add retry + backoff to Shopee PIM sync worker',
+        id: 'pr-901',
+        number: 901,
+        title: 'Add retry + backoff to Shopee PIM sync worker',
         url: 'https://github.com/pomelofashion/marketplace-sync/pull/901',
-        repo: 'pomelofashion/marketplace-sync', status: 'OPEN',
+        repo: 'pomelofashion/marketplace-sync',
+        status: 'OPEN',
         author: { name: 'Kai Nguyen', login: 'kai-nguyen' },
-        sourceBranch: 'fix/shopee-sync-retry', targetBranch: 'main',
-        additions: 203, deletions: 54, changedFiles: 9, commentCount: 1,
+        sourceBranch: 'fix/shopee-sync-retry',
+        targetBranch: 'main',
+        additions: 203,
+        deletions: 54,
+        changedFiles: 9,
+        commentCount: 1,
         reviews: [{ reviewer: 'Alex Lee', state: 'APPROVED' }],
         checks: { status: 'success', passed: 18, failed: 0, pending: 0, total: 18 },
         lastUpdate: '2026-03-26T07:40:00Z',
@@ -254,7 +403,8 @@ const MOCK_TICKETS = [
     status: 'Open',
     created: '2026-03-25',
     updated: '2026-03-25',
-    description: 'Campaign banner images uploaded to TikTok Shop are not rendering. Shows broken image placeholder.',
+    description:
+      'Campaign banner images uploaded to TikTok Shop are not rendering. Shows broken image placeholder.',
     assignee: null,
     department: 'Marketing',
     shop: 'Pomelo TH',
@@ -264,7 +414,11 @@ const MOCK_TICKETS = [
       { date: '2026-03-25 13:05', action: 'Ticket assigned to IT Support', actor: 'System' },
     ],
     messages: [
-      { from: 'Fern P.', time: '2026-03-25 13:00', text: 'Campaign banners are broken on TikTok Shop. Launch is tomorrow morning.' },
+      {
+        from: 'Fern P.',
+        time: '2026-03-25 13:00',
+        text: 'Campaign banners are broken on TikTok Shop. Launch is tomorrow morning.',
+      },
     ],
   },
   {
@@ -275,7 +429,8 @@ const MOCK_TICKETS = [
     status: 'Pending',
     created: '2026-03-24',
     updated: '2026-03-25',
-    description: 'Weekly Lazada order export CSV is missing the shipping_method and tracking_number columns since last Tuesday.',
+    description:
+      'Weekly Lazada order export CSV is missing the shipping_method and tracking_number columns since last Tuesday.',
     assignee: 'Prim Srisawat',
     department: 'Operations',
     shop: 'Pomelo MY',
@@ -284,12 +439,28 @@ const MOCK_TICKETS = [
       { date: '2026-03-24 09:00', action: 'Ticket submitted', actor: 'Ops Team' },
       { date: '2026-03-24 09:15', action: 'Ticket assigned to Prim Srisawat', actor: 'System' },
       { date: '2026-03-24 14:00', action: 'Status changed to In Progress', actor: 'Prim Srisawat' },
-      { date: '2026-03-25 10:00', action: 'Status changed to Pending — awaiting vendor response', actor: 'Prim Srisawat' },
+      {
+        date: '2026-03-25 10:00',
+        action: 'Status changed to Pending — awaiting vendor response',
+        actor: 'Prim Srisawat',
+      },
     ],
     messages: [
-      { from: 'Ops Team', time: '2026-03-24 09:00', text: 'The Lazada export is missing shipping_method and tracking_number since March 18.' },
-      { from: 'Prim Srisawat', time: '2026-03-24 14:05', text: "I've reproduced the issue. It looks like a Lazada API change on their end. Raising a vendor ticket with them now." },
-      { from: 'Prim Srisawat', time: '2026-03-25 10:00', text: 'Waiting on Lazada support response. Ticket is Pending until they confirm the API fix.' },
+      {
+        from: 'Ops Team',
+        time: '2026-03-24 09:00',
+        text: 'The Lazada export is missing shipping_method and tracking_number since March 18.',
+      },
+      {
+        from: 'Prim Srisawat',
+        time: '2026-03-24 14:05',
+        text: "I've reproduced the issue. It looks like a Lazada API change on their end. Raising a vendor ticket with them now.",
+      },
+      {
+        from: 'Prim Srisawat',
+        time: '2026-03-25 10:00',
+        text: 'Waiting on Lazada support response. Ticket is Pending until they confirm the API fix.',
+      },
     ],
   },
   {
@@ -300,7 +471,8 @@ const MOCK_TICKETS = [
     status: 'In Progress',
     created: '2026-03-23',
     updated: '2026-03-25',
-    description: 'Product images on Amazon SG are showing with incorrect 4:3 crop instead of 1:1 square. Affects all 340 active listings.',
+    description:
+      'Product images on Amazon SG are showing with incorrect 4:3 crop instead of 1:1 square. Affects all 340 active listings.',
     assignee: 'Kai Nguyen',
     department: 'Merchandising',
     shop: 'Pomelo SG',
@@ -311,8 +483,16 @@ const MOCK_TICKETS = [
       { date: '2026-03-24 09:30', action: 'Status changed to In Progress', actor: 'Kai Nguyen' },
     ],
     messages: [
-      { from: 'James T.', time: '2026-03-23 11:00', text: 'All product images on Amazon SG are showing 4:3 instead of 1:1. Started after the batch re-upload yesterday.' },
-      { from: 'Kai Nguyen', time: '2026-03-24 09:35', text: "I've identified the issue — the image processor was using the wrong crop preset. Working on a fix now." },
+      {
+        from: 'James T.',
+        time: '2026-03-23 11:00',
+        text: 'All product images on Amazon SG are showing 4:3 instead of 1:1. Started after the batch re-upload yesterday.',
+      },
+      {
+        from: 'Kai Nguyen',
+        time: '2026-03-24 09:35',
+        text: "I've identified the issue — the image processor was using the wrong crop preset. Working on a fix now.",
+      },
     ],
   },
   {
@@ -323,7 +503,8 @@ const MOCK_TICKETS = [
     status: 'Pending',
     created: '2026-03-21',
     updated: '2026-03-23',
-    description: 'GA4 dashboard shows no traffic attributable to Shopee referrals since March 15. UTM parameters may be stripped.',
+    description:
+      'GA4 dashboard shows no traffic attributable to Shopee referrals since March 15. UTM parameters may be stripped.',
     assignee: 'Prim Srisawat',
     department: 'Marketing',
     shop: 'All Shops',
@@ -332,11 +513,23 @@ const MOCK_TICKETS = [
       { date: '2026-03-21 15:00', action: 'Ticket submitted', actor: 'Marketing Team' },
       { date: '2026-03-21 15:10', action: 'Ticket assigned to Prim Srisawat', actor: 'System' },
       { date: '2026-03-22 10:00', action: 'Status changed to In Progress', actor: 'Prim Srisawat' },
-      { date: '2026-03-23 14:00', action: 'Status changed to Pending — awaiting Marketing sign-off on UTM restructure', actor: 'Prim Srisawat' },
+      {
+        date: '2026-03-23 14:00',
+        action: 'Status changed to Pending — awaiting Marketing sign-off on UTM restructure',
+        actor: 'Prim Srisawat',
+      },
     ],
     messages: [
-      { from: 'Marketing Team', time: '2026-03-21 15:00', text: 'GA4 has not been showing Shopee-attributed sessions for 6 days. We need this for the campaign report.' },
-      { from: 'Prim Srisawat', time: '2026-03-23 14:05', text: 'Found the cause — Shopee is stripping UTM params on redirect. Proposed fix needs Marketing to approve a new URL structure first.' },
+      {
+        from: 'Marketing Team',
+        time: '2026-03-21 15:00',
+        text: 'GA4 has not been showing Shopee-attributed sessions for 6 days. We need this for the campaign report.',
+      },
+      {
+        from: 'Prim Srisawat',
+        time: '2026-03-23 14:05',
+        text: 'Found the cause — Shopee is stripping UTM params on redirect. Proposed fix needs Marketing to approve a new URL structure first.',
+      },
     ],
   },
 ];
@@ -351,17 +544,20 @@ const bumpTickets = () => {
   _ticketsListeners.forEach(fn => fn(_ticketsVersion));
   saveStore('tickets', MOCK_TICKETS);
 };
-const subscribeTickets = (fn) => { _ticketsListeners.add(fn); return () => _ticketsListeners.delete(fn); };
-const updateTickets = (updater) => {
+const subscribeTickets = fn => {
+  _ticketsListeners.add(fn);
+  return () => _ticketsListeners.delete(fn);
+};
+const updateTickets = updater => {
   const next = typeof updater === 'function' ? updater(MOCK_TICKETS.slice()) : updater;
   replaceArrayInPlace(MOCK_TICKETS, next);
   bumpTickets();
 };
-const addTicket = (ticket) => {
+const addTicket = ticket => {
   MOCK_TICKETS.unshift(ticket);
   bumpTickets();
 };
-const deleteTicket = (id) => {
+const deleteTicket = id => {
   const t = MOCK_TICKETS.find(x => x.id === id);
   updateTickets(ts => ts.filter(x => x.id !== id));
   mirror(t?.uuid && ticketsApi.deleteTicket(t.uuid));
@@ -373,7 +569,7 @@ const deleteTicket = (id) => {
 // server remains authoritative — hydrateFromBackend() re-syncs after login.
 // mirror() swallows a false-y argument so call sites can guard inline:
 //   mirror(t.uuid && ticketsApi.updateTicket(t.uuid, {...}))
-const mirror = (promise) => {
+const mirror = promise => {
   if (!API_ENABLED || !promise || typeof promise.then !== 'function') return;
   promise.then(res => {
     if (res?.error) console.warn('[api] backend mirror failed:', res.error);
@@ -382,7 +578,7 @@ const mirror = (promise) => {
 
 // Server ticket → UI ticket. The human key drives display and local lookups
 // (mock tickets use it as their id); the row uuid is kept for API calls.
-const ticketFromApi = (t) => ({
+const ticketFromApi = t => ({
   id: t.key || t.id,
   uuid: t.id,
   title: t.title,
@@ -402,68 +598,11 @@ const ticketFromApi = (t) => ({
   jiraSyncState: t.jiraSyncState,
   jiraSyncedAt: t.jiraSyncedAt,
   timeline: (t.timeline || []).map(x => ({ date: x.date, action: x.action, actor: x.actor })),
-  messages: (t.comments || []).filter(c => !c.internal).map(c => ({ from: c.author, time: c.time, text: c.body })),
+  messages: (t.comments || [])
+    .filter(c => !c.internal)
+    .map(c => ({ from: c.author, time: c.time, text: c.body })),
   pullRequests: [],
 });
-
-// Legacy fallback list. Live ticket UIs derive their options from
-// listAssignableUsers() (role-registry-driven); ALL_AGENTS is only used by
-// older code paths that haven't been ported. Kept so those paths stay
-// functional, but they should be ported off this constant.
-const ALL_AGENTS = ['Kai Nguyen', 'Prim Srisawat', 'Unassigned'];
-
-const DOCS = [
-  {
-    id: 1,
-    title: 'VPN Setup Guide',
-    category: 'Network & Access',
-    icon: '🔒',
-    summary: 'Step-by-step instructions for setting up Pomelo\'s corporate VPN on Mac, Windows, and mobile devices.',
-    content: `# VPN Setup Guide\n\n## Overview\nPomelo uses Cisco AnyConnect for secure remote access. All employees working remotely must connect via VPN.\n\n## Mac Installation\n1. Download Cisco AnyConnect from the IT portal: it.pomelo.com/vpn\n2. Run the installer and follow the on-screen instructions\n3. Open Cisco AnyConnect from Applications\n4. Enter server: **vpn.pomelo.com**\n5. Log in with your Pomelo email and password\n6. Approve the MFA push notification on your phone\n\n## Windows Installation\n1. Download from it.pomelo.com/vpn (Windows tab)\n2. Run the .exe installer as Administrator\n3. Follow prompts, accept default installation path\n4. Launch from Start Menu\n5. Enter server: **vpn.pomelo.com**\n6. Log in with Pomelo credentials + MFA\n\n## Troubleshooting\n- **Connection refused**: Ensure you're not on a restricted network (some hotel WiFi blocks VPN)\n- **MFA not arriving**: Check Okta Verify app or try SMS backup\n- **Slow speeds**: Try the alternate server: **vpn2.pomelo.com**\n\n## Support\nFor VPN issues outside business hours, contact #techops-urgent on Slack.`,
-  },
-  {
-    id: 2,
-    title: 'New Employee IT Onboarding',
-    category: 'Onboarding',
-    icon: '🚀',
-    summary: 'Everything new Pomelo employees need to get set up: accounts, tools, and first-day checklist.',
-    content: `# New Employee IT Onboarding\n\n## Day 1 Checklist\n- [ ] Collect laptop from IT (Building A, Floor 2)\n- [ ] Sign in with temporary credentials (emailed to personal address)\n- [ ] Set up Google Workspace account\n- [ ] Install Slack and join #general, #it-announcements\n- [ ] Install Cisco AnyConnect VPN\n- [ ] Set up Okta Verify MFA on your phone\n- [ ] Access Workday for HR tasks\n\n## Essential Tools\n| Tool | Purpose | Access |\n|------|---------|--------|\n| Google Workspace | Email, Docs, Drive | your.name@pomelo.com |\n| Slack | Team communication | pomelo.slack.com |\n| Workday | HR, payroll, leave | workday.pomelo.com |\n| Notion | Documentation | notion.pomelo.com |\n| Jira | Project tracking | pomelo.atlassian.net |\n\n## Getting Help\nRaise a ticket here in the TechOps Portal or visit IT at Building A, Floor 2 during support hours.`,
-  },
-  {
-    id: 3,
-    title: 'Password Reset & MFA',
-    category: 'Security',
-    icon: '🛡️',
-    summary: 'How to reset your Pomelo password and manage multi-factor authentication settings.',
-    content: `# Password Reset & MFA\n\n## Self-Service Password Reset\n1. Visit **accounts.pomelo.com/reset**\n2. Enter your Pomelo email address\n3. Check your personal email for a verification code\n4. Enter the code and create a new password\n\n## Password Requirements\n- Minimum 12 characters\n- At least 1 uppercase, 1 lowercase, 1 number, 1 symbol\n- Cannot reuse last 10 passwords\n- Must change every 90 days\n\n## Setting Up MFA\nPomelo requires Okta Verify for MFA on all accounts.\n1. Download **Okta Verify** from App Store or Google Play\n2. Visit myapps.pomelo.com\n3. Click your profile > Settings > Set up multifactor\n4. Scan the QR code with Okta Verify\n5. Enter the 6-digit code to confirm\n\n## Lost Phone / MFA Locked Out\nContact IT immediately:\n- Slack: #techops-urgent\n- Email: it@pomelo.com\n- In person: Building A, Floor 2\n\n**Never share your MFA codes with anyone, including IT staff.**`,
-  },
-  {
-    id: 4,
-    title: 'Software Request Process',
-    category: 'Software & Apps',
-    icon: '💻',
-    summary: 'How to request new software licenses, approved tools list, and procurement timelines.',
-    content: `# Software Request Process\n\n## Approved Software (No Approval Needed)\nThese tools are pre-approved and can be installed from the Self-Service portal:\n- Google Chrome, Firefox\n- Zoom, Google Meet\n- Notion, Confluence\n- Figma (Design team)\n- VS Code (Tech team)\n\n## Requesting New Software\n1. Submit a ticket via TechOps Portal (category: Software & Apps)\n2. Include: tool name, business justification, number of licenses needed, budget owner\n3. IT will assess security compliance\n4. If approved, procurement takes 5–10 business days\n5. License details sent to your email\n\n## Procurement Timeline\n| Type | Timeline |\n|------|----------|\n| Cloud SaaS (existing vendor) | 3–5 days |\n| New SaaS vendor | 10–15 days |\n| Desktop software | 5–7 days |\n| Enterprise license negotiation | 30+ days |\n\n## Security Review\nAll new software undergoes a security review covering data handling, SOC2 compliance, and vendor risk before approval.`,
-  },
-  {
-    id: 5,
-    title: 'Hardware Replacement Policy',
-    category: 'Hardware',
-    icon: '🖥️',
-    summary: 'Eligibility criteria for hardware upgrades, the request process, and equipment loan procedures.',
-    content: `# Hardware Replacement Policy\n\n## Replacement Eligibility\n| Device | Replacement Cycle |\n|--------|------------------|\n| MacBook Pro | Every 4 years |\n| MacBook Air | Every 3 years |\n| External Monitor | Every 5 years |\n| Keyboard/Mouse | As needed (report damage) |\n| iPhone (if issued) | Every 3 years |\n\n## Requesting Replacement\n1. Submit ticket: category Hardware, include device serial number\n2. IT will verify eligibility\n3. If eligible: new device prepared within 5 business days\n4. Old device returned at pickup — data migration assistance available\n\n## Loaner Equipment\nLoaners available for hardware repairs:\n- Request via ticket: state duration needed\n- Pick up from IT (Building A, Floor 2)\n- Return within 2 business days of repair completion\n\n## Damaged Equipment\nAccidental damage: IT assesses, may repair or replace depending on severity.\nNegligent damage: Employee may be responsible for partial cost per HR policy.`,
-  },
-  {
-    id: 6,
-    title: 'Data Backup & Recovery',
-    category: 'Data & Storage',
-    icon: '☁️',
-    summary: 'Pomelo\'s backup strategy, how to recover lost files, and best practices for data hygiene.',
-    content: `# Data Backup & Recovery\n\n## What Is Backed Up Automatically\n- Google Drive: real-time sync, 30-day version history\n- Notion: automatic version history\n- GitHub/GitLab: all repository data\n- Workday: HR data managed by vendor\n\n## What Is NOT Automatically Backed Up\n- Files saved locally on your Mac/PC (Desktop, Documents folder not synced)\n- Local databases or dev environments\n- Personal browser bookmarks\n\n## Best Practice\n**Always save work to Google Drive**, not locally. Use the Drive desktop app for seamless sync.\n\n## Recovering a Deleted File\n### Google Drive\n1. Open drive.google.com\n2. Left sidebar > Trash\n3. Right-click file > Restore\n(Files permanently deleted after 30 days)\n\n### Recovering Older Versions\n1. Right-click file in Drive\n2. Version history > See version history\n3. Select version > Restore this version\n\n## Data Loss Incident\nIf you suspect significant data loss, submit a Critical ticket immediately with details of what was lost and when.`,
-  },
-];
-
-const CATEGORIES = ['Access & Permissions', 'Software & Apps', 'Hardware', 'Network & Connectivity', 'Email & Calendar', 'Data & Storage', 'Other'];
 
 const PRIORITY_COLORS = {
   Critical: '#DC2626',
@@ -476,17 +615,17 @@ const PRIORITY_COLORS = {
 // Management workflow names. Unknown statuses fall back to slate gray.
 const STATUS_COLORS = {
   // Legacy local names
-  'Open': '#3B82F6',
+  Open: '#3B82F6',
   'In Progress': '#8B5CF6',
-  'Pending': '#F59E0B',
-  'Resolved': '#16A34A',
-  'Closed': 'var(--text-secondary)',
+  Pending: '#F59E0B',
+  Resolved: '#16A34A',
+  Closed: 'var(--text-secondary)',
   // Jira Service Management canonical names
   'To Do': '#3B82F6',
-  'Blocked': '#DC2626',
+  Blocked: '#DC2626',
   'Waiting for Customer': '#F59E0B',
   'Waiting for Support': '#F97316',
-  'Done': 'var(--text-secondary)',
+  Done: 'var(--text-secondary)',
 };
 const STATUS_BG = {
   '#3B82F6': '#EFF6FF',
@@ -529,7 +668,7 @@ const DONE_STATUSES = new Set(['Resolved', 'Done', 'Closed']);
 
 // Returns 'ok' | 'at-risk' (≥75% of resolution target) | 'breached' (past target).
 // Done/Resolved/Closed tickets always return 'ok'.
-const slaStateFor = (ticket) => {
+const slaStateFor = ticket => {
   if (!ticket || !ticket.created || DONE_STATUSES.has(ticket.status)) return 'ok';
   const target = SLA_TARGETS_HOURS[ticket.priority];
   if (!target) return 'ok';
@@ -551,10 +690,18 @@ const JIRA_DEFAULT_STATUSES = [
   { name: 'Resolved', category: 'done' },
   { name: 'Done', category: 'done' },
 ];
-let JIRA_WORKFLOW = { statuses: JIRA_DEFAULT_STATUSES, source: 'fallback', loadedAt: null, note: null };
+let JIRA_WORKFLOW = {
+  statuses: JIRA_DEFAULT_STATUSES,
+  source: 'fallback',
+  loadedAt: null,
+  note: null,
+};
 const _jiraWorkflowListeners = new Set();
-const subscribeJiraWorkflow = (fn) => { _jiraWorkflowListeners.add(fn); return () => _jiraWorkflowListeners.delete(fn); };
-const setJiraWorkflow = (payload) => {
+const subscribeJiraWorkflow = fn => {
+  _jiraWorkflowListeners.add(fn);
+  return () => _jiraWorkflowListeners.delete(fn);
+};
+const setJiraWorkflow = payload => {
   JIRA_WORKFLOW = { ...payload, loadedAt: new Date().toISOString() };
   _jiraWorkflowListeners.forEach(fn => fn(JIRA_WORKFLOW));
 };
@@ -564,7 +711,7 @@ const getJiraWorkflow = () => JIRA_WORKFLOW;
 // on the matching local ticket. Returns { ok, error? }.
 const pushJiraTransition = async (ticket, newStatus) => {
   if (!ticket?.jiraKey) return { ok: false, error: 'no-jira-key' };
-  updateTickets(ts => ts.map(t => t.id === ticket.id ? { ...t, jiraSyncState: 'syncing' } : t));
+  updateTickets(ts => ts.map(t => (t.id === ticket.id ? { ...t, jiraSyncState: 'syncing' } : t)));
   try {
     const res = await fetch('/api/v1/jira/transition', {
       method: 'POST',
@@ -573,16 +720,47 @@ const pushJiraTransition = async (ticket, newStatus) => {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      updateTickets(ts => ts.map(t => t.id === ticket.id ? { ...t, jiraSyncState: 'error', jiraSyncError: err?.error || ('HTTP ' + res.status) } : t));
-      recordAudit('ticket.jira_transition_failed', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title }, { jiraKey: ticket.jiraKey, target: newStatus, error: err?.error });
-      return { ok: false, error: err?.error || ('HTTP ' + res.status) };
+      updateTickets(ts =>
+        ts.map(t =>
+          t.id === ticket.id
+            ? { ...t, jiraSyncState: 'error', jiraSyncError: err?.error || 'HTTP ' + res.status }
+            : t
+        )
+      );
+      recordAudit(
+        'ticket.jira_transition_failed',
+        _currentActor,
+        { type: 'ticket', id: ticket.id, label: ticket.title },
+        { jiraKey: ticket.jiraKey, target: newStatus, error: err?.error }
+      );
+      return { ok: false, error: err?.error || 'HTTP ' + res.status };
     }
     const data = await res.json();
-    updateTickets(ts => ts.map(t => t.id === ticket.id ? { ...t, jiraSyncState: 'synced', jiraSyncedAt: new Date().toISOString(), jiraSyncError: null } : t));
-    recordAudit('ticket.jira_transition', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title }, { jiraKey: ticket.jiraKey, status: data.status });
+    updateTickets(ts =>
+      ts.map(t =>
+        t.id === ticket.id
+          ? {
+              ...t,
+              jiraSyncState: 'synced',
+              jiraSyncedAt: new Date().toISOString(),
+              jiraSyncError: null,
+            }
+          : t
+      )
+    );
+    recordAudit(
+      'ticket.jira_transition',
+      _currentActor,
+      { type: 'ticket', id: ticket.id, label: ticket.title },
+      { jiraKey: ticket.jiraKey, status: data.status }
+    );
     return { ok: true, status: data.status };
   } catch (err) {
-    updateTickets(ts => ts.map(t => t.id === ticket.id ? { ...t, jiraSyncState: 'error', jiraSyncError: err.message } : t));
+    updateTickets(ts =>
+      ts.map(t =>
+        t.id === ticket.id ? { ...t, jiraSyncState: 'error', jiraSyncError: err.message } : t
+      )
+    );
     return { ok: false, error: err.message };
   }
 };
@@ -613,7 +791,8 @@ const pollJira = async (project = 'PESD1') => {
         if (!incoming) return t;
         const next = { ...t };
         if (incoming.status && incoming.status !== t.status) next.status = incoming.status;
-        if (incoming.assignee !== undefined && incoming.assignee !== t.assignee) next.assignee = incoming.assignee;
+        if (incoming.assignee !== undefined && incoming.assignee !== t.assignee)
+          next.assignee = incoming.assignee;
         next.jiraSyncState = 'synced';
         next.jiraSyncedAt = data.fetchedAt;
         if (next.status !== t.status || next.assignee !== t.assignee) touched++;
@@ -638,7 +817,9 @@ const pollJira = async (project = 'PESD1') => {
           department: '—',
           shop: '—',
           platforms: [],
-          timeline: [{ date: createdDay, actor: issue.assignee || 'Jira', action: 'Imported from Jira' }],
+          timeline: [
+            { date: createdDay, actor: issue.assignee || 'Jira', action: 'Imported from Jira' },
+          ],
           messages: [],
           internalNotes: [],
           requester: { name: 'Jira import', email: null },
@@ -661,12 +842,25 @@ const pollJira = async (project = 'PESD1') => {
 };
 
 // ─── Issue types + Components (live, with fallback) ──────────────────────────
-let JIRA_ISSUE_TYPES = { issueTypes: [{ id: 'fb', name: 'Service Request' }, { id: 'fb', name: 'Incident' }, { id: 'fb', name: 'Bug' }], source: 'fallback' };
+let JIRA_ISSUE_TYPES = {
+  issueTypes: [
+    { id: 'fb', name: 'Service Request' },
+    { id: 'fb', name: 'Incident' },
+    { id: 'fb', name: 'Bug' },
+  ],
+  source: 'fallback',
+};
 let JIRA_COMPONENTS = { components: [], source: 'fallback' };
 const _typesListeners = new Set();
 const _componentsListeners = new Set();
-const subscribeIssueTypes = (fn) => { _typesListeners.add(fn); return () => _typesListeners.delete(fn); };
-const subscribeComponents = (fn) => { _componentsListeners.add(fn); return () => _componentsListeners.delete(fn); };
+const subscribeIssueTypes = fn => {
+  _typesListeners.add(fn);
+  return () => _typesListeners.delete(fn);
+};
+const subscribeComponents = fn => {
+  _componentsListeners.add(fn);
+  return () => _componentsListeners.delete(fn);
+};
 const loadIssueTypes = async (project = 'PESD1') => {
   try {
     const res = await fetch(`/api/v1/jira/issue-types?project=${encodeURIComponent(project)}`);
@@ -675,7 +869,9 @@ const loadIssueTypes = async (project = 'PESD1') => {
     JIRA_ISSUE_TYPES = { issueTypes: data.issueTypes || [], source: data.source || 'fallback' };
     _typesListeners.forEach(fn => fn(JIRA_ISSUE_TYPES));
     return JIRA_ISSUE_TYPES;
-  } catch { return JIRA_ISSUE_TYPES; }
+  } catch {
+    return JIRA_ISSUE_TYPES;
+  }
 };
 const loadComponents = async (project = 'PESD1') => {
   try {
@@ -685,22 +881,33 @@ const loadComponents = async (project = 'PESD1') => {
     JIRA_COMPONENTS = { components: data.components || [], source: data.source || 'fallback' };
     _componentsListeners.forEach(fn => fn(JIRA_COMPONENTS));
     return JIRA_COMPONENTS;
-  } catch { return JIRA_COMPONENTS; }
+  } catch {
+    return JIRA_COMPONENTS;
+  }
 };
 
 // ─── Assignable users (live, with fallback) ───────────────────────────────────
 let ASSIGNABLE_USERS = { users: [], source: 'fallback', loadedAt: null };
 const _assignableListeners = new Set();
-const subscribeAssignable = (fn) => { _assignableListeners.add(fn); return () => _assignableListeners.delete(fn); };
+const subscribeAssignable = fn => {
+  _assignableListeners.add(fn);
+  return () => _assignableListeners.delete(fn);
+};
 const loadAssignableUsers = async (project = 'PESD1') => {
   try {
     const res = await fetch(`/api/v1/jira/users/assignable?project=${encodeURIComponent(project)}`);
     if (!res.ok) return ASSIGNABLE_USERS;
     const data = await res.json();
-    ASSIGNABLE_USERS = { users: Array.isArray(data.users) ? data.users : [], source: data.source || 'fallback', loadedAt: new Date().toISOString() };
+    ASSIGNABLE_USERS = {
+      users: Array.isArray(data.users) ? data.users : [],
+      source: data.source || 'fallback',
+      loadedAt: new Date().toISOString(),
+    };
     _assignableListeners.forEach(fn => fn(ASSIGNABLE_USERS));
     return ASSIGNABLE_USERS;
-  } catch { return ASSIGNABLE_USERS; }
+  } catch {
+    return ASSIGNABLE_USERS;
+  }
 };
 const getAssignableUsers = () => ASSIGNABLE_USERS;
 
@@ -710,7 +917,10 @@ const getAssignableUsers = () => ASSIGNABLE_USERS;
 let LAST_EVENT_AT = null;
 let LAST_WEBHOOK_RECEIVED_AT = null;
 const _webhookListeners = new Set();
-const subscribeWebhookState = (fn) => { _webhookListeners.add(fn); return () => _webhookListeners.delete(fn); };
+const subscribeWebhookState = fn => {
+  _webhookListeners.add(fn);
+  return () => _webhookListeners.delete(fn);
+};
 const pollWebhookEvents = async () => {
   try {
     const since = LAST_EVENT_AT ? `?since=${encodeURIComponent(LAST_EVENT_AT)}` : '';
@@ -723,21 +933,24 @@ const pollWebhookEvents = async () => {
     if (data.count === 0) return data;
     // Apply each event to local state (only updates, not creates — poll handles creates)
     let touched = 0;
-    updateTickets(ts => ts.map(t => {
-      if (!t.jiraKey) return t;
-      const relevant = data.events.find(e => e.issueKey === t.jiraKey);
-      if (!relevant) return t;
-      const next = { ...t };
-      if (relevant.issueStatus && relevant.issueStatus !== t.status) next.status = relevant.issueStatus;
-      if (relevant.issueAssignee !== undefined && relevant.issueAssignee !== t.assignee) {
-        next.assignee = relevant.issueAssignee;
-        next.assigneeEmail = emailForAssignee(relevant.issueAssignee);
-      }
-      next.jiraSyncedAt = data.fetchedAt;
-      next.jiraSyncState = 'synced';
-      if (next.status !== t.status || next.assignee !== t.assignee) touched++;
-      return next;
-    }));
+    updateTickets(ts =>
+      ts.map(t => {
+        if (!t.jiraKey) return t;
+        const relevant = data.events.find(e => e.issueKey === t.jiraKey);
+        if (!relevant) return t;
+        const next = { ...t };
+        if (relevant.issueStatus && relevant.issueStatus !== t.status)
+          next.status = relevant.issueStatus;
+        if (relevant.issueAssignee !== undefined && relevant.issueAssignee !== t.assignee) {
+          next.assignee = relevant.issueAssignee;
+          next.assigneeEmail = emailForAssignee(relevant.issueAssignee);
+        }
+        next.jiraSyncedAt = data.fetchedAt;
+        next.jiraSyncState = 'synced';
+        if (next.status !== t.status || next.assignee !== t.assignee) touched++;
+        return next;
+      })
+    );
     return { ...data, applied: touched };
   } catch {
     return null;
@@ -751,10 +964,16 @@ const loadJiraWorkflow = async (project = 'PESD1') => {
     if (!res.ok) throw new Error('http ' + res.status);
     const data = await res.json();
     if (Array.isArray(data?.statuses) && data.statuses.length > 0) {
-      setJiraWorkflow({ statuses: data.statuses, source: data.source || 'fallback', note: data.note || null });
+      setJiraWorkflow({
+        statuses: data.statuses,
+        source: data.source || 'fallback',
+        note: data.note || null,
+      });
       return data;
     }
-  } catch { /* keep current cache / default */ }
+  } catch {
+    /* keep current cache / default */
+  }
   return getJiraWorkflow();
 };
 
@@ -773,7 +992,7 @@ function usePersistentState(key, initialValue, options = {}) {
   // Scope per user; _currentActor is set on login (falls back to 'anon').
   const scopedKey = `draft:${_currentActor?.email || 'anon'}:${key}`;
   const computeInitial = () => (typeof initialValue === 'function' ? initialValue() : initialValue);
-  const stripOmitted = (value) => {
+  const stripOmitted = value => {
     if (!value || typeof value !== 'object' || omit.length === 0) return value;
     const copy = { ...value };
     for (const k of omit) delete copy[k];
@@ -785,7 +1004,9 @@ function usePersistentState(key, initialValue, options = {}) {
     // Merge saved over the initial so omitted/new keys always start clean.
     return saved && typeof saved === 'object' && typeof init === 'object'
       ? { ...init, ...saved }
-      : (saved != null ? saved : init);
+      : saved != null
+        ? saved
+        : init;
   });
   useEffect(() => {
     saveStore(scopedKey, stripOmitted(value));
@@ -831,7 +1052,10 @@ function useComponents() {
 function useJiraChangelog(jiraKey) {
   const [history, setHistory] = useState([]);
   useEffect(() => {
-    if (!jiraKey) { setHistory([]); return; }
+    if (!jiraKey) {
+      setHistory([]);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -839,9 +1063,13 @@ function useJiraChangelog(jiraKey) {
         if (!res.ok) return;
         const json = await res.json();
         if (!cancelled) setHistory(Array.isArray(json.history) ? json.history : []);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [jiraKey]);
   return history;
 }
@@ -849,7 +1077,10 @@ function useJiraChangelog(jiraKey) {
 function useJiraCsat(jiraKey, status) {
   const [data, setData] = useState(null);
   useEffect(() => {
-    if (!jiraKey || !DONE_STATUSES.has(status)) { setData(null); return; }
+    if (!jiraKey || !DONE_STATUSES.has(status)) {
+      setData(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -857,9 +1088,13 @@ function useJiraCsat(jiraKey, status) {
         if (!res.ok) return;
         const json = await res.json();
         if (!cancelled && json.available) setData(json);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [jiraKey, status]);
   return data;
 }
@@ -867,7 +1102,10 @@ function useJiraCsat(jiraKey, status) {
 function useJiraWorklog(jiraKey) {
   const [data, setData] = useState(null);
   useEffect(() => {
-    if (!jiraKey) { setData(null); return; }
+    if (!jiraKey) {
+      setData(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -875,9 +1113,13 @@ function useJiraWorklog(jiraKey) {
         if (!res.ok) return;
         const json = await res.json();
         if (!cancelled) setData(json);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [jiraKey]);
   return data;
 }
@@ -885,17 +1127,25 @@ function useJiraWorklog(jiraKey) {
 function useJiraWatchers(jiraKey) {
   const [state, setState] = useState({ watchers: [], watchCount: 0 });
   useEffect(() => {
-    if (!jiraKey) { setState({ watchers: [], watchCount: 0 }); return; }
+    if (!jiraKey) {
+      setState({ watchers: [], watchCount: 0 });
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch(`/api/v1/jira/issue/${encodeURIComponent(jiraKey)}/watchers`);
         if (!res.ok) return;
         const json = await res.json();
-        if (!cancelled) setState({ watchers: json.watchers || [], watchCount: json.watchCount || 0 });
-      } catch { /* ignore */ }
+        if (!cancelled)
+          setState({ watchers: json.watchers || [], watchCount: json.watchCount || 0 });
+      } catch {
+        /* ignore */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [jiraKey]);
   return state;
 }
@@ -922,9 +1172,13 @@ function useJiraIssueDetail(jiraKey) {
         if (cancelled) return;
         _jiraIssueCache.set(jiraKey, json);
         setData(json);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [jiraKey]);
   return data;
 }
@@ -932,7 +1186,10 @@ function useJiraIssueDetail(jiraKey) {
 function useJiraSla(jiraKey) {
   const [data, setData] = useState(null);
   useEffect(() => {
-    if (!jiraKey) { setData(null); return; }
+    if (!jiraKey) {
+      setData(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -940,9 +1197,13 @@ function useJiraSla(jiraKey) {
         if (!res.ok) return;
         const json = await res.json();
         if (!cancelled) setData(json);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [jiraKey]);
   return data;
 }
@@ -959,9 +1220,9 @@ function useJiraSla(jiraKey) {
 
 // PR lifecycle status → presentation (icon, colours, label).
 const PR_STATUS_META = {
-  OPEN:     { icon: '🟢', label: 'Open',     bg: '#DCFCE7', fg: '#15803D' },
-  DRAFT:    { icon: '📝', label: 'Draft',    bg: 'var(--bg-hover)', fg: 'var(--text-secondary)' },
-  MERGED:   { icon: '🟣', label: 'Merged',   bg: '#F3E8FF', fg: '#7E22CE' },
+  OPEN: { icon: '🟢', label: 'Open', bg: '#DCFCE7', fg: '#15803D' },
+  DRAFT: { icon: '📝', label: 'Draft', bg: 'var(--bg-hover)', fg: 'var(--text-secondary)' },
+  MERGED: { icon: '🟣', label: 'Merged', bg: '#F3E8FF', fg: '#7E22CE' },
   DECLINED: { icon: '🔴', label: 'Declined', bg: '#FEE2E2', fg: '#B91C1C' },
 };
 const prStatusMeta = status => PR_STATUS_META[status] || PR_STATUS_META.OPEN;
@@ -969,7 +1230,7 @@ const prStatusMeta = status => PR_STATUS_META[status] || PR_STATUS_META.OPEN;
 // CI/checks rollup → presentation.
 const PR_CHECK_META = {
   success: { icon: '✓', label: 'Checks passing', bg: '#DCFCE7', fg: '#15803D' },
-  failed:  { icon: '✕', label: 'Checks failing', bg: '#FEE2E2', fg: '#B91C1C' },
+  failed: { icon: '✕', label: 'Checks failing', bg: '#FEE2E2', fg: '#B91C1C' },
   pending: { icon: '•', label: 'Checks running', bg: '#FEF3C7', fg: '#92400E' },
 };
 const prCheckMeta = status => PR_CHECK_META[status] || null;
@@ -990,11 +1251,17 @@ function prSummary(prs) {
 // Returns { prs, summary, loading, source }. Uses the ticket's mock PRs as the
 // baseline and overlays anything the BFF returns from live Jira dev-status.
 function usePullRequests(jiraKey, ticket) {
-  const mock = useMemo(() => (Array.isArray(ticket?.pullRequests) ? ticket.pullRequests : []), [ticket]);
+  const mock = useMemo(
+    () => (Array.isArray(ticket?.pullRequests) ? ticket.pullRequests : []),
+    [ticket]
+  );
   const [prs, setPrs] = useState(mock);
   const [source, setSource] = useState(mock.length ? 'mock' : 'none');
   const [loading, setLoading] = useState(false);
-  useEffect(() => { setPrs(mock); setSource(mock.length ? 'mock' : 'none'); }, [mock]);
+  useEffect(() => {
+    setPrs(mock);
+    setSource(mock.length ? 'mock' : 'none');
+  }, [mock]);
   useEffect(() => {
     if (!jiraKey) return;
     let cancelled = false;
@@ -1007,10 +1274,15 @@ function usePullRequests(jiraKey, ticket) {
         if (cancelled || !json?.available || !Array.isArray(json.pullRequests)) return;
         setPrs(json.pullRequests);
         setSource('jira');
-      } catch { /* keep mock */ }
-      finally { if (!cancelled) setLoading(false); }
+      } catch {
+        /* keep mock */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [jiraKey]);
   return { prs, summary: prSummary(prs), loading, source };
 }
@@ -1096,13 +1368,31 @@ function TicketAttachments({ local = [], jira = [] }) {
   if (all.length === 0) return null;
   return (
     <div style={{ ...S.card, marginBottom: '20px' }}>
-      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div
+        style={{
+          fontSize: '13px',
+          fontWeight: 700,
+          color: 'var(--text-secondary)',
+          marginBottom: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}
+      >
         📎 Attachments ({all.length})
         {jiraList.length > 0 && localList.length > 0 && (
-          <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 600 }}>· {localList.length} local · {jiraList.length} from Jira</span>
+          <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 600 }}>
+            · {localList.length} local · {jiraList.length} from Jira
+          </span>
         )}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+          gap: '8px',
+        }}
+      >
         {all.map(a => (
           <FilePreviewCard key={a.key} name={a.name} size={a.size} type={a.type} src={a.src} />
         ))}
@@ -1118,10 +1408,19 @@ function SubmitFilesPreview({ files, onRemove }) {
   useEffect(() => {
     const generated = files.map(f => URL.createObjectURL(f));
     setUrls(generated);
-    return () => { generated.forEach(u => URL.revokeObjectURL(u)); };
+    return () => {
+      generated.forEach(u => URL.revokeObjectURL(u));
+    };
   }, [files]);
   return (
-    <div style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
+    <div
+      style={{
+        marginTop: '12px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+        gap: '8px',
+      }}
+    >
       {files.map((f, i) => (
         <FilePreviewCard
           key={`${f.name}-${i}-${f.size}`}
@@ -1144,7 +1443,8 @@ function useModalFocusTrap(ref) {
     const prev = typeof document !== 'undefined' ? document.activeElement : null;
     const node = ref.current;
     if (!node) return;
-    const FOCUSABLE = 'a[href], area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const FOCUSABLE =
+      'a[href], area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])';
     const focusables = () => Array.from(node.querySelectorAll(FOCUSABLE));
     const first = focusables()[0];
     (first || node).focus({ preventScroll: true });
@@ -1181,7 +1481,10 @@ let MOCK_USERS = [...DEMO_SEED_USERS];
 // continuous chat between a user and the assistant.
 const CHAT_SESSIONS = [];
 const _chatListeners = new Set();
-const subscribeChat = (fn) => { _chatListeners.add(fn); return () => _chatListeners.delete(fn); };
+const subscribeChat = fn => {
+  _chatListeners.add(fn);
+  return () => _chatListeners.delete(fn);
+};
 const bumpChat = () => {
   _chatListeners.forEach(fn => fn());
   saveStore('chatSessions', CHAT_SESSIONS);
@@ -1213,14 +1516,25 @@ const listChatSessions = () => CHAT_SESSIONS.slice();
 // ─── Maintenance mode (in-memory toggle) ──────────────────────────────────────
 let MAINTENANCE = { active: false, message: '', enabledBy: null, enabledAt: null };
 const _maintListeners = new Set();
-const subscribeMaintenance = (fn) => { _maintListeners.add(fn); return () => _maintListeners.delete(fn); };
+const subscribeMaintenance = fn => {
+  _maintListeners.add(fn);
+  return () => _maintListeners.delete(fn);
+};
 const setMaintenanceMode = (active, message, actor) => {
   MAINTENANCE = active
-    ? { active: true, message: message || 'Scheduled maintenance in progress.', enabledBy: actor?.name || 'Admin', enabledAt: new Date().toISOString() }
+    ? {
+        active: true,
+        message: message || 'Scheduled maintenance in progress.',
+        enabledBy: actor?.name || 'Admin',
+        enabledAt: new Date().toISOString(),
+      }
     : { active: false, message: '', enabledBy: null, enabledAt: null };
   saveStore('maintenance', MAINTENANCE);
   _maintListeners.forEach(fn => fn(MAINTENANCE));
-  if (actor) recordAudit(active ? 'system.maintenance_on' : 'system.maintenance_off', actor, null, { message });
+  if (actor)
+    recordAudit(active ? 'system.maintenance_on' : 'system.maintenance_off', actor, null, {
+      message,
+    });
 };
 const getMaintenanceMode = () => MAINTENANCE;
 
@@ -1231,30 +1545,30 @@ const getMaintenanceMode = () => MAINTENANCE;
 // Log page consume this so a new action code only needs to be added in one
 // place. Keys must match the `action` strings passed into recordAudit().
 const AUDIT_ACTION_LABELS = {
-  'user.create':           '➕ User created',
-  'user.update':           '✏️ User edited',
-  'user.promote':          '⬆️ Promoted to superadmin',
-  'user.demote':           '⬇️ Demoted to user',
-  'user.role_change':      '🎚 Role changed',
-  'user.deactivate':       '🚫 User deactivated',
-  'user.reactivate':       '✅ User reactivated',
-  'user.force_re_otp':     '🔁 Force re-OTP',
-  'user.reset_password':   '🔑 Password reset',
-  'role.create':           '🎭 Role created',
-  'role.update':           '🎭 Role updated',
-  'role.delete':           '🗑 Role deleted',
-  'capability.toggle':     '🔧 Capability toggled',
-  'admin.view_as':         '👁 View-as switched',
-  'session.login':         '🔓 Login',
-  'session.logout':        '🔒 Logout',
-  'system.maintenance_on':  '🛠 Maintenance ON',
+  'user.create': '➕ User created',
+  'user.update': '✏️ User edited',
+  'user.promote': '⬆️ Promoted to superadmin',
+  'user.demote': '⬇️ Demoted to user',
+  'user.role_change': '🎚 Role changed',
+  'user.deactivate': '🚫 User deactivated',
+  'user.reactivate': '✅ User reactivated',
+  'user.force_re_otp': '🔁 Force re-OTP',
+  'user.reset_password': '🔑 Password reset',
+  'role.create': '🎭 Role created',
+  'role.update': '🎭 Role updated',
+  'role.delete': '🗑 Role deleted',
+  'capability.toggle': '🔧 Capability toggled',
+  'admin.view_as': '👁 View-as switched',
+  'session.login': '🔓 Login',
+  'session.logout': '🔒 Logout',
+  'system.maintenance_on': '🛠 Maintenance ON',
   'system.maintenance_off': '🛠 Maintenance OFF',
-  'system.rbac_migrated':   '⚙️ RBAC migration ran',
+  'system.rbac_migrated': '⚙️ RBAC migration ran',
   'system.settings_update': '⚙️ Settings updated',
-  'ticket.bulk_status':    '📋 Bulk status change',
-  'ticket.bulk_reassign':  '📋 Bulk reassign',
-  'ticket.status_change':  '📋 Status change',
-  'ticket.internal_note':  '📝 Internal note',
+  'ticket.bulk_status': '📋 Bulk status change',
+  'ticket.bulk_reassign': '📋 Bulk reassign',
+  'ticket.status_change': '📋 Status change',
+  'ticket.internal_note': '📝 Internal note',
 };
 const AUDIT_LOG = [];
 let _auditVersion = 0;
@@ -1264,16 +1578,19 @@ const bumpAudit = () => {
   _auditListeners.forEach(fn => fn(_auditVersion));
   saveStore('audit', AUDIT_LOG);
 };
-const subscribeAudit = (fn) => { _auditListeners.add(fn); return () => _auditListeners.delete(fn); };
+const subscribeAudit = fn => {
+  _auditListeners.add(fn);
+  return () => _auditListeners.delete(fn);
+};
 
 const recordAudit = (action, actor, target = null, details = null) => {
   AUDIT_LOG.unshift({
     id: 'a' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     timestamp: new Date().toISOString(),
-    action,            // e.g. 'user.promote'
+    action, // e.g. 'user.promote'
     actorEmail: actor?.email || 'unknown',
     actorName: actor?.name || 'Unknown',
-    targetType: target?.type || null,   // 'user' | 'doc' | 'ticket' | 'system' | null
+    targetType: target?.type || null, // 'user' | 'doc' | 'ticket' | 'system' | null
     targetId: target?.id || null,
     targetLabel: target?.label || null,
     details: details || null,
@@ -1285,7 +1602,9 @@ const listAudit = () => AUDIT_LOG.slice();
 // Module-level holder so admin API functions can resolve the current actor
 // without threading actor through every mutation call.
 let _currentActor = null;
-const setAuditActor = (actor) => { _currentActor = actor; };
+const setAuditActor = actor => {
+  _currentActor = actor;
+};
 
 // ─── Admin user-management API (in-memory) ────────────────────────────────────
 // Returns a sanitised list (no password hashes) and emits a version counter
@@ -1297,7 +1616,10 @@ const bumpUsers = () => {
   _usersListeners.forEach(fn => fn(_usersVersion));
   saveStore('users', MOCK_USERS);
 };
-const subscribeUsers = (fn) => { _usersListeners.add(fn); return () => _usersListeners.delete(fn); };
+const subscribeUsers = fn => {
+  _usersListeners.add(fn);
+  return () => _usersListeners.delete(fn);
+};
 
 // Back-fill seed tickets with a requester so existing fixtures show up under
 // "My Tickets" for the demo users.
@@ -1358,7 +1680,10 @@ for (const t of MOCK_TICKETS) {
 // MOCK_USERS during migration and call recordAudit on changes — both circular
 // concerns we'd hit if the registry moved into the pure rbac module.
 let ROLES_REGISTRY = SEED_ROLES.map(r => ({ ...r, capabilities: r.capabilities.slice() }));
-let SETTINGS = { defaultAssigneeName: DEFAULT_ASSIGNEE.name, defaultAssigneeEmail: DEFAULT_ASSIGNEE.email };
+let SETTINGS = {
+  defaultAssigneeName: DEFAULT_ASSIGNEE.name,
+  defaultAssigneeEmail: DEFAULT_ASSIGNEE.email,
+};
 
 let _rolesVersion = 0;
 const _rolesListeners = new Set();
@@ -1367,7 +1692,10 @@ const bumpRoles = () => {
   _rolesListeners.forEach(fn => fn(_rolesVersion));
   saveStore('roles', ROLES_REGISTRY);
 };
-const subscribeRoles = (fn) => { _rolesListeners.add(fn); return () => _rolesListeners.delete(fn); };
+const subscribeRoles = fn => {
+  _rolesListeners.add(fn);
+  return () => _rolesListeners.delete(fn);
+};
 
 let _settingsVersion = 0;
 const _settingsListeners = new Set();
@@ -1376,32 +1704,37 @@ const bumpSettings = () => {
   _settingsListeners.forEach(fn => fn(_settingsVersion));
   saveStore('settings', SETTINGS);
 };
-const subscribeSettings = (fn) => { _settingsListeners.add(fn); return () => _settingsListeners.delete(fn); };
+const subscribeSettings = fn => {
+  _settingsListeners.add(fn);
+  return () => _settingsListeners.delete(fn);
+};
 
 const listRoles = () => ROLES_REGISTRY.slice();
-const findRole = (roleId) => ROLES_REGISTRY.find(r => r.id === roleId) || null;
-const getDefaultRoleId = () => (ROLES_REGISTRY.find(r => r.isDefault)?.id) || DEFAULT_ROLE_ID;
+const findRole = roleId => ROLES_REGISTRY.find(r => r.id === roleId) || null;
+const getDefaultRoleId = () => ROLES_REGISTRY.find(r => r.isDefault)?.id || DEFAULT_ROLE_ID;
 const getSettings = () => ({ ...SETTINGS });
-const setSettings = (next) => {
+const setSettings = next => {
   SETTINGS = { ...SETTINGS, ...next };
   bumpSettings();
 };
-const countUsersInRole = (roleId) => MOCK_USERS.reduce((n, u) => n + (u.roleId === roleId ? 1 : 0), 0);
+const countUsersInRole = roleId =>
+  MOCK_USERS.reduce((n, u) => n + (u.roleId === roleId ? 1 : 0), 0);
 
 // Users eligible to be picked as a ticket assignee: anyone whose role grants
 // tickets.view_assigned (developers, admins, superadmins by default).
 // Returns display names sorted alphabetically.
 const listAssignableUsers = () => {
-  const eligibleRoleIds = new Set(ROLES_REGISTRY.filter(r => r.capabilities.includes('tickets.view_assigned')).map(r => r.id));
-  return MOCK_USERS
-    .filter(u => u.active !== false && eligibleRoleIds.has(u.roleId))
+  const eligibleRoleIds = new Set(
+    ROLES_REGISTRY.filter(r => r.capabilities.includes('tickets.view_assigned')).map(r => r.id)
+  );
+  return MOCK_USERS.filter(u => u.active !== false && eligibleRoleIds.has(u.roleId))
     .map(u => ({ name: u.name, email: u.email }))
     .sort((a, b) => a.name.localeCompare(b.name));
 };
 
 // Look up the email for a display name. Used when we have a name string
 // (legacy callers, Jira sync) but want to write the canonical assigneeEmail.
-const emailForAssignee = (name) => {
+const emailForAssignee = name => {
   if (!name) return null;
   const match = MOCK_USERS.find(u => u.name === name);
   return match?.email || null;
@@ -1416,15 +1749,23 @@ const emailForAssignee = (name) => {
 //   * a role with users cannot be deleted (caller must reassign first)
 //   * the current actor cannot demote themselves below `roles.edit` if doing
 //     so would leave nobody able to manage roles (last-admin guard).
-const slugify = (s) => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'role';
+const slugify = s =>
+  String(s || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'role';
 
 const createRole = ({ name, label, description, color, capabilities }) => {
   const trimmedLabel = String(label || '').trim();
   const machineName = slugify(name || trimmedLabel);
   if (!trimmedLabel) return { error: 'Role label is required.' };
-  if (ROLES_REGISTRY.some(r => r.name === machineName)) return { error: `A role named "${machineName}" already exists.` };
+  if (ROLES_REGISTRY.some(r => r.name === machineName))
+    return { error: `A role named "${machineName}" already exists.` };
   const id = 'role_' + machineName + '_' + Date.now().toString(36);
-  const caps = Array.isArray(capabilities) ? capabilities.filter(c => CAPABILITIES.some(cap => cap.id === c)) : [];
+  const caps = Array.isArray(capabilities)
+    ? capabilities.filter(c => CAPABILITIES.some(cap => cap.id === c))
+    : [];
   const role = {
     id,
     name: machineName,
@@ -1443,29 +1784,45 @@ const createRole = ({ name, label, description, color, capabilities }) => {
   // Server assigns its own role id — refresh the registry so later edits to
   // this role target the server's id, not the optimistic local one.
   if (API_ENABLED) {
-    rolesApi.createRole({ label: trimmedLabel, description: description || '', color: role.color, capabilities: caps })
+    rolesApi
+      .createRole({
+        label: trimmedLabel,
+        description: description || '',
+        color: role.color,
+        capabilities: caps,
+      })
       .then(res => {
         if (res.error) console.warn('[api] backend mirror failed:', res.error);
         else hydrateFromBackend();
       });
   }
-  recordAudit('role.create', _currentActor, { type: 'role', id: role.id, label: role.label }, { capabilities: caps });
+  recordAudit(
+    'role.create',
+    _currentActor,
+    { type: 'role', id: role.id, label: role.label },
+    { capabilities: caps }
+  );
   return role;
 };
 
-const isFullCapabilitySet = (caps) => Array.isArray(caps) && CAPABILITIES.every(c => caps.includes(c.id));
+const isFullCapabilitySet = caps =>
+  Array.isArray(caps) && CAPABILITIES.every(c => caps.includes(c.id));
 
 const updateRole = (id, updates) => {
   const role = findRole(id);
   if (!role) return { error: 'Role not found.' };
   // Lockout protection: superadmin must keep every capability.
-  if (role.id === 'role_superadmin' && updates.capabilities && !isFullCapabilitySet(updates.capabilities)) {
+  if (
+    role.id === 'role_superadmin' &&
+    updates.capabilities &&
+    !isFullCapabilitySet(updates.capabilities)
+  ) {
     return { error: 'Superadmin must retain every capability.' };
   }
   const next = { ...role, ...updates, updatedAt: new Date().toISOString() };
   // System roles keep their machine `name` even if the label is renamed.
   if (role.isSystem) next.name = role.name;
-  ROLES_REGISTRY = ROLES_REGISTRY.map(r => r.id === id ? next : r);
+  ROLES_REGISTRY = ROLES_REGISTRY.map(r => (r.id === id ? next : r));
   bumpRoles();
   {
     const { label, description, color, capabilities } = updates;
@@ -1480,15 +1837,24 @@ const updateRole = (id, updates) => {
         removed: role.capabilities.filter(c => !updates.capabilities.includes(c)),
       }
     : null;
-  recordAudit('role.update', _currentActor, { type: 'role', id, label: next.label },
-    { changedKeys: Object.keys(updates), ...(capChange ? { capabilities: capChange } : {}) });
+  recordAudit(
+    'role.update',
+    _currentActor,
+    { type: 'role', id, label: next.label },
+    { changedKeys: Object.keys(updates), ...(capChange ? { capabilities: capChange } : {}) }
+  );
   if (capChange && (capChange.added.length || capChange.removed.length)) {
-    recordAudit('capability.toggle', _currentActor, { type: 'role', id, label: next.label }, capChange);
+    recordAudit(
+      'capability.toggle',
+      _currentActor,
+      { type: 'role', id, label: next.label },
+      capChange
+    );
   }
   return next;
 };
 
-const deleteRole = (id) => {
+const deleteRole = id => {
   const role = findRole(id);
   if (!role) return { error: 'Role not found.' };
   if (role.isSystem) return { error: 'System roles cannot be deleted.' };
@@ -1511,13 +1877,18 @@ const setUserRoleId = (userId, nextRoleId) => {
   if (u.roleId === nextRoleId) return sanitiseUser(u);
 
   // Last-admin guard
-  if (_currentActor && u.email === _currentActor.email && !targetRole.capabilities.includes('roles.edit')) {
+  if (
+    _currentActor &&
+    u.email === _currentActor.email &&
+    !targetRole.capabilities.includes('roles.edit')
+  ) {
     const othersCanEditRoles = MOCK_USERS.some(other => {
       if (other.id === u.id) return false;
       const r = findRole(other.roleId);
       return r && r.capabilities.includes('roles.edit');
     });
-    if (!othersCanEditRoles) return { error: 'Cannot demote yourself — nobody else can manage roles.' };
+    if (!othersCanEditRoles)
+      return { error: 'Cannot demote yourself — nobody else can manage roles.' };
   }
 
   const prev = u.roleId;
@@ -1527,13 +1898,23 @@ const setUserRoleId = (userId, nextRoleId) => {
   else u.role = targetRole.name;
   bumpUsers();
   mirror(usersApi.updateUser(userId, { roleId: nextRoleId }));
-  recordAudit('user.role_change', _currentActor, { type: 'user', id: u.id, label: u.name }, { from: prev, to: nextRoleId });
+  recordAudit(
+    'user.role_change',
+    _currentActor,
+    { type: 'user', id: u.id, label: u.name },
+    { from: prev, to: nextRoleId }
+  );
   return sanitiseUser(u);
 };
 
-const updateSettings = (patch) => {
+const updateSettings = patch => {
   setSettings(patch);
-  recordAudit('system.settings_update', _currentActor, { type: 'system', id: 'settings', label: 'Portal settings' }, patch);
+  recordAudit(
+    'system.settings_update',
+    _currentActor,
+    { type: 'system', id: 'settings', label: 'Portal settings' },
+    patch
+  );
   return getSettings();
 };
 
@@ -1569,8 +1950,9 @@ const updateSettings = (patch) => {
     if (!oldUser) continue;
     const collision = MOCK_USERS.find(u => u.email === newEmail && u.id !== oldUser.id);
     if (collision) {
-      // eslint-disable-next-line no-console
-      console.warn(`[rbac migration] skipping email rewrite ${oldEmail} → ${newEmail}: target email already exists on user ${collision.id}`);
+      console.warn(
+        `[rbac migration] skipping email rewrite ${oldEmail} → ${newEmail}: target email already exists on user ${collision.id}`
+      );
       continue;
     }
     oldUser.email = newEmail;
@@ -1586,18 +1968,23 @@ const updateSettings = (patch) => {
 
   if (touched) bumpUsers();
   saveStore('userRolesV', RBAC_SCHEMA_VERSION);
-  recordAudit('system.rbac_migrated', { name: 'System', email: 'system@pomelo.local' }, { type: 'system', id: 'rbac', label: 'RBAC schema' }, { from: storedVersion, to: RBAC_SCHEMA_VERSION });
+  recordAudit(
+    'system.rbac_migrated',
+    { name: 'System', email: 'system@pomelo.local' },
+    { type: 'system', id: 'rbac', label: 'RBAC schema' },
+    { from: storedVersion, to: RBAC_SCHEMA_VERSION }
+  );
 })();
 
 const sanitiseUser = ({ passwordHash: _, ...u }) => u;
 const listUsers = () => MOCK_USERS.map(sanitiseUser);
-const findUserById = (id) => MOCK_USERS.find(u => u.id === id);
+const findUserById = id => MOCK_USERS.find(u => u.id === id);
 
 // ─── Backend hydration (API mode) ─────────────────────────────────────────────
 // After login the server becomes the source of truth: replace the local
 // roles/users/tickets caches with server state. Non-admins get a 403 from
 // /api/users — their cache simply keeps whatever the session already knows.
-const userFromApi = (u) => ({
+const userFromApi = u => ({
   id: u.id,
   name: u.name,
   email: u.email,
@@ -1614,12 +2001,15 @@ const hydrateFromBackend = async () => {
   if (!API_ENABLED) return;
   // Roles first so userFromApi can resolve role names.
   const r = await rolesApi.listRoles();
-  if (r.data?.roles?.length) { ROLES_REGISTRY = r.data.roles; bumpRoles(); }
-  const [u, t] = await Promise.all([
-    usersApi.listUsers(),
-    ticketsApi.listTickets({ limit: 200 }),
-  ]);
-  if (u.data?.users) { MOCK_USERS = u.data.users.map(userFromApi); bumpUsers(); }
+  if (r.data?.roles?.length) {
+    ROLES_REGISTRY = r.data.roles;
+    bumpRoles();
+  }
+  const [u, t] = await Promise.all([usersApi.listUsers(), ticketsApi.listTickets({ limit: 200 })]);
+  if (u.data?.users) {
+    MOCK_USERS = u.data.users.map(userFromApi);
+    bumpUsers();
+  }
   if (t.data?.tickets) updateTickets(t.data.tickets.map(ticketFromApi));
 };
 
@@ -1634,8 +2024,16 @@ const updateUser = (id, updates) => {
     Object.entries({ name, email, department }).filter(([, v]) => v !== undefined)
   );
   mirror(Object.keys(serverPatch).length && usersApi.updateUser(id, serverPatch));
-  recordAudit('user.update', _currentActor, { type: 'user', id: u.id, label: u.name },
-    { changedKeys: Object.keys(updates), before: Object.fromEntries(Object.keys(updates).map(k => [k, before[k]])), after: updates });
+  recordAudit(
+    'user.update',
+    _currentActor,
+    { type: 'user', id: u.id, label: u.name },
+    {
+      changedKeys: Object.keys(updates),
+      before: Object.fromEntries(Object.keys(updates).map(k => [k, before[k]])),
+      after: updates,
+    }
+  );
   return sanitiseUser(u);
 };
 
@@ -1645,9 +2043,16 @@ const setUserRole = (id, role) => {
   const prev = u.role;
   u.role = role;
   bumpUsers();
-  mirror(LEGACY_ROLE_TO_ROLE_ID[role] && usersApi.updateUser(id, { roleId: LEGACY_ROLE_TO_ROLE_ID[role] }));
-  recordAudit(role === 'superadmin' ? 'user.promote' : 'user.demote', _currentActor,
-    { type: 'user', id: u.id, label: u.name }, { from: prev, to: role });
+  mirror(
+    LEGACY_ROLE_TO_ROLE_ID[role] &&
+      usersApi.updateUser(id, { roleId: LEGACY_ROLE_TO_ROLE_ID[role] })
+  );
+  recordAudit(
+    role === 'superadmin' ? 'user.promote' : 'user.demote',
+    _currentActor,
+    { type: 'user', id: u.id, label: u.name },
+    { from: prev, to: role }
+  );
   return sanitiseUser(u);
 };
 
@@ -1657,12 +2062,15 @@ const setUserActive = (id, active) => {
   u.active = active;
   bumpUsers();
   mirror(usersApi.updateUser(id, { active }));
-  recordAudit(active ? 'user.reactivate' : 'user.deactivate', _currentActor,
-    { type: 'user', id: u.id, label: u.name });
+  recordAudit(active ? 'user.reactivate' : 'user.deactivate', _currentActor, {
+    type: 'user',
+    id: u.id,
+    label: u.name,
+  });
   return sanitiseUser(u);
 };
 
-const forceUserReOtp = (id) => {
+const forceUserReOtp = id => {
   const u = findUserById(id);
   if (!u) return null;
   u.forceReOtp = true;
@@ -1681,37 +2089,65 @@ const resetUserPassword = async (id, tempPassword) => {
   return sanitiseUser(u);
 };
 
-const adminCreateUser = async ({ name, email, role, roleId, department = 'IT & Technology', tempPassword }) => {
-  const sanitisedEmail = String(email || '').trim().toLowerCase();
+const adminCreateUser = async ({
+  name,
+  email,
+  role,
+  roleId,
+  department = 'IT & Technology',
+  tempPassword,
+}) => {
+  const sanitisedEmail = String(email || '')
+    .trim()
+    .toLowerCase();
   if (!sanitisedEmail || !name) return { error: 'Name and email are required.' };
   if (MOCK_USERS.some(u => u.email === sanitisedEmail)) return { error: 'Email already in use.' };
-  if (!tempPassword || tempPassword.length < 8) return { error: 'Temp password must be at least 8 characters.' };
+  if (!tempPassword || tempPassword.length < 8)
+    return { error: 'Temp password must be at least 8 characters.' };
   // Resolve the target role. Callers can pass roleId directly (new API used
   // by Roles & Access page) or the legacy `role` string (existing Users
   // panel CreateUserModal). Falls back to the registry's default role.
-  const resolvedRoleId = roleId || (role ? (LEGACY_ROLE_TO_ROLE_ID[role] || getDefaultRoleId()) : getDefaultRoleId());
+  const resolvedRoleId =
+    roleId || (role ? LEGACY_ROLE_TO_ROLE_ID[role] || getDefaultRoleId() : getDefaultRoleId());
   const targetRole = findRole(resolvedRoleId);
   const legacyRoleStr = targetRole?.name || role || 'user';
   const id = 'u' + Date.now();
   const u = {
-    id, name: name.trim(), email: sanitisedEmail,
-    passwordHash: '', passwordSalt: '',
-    role: legacyRoleStr, roleId: resolvedRoleId, department,
-    active: true, lastLoginAt: null, forceReOtp: true,
+    id,
+    name: name.trim(),
+    email: sanitisedEmail,
+    passwordHash: '',
+    passwordSalt: '',
+    role: legacyRoleStr,
+    roleId: resolvedRoleId,
+    department,
+    active: true,
+    lastLoginAt: null,
+    forceReOtp: true,
     createdAt: new Date().toISOString().slice(0, 10),
   };
   await setUserPassword(u, tempPassword);
   MOCK_USERS.push(u);
   bumpUsers();
-  mirror(usersApi.createUser({
-    name: u.name, email: sanitisedEmail, password: tempPassword,
-    roleId: resolvedRoleId, department,
-  }));
-  recordAudit('user.create', _currentActor, { type: 'user', id, label: u.name }, { role: legacyRoleStr, roleId: resolvedRoleId, department });
+  mirror(
+    usersApi.createUser({
+      name: u.name,
+      email: sanitisedEmail,
+      password: tempPassword,
+      roleId: resolvedRoleId,
+      department,
+    })
+  );
+  recordAudit(
+    'user.create',
+    _currentActor,
+    { type: 'user', id, label: u.name },
+    { role: legacyRoleStr, roleId: resolvedRoleId, department }
+  );
   return { user: sanitiseUser(u) };
 };
 
-const delay = (ms) => new Promise(res => setTimeout(res, ms));
+const delay = ms => new Promise(res => setTimeout(res, ms));
 
 // ─── Mock-mode credential wrappers ────────────────────────────────────────────
 // Primitives come from src/lib/localAuth.js; these wrappers own the MOCK_USERS
@@ -1723,11 +2159,14 @@ const validateCredentials = async (email, password) => {
   return user;
 };
 
-const createSession = (user) => {
+const createSession = user => {
   const { passwordHash: _, ...safe } = user;
   // Record lastLoginAt on the canonical record so the admin Users panel reflects it
   const canonical = MOCK_USERS.find(u => u.id === user.id);
-  if (canonical) { canonical.lastLoginAt = new Date().toISOString(); bumpUsers(); }
+  if (canonical) {
+    canonical.lastLoginAt = new Date().toISOString();
+    bumpUsers();
+  }
   writeSession(safe);
 };
 
@@ -1740,10 +2179,13 @@ const registerUser = async (firstName, lastName, email, password) => {
     id,
     name: firstName.trim() + ' ' + lastName.trim(),
     email: sanitisedEmail,
-    passwordHash: '', passwordSalt: '',
+    passwordHash: '',
+    passwordSalt: '',
     role: 'user',
     department: 'IT & Technology',
-    active: true, lastLoginAt: null, forceReOtp: false,
+    active: true,
+    lastLoginAt: null,
+    forceReOtp: false,
     createdAt: new Date().toISOString().slice(0, 10),
   };
   await setUserPassword(u, password);
@@ -1754,47 +2196,60 @@ const registerUser = async (firstName, lastName, email, password) => {
 
 // ─── Signup Modal ─────────────────────────────────────────────────────────────
 function SignupModal({ onClose, onToast }) {
-  const [firstName, setFirstName]               = useState('');
-  const [lastName, setLastName]                 = useState('');
-  const [email, setEmail]                       = useState('');
-  const [password, setPassword]                 = useState('');
-  const [confirmPassword, setConfirmPassword]   = useState('');
-  const [showPassword, setShowPassword]         = useState(false);
-  const [showConfirm, setShowConfirm]           = useState(false);
-  const [error, setError]                       = useState('');
-  const [isLoading, setIsLoading]               = useState(false);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleKey = e => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
   const passwordScore = password
-    ? [password.length >= 8, /[A-Z]/.test(password), /[0-9]/.test(password), /[^A-Za-z0-9]/.test(password)].filter(Boolean).length
+    ? [
+        password.length >= 8,
+        /[A-Z]/.test(password),
+        /[0-9]/.test(password),
+        /[^A-Za-z0-9]/.test(password),
+      ].filter(Boolean).length
     : 0;
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async e => {
     e.preventDefault();
     setError('');
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !password || !confirmPassword) {
-      setError('All fields are required.'); return;
+      setError('All fields are required.');
+      return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError('Please enter a valid email address.'); return;
+      setError('Please enter a valid email address.');
+      return;
     }
     if (password.length < 8 || passwordScore < 2) {
-      setError('Password must be at least 8 characters and rated Fair or stronger.'); return;
+      setError('Password must be at least 8 characters and rated Fair or stronger.');
+      return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match.'); return;
+      setError('Passwords do not match.');
+      return;
     }
     setIsLoading(true);
     let registrationError;
     if (API_ENABLED) {
       // Backend signup requires email verification before first login.
       const { error: err } = await authApi.register(
-        `${firstName.trim()} ${lastName.trim()}`, email.trim().toLowerCase(), password
+        `${firstName.trim()} ${lastName.trim()}`,
+        email.trim().toLowerCase(),
+        password
       );
       registrationError = err;
     } else {
@@ -1802,71 +2257,227 @@ function SignupModal({ onClose, onToast }) {
       registrationError = await registerUser(firstName, lastName, email, password);
     }
     setIsLoading(false);
-    if (registrationError) { setError(registrationError); return; }
-    onToast?.(API_ENABLED
-      ? 'Account created — check your email to verify your address before signing in.'
-      : 'Welcome To Pomelo TechOps Portal');
+    if (registrationError) {
+      setError(registrationError);
+      return;
+    }
+    onToast?.(
+      API_ENABLED
+        ? 'Account created — check your email to verify your address before signing in.'
+        : 'Welcome To Pomelo TechOps Portal'
+    );
     onClose();
   };
 
   const fieldStyle = {
-    width: '100%', padding: '11px 14px', borderRadius: '8px',
-    border: '1.5px solid var(--border-default)', fontFamily: "'Inter', sans-serif",
-    fontSize: '14px', color: 'var(--text-primary)', background: 'var(--bg-page)',
-    outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s',
+    width: '100%',
+    padding: '11px 14px',
+    borderRadius: '8px',
+    border: '1.5px solid var(--border-default)',
+    fontFamily: "'Inter', sans-serif",
+    fontSize: '14px',
+    color: 'var(--text-primary)',
+    background: 'var(--bg-page)',
+    outline: 'none',
+    boxSizing: 'border-box',
+    transition: 'border-color 0.15s',
   };
   const pwFieldStyle = { ...fieldStyle, paddingRight: '44px' };
-  const focusOrange = (e) => { e.target.style.borderColor = 'var(--accent-primary)'; };
-  const blurGray    = (e) => { e.target.style.borderColor = 'var(--border-default)'; };
+  const focusOrange = e => {
+    e.target.style.borderColor = 'var(--accent-primary)';
+  };
+  const blurGray = e => {
+    e.target.style.borderColor = 'var(--border-default)';
+  };
 
   const Lbl = ({ children }) => (
-    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{children}</div>
+    <div
+      style={{
+        fontSize: '12px',
+        fontWeight: 700,
+        color: 'var(--text-secondary)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+        marginBottom: '6px',
+      }}
+    >
+      {children}
+    </div>
   );
   const Eye = ({ show, onToggle }) => (
-    <button type="button" onClick={onToggle} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '16px', lineHeight: 1, padding: '4px' }}>
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{
+        position: 'absolute',
+        right: '12px',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        color: 'var(--text-muted)',
+        fontSize: '16px',
+        lineHeight: 1,
+        padding: '4px',
+      }}
+    >
       {show ? '🙈' : '👁'}
     </button>
   );
   const Spin = () => (
-    <span style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+    <span
+      style={{
+        width: '16px',
+        height: '16px',
+        borderRadius: '50%',
+        border: '2px solid rgba(255,255,255,0.3)',
+        borderTopColor: '#fff',
+        display: 'inline-block',
+        animation: 'spin 0.7s linear infinite',
+      }}
+    />
   );
 
   return (
-    <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
-      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Create your account" style={{ width: '460px', maxWidth: '95vw', background: 'var(--bg-surface)', borderRadius: '16px', boxShadow: '0 24px 72px rgba(0,0,0,0.22)', overflow: 'hidden', animation: 'slideUp 0.2s ease' }}>
-
+    <div
+      onClick={onClose}
+      role="presentation"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--bg-overlay)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '16px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create your account"
+        style={{
+          width: '460px',
+          maxWidth: '95vw',
+          background: 'var(--bg-surface)',
+          borderRadius: '16px',
+          boxShadow: '0 24px 72px rgba(0,0,0,0.22)',
+          overflow: 'hidden',
+          animation: 'slideUp 0.2s ease',
+        }}
+      >
         {/* Header */}
-        <div style={{ background: '#111111', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0, color: '#fff', fontSize: '18px', fontWeight: 900, fontFamily: "'Inter', sans-serif" }}>Create your account</h2>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.65)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: '2px 6px', borderRadius: '4px' }}>×</button>
+        <div
+          style={{
+            background: '#111111',
+            padding: '20px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              color: '#fff',
+              fontSize: '18px',
+              fontWeight: 900,
+              fontFamily: "'Inter', sans-serif",
+            }}
+          >
+            Create your account
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.65)',
+              fontSize: '22px',
+              cursor: 'pointer',
+              lineHeight: 1,
+              padding: '2px 6px',
+              borderRadius: '4px',
+            }}
+          >
+            ×
+          </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} noValidate style={{ padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          style={{ padding: '28px 24px', display: 'flex', flexDirection: 'column', gap: '18px' }}
+        >
           {/* First + Last Name */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
               <Lbl>First Name</Lbl>
-              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First" aria-label="First name" autoComplete="given-name" style={fieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+              <input
+                type="text"
+                value={firstName}
+                onChange={e => setFirstName(e.target.value)}
+                placeholder="First"
+                aria-label="First name"
+                autoComplete="given-name"
+                style={fieldStyle}
+                onFocus={focusOrange}
+                onBlur={blurGray}
+              />
             </div>
             <div>
               <Lbl>Last Name</Lbl>
-              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last" aria-label="Last name" autoComplete="family-name" style={fieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+              <input
+                type="text"
+                value={lastName}
+                onChange={e => setLastName(e.target.value)}
+                placeholder="Last"
+                aria-label="Last name"
+                autoComplete="family-name"
+                style={fieldStyle}
+                onFocus={focusOrange}
+                onBlur={blurGray}
+              />
             </div>
           </div>
 
           {/* Email */}
           <div>
             <Lbl>Email</Lbl>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@pomelo.com" aria-label="Email" autoComplete="email" style={fieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@pomelo.com"
+              aria-label="Email"
+              autoComplete="email"
+              style={fieldStyle}
+              onFocus={focusOrange}
+              onBlur={blurGray}
+            />
           </div>
 
           {/* Password */}
           <div>
             <Lbl>Password</Lbl>
             <div style={{ position: 'relative' }}>
-              <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" aria-label="Password" autoComplete="new-password" style={pwFieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                aria-label="Password"
+                autoComplete="new-password"
+                style={pwFieldStyle}
+                onFocus={focusOrange}
+                onBlur={blurGray}
+              />
               <Eye show={showPassword} onToggle={() => setShowPassword(v => !v)} />
             </div>
             <PasswordStrengthMeter password={password} />
@@ -1876,20 +2487,63 @@ function SignupModal({ onClose, onToast }) {
           <div>
             <Lbl>Confirm Password</Lbl>
             <div style={{ position: 'relative' }}>
-              <input type={showConfirm ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" aria-label="Confirm password" autoComplete="new-password" style={pwFieldStyle} onFocus={focusOrange} onBlur={blurGray} />
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                aria-label="Confirm password"
+                autoComplete="new-password"
+                style={pwFieldStyle}
+                onFocus={focusOrange}
+                onBlur={blurGray}
+              />
               <Eye show={showConfirm} onToggle={() => setShowConfirm(v => !v)} />
             </div>
           </div>
 
           {/* Error */}
           {error && (
-            <div style={{ padding: '12px 16px', borderRadius: '8px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: '8px',
+                background: '#FEF2F2',
+                border: '1px solid #FCA5A5',
+                color: '#DC2626',
+                fontSize: '13px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
               ⚠ {error}
             </div>
           )}
 
           {/* Submit */}
-          <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '13px 0', background: isLoading ? 'var(--border-strong)' : 'var(--accent-primary)', color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Inter', sans-serif", fontWeight: 900, fontSize: '15px', cursor: isLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.15s' }}>
+          <button
+            type="submit"
+            disabled={isLoading}
+            style={{
+              width: '100%',
+              padding: '13px 0',
+              background: isLoading ? 'var(--border-strong)' : 'var(--accent-primary)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontFamily: "'Inter', sans-serif",
+              fontWeight: 900,
+              fontSize: '15px',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'background 0.15s',
+            }}
+          >
             {isLoading ? <Spin /> : 'Create Account'}
           </button>
         </form>
@@ -1901,15 +2555,29 @@ function SignupModal({ onClose, onToast }) {
 // ─── Password Strength Meter ───────────────────────────────────────────────────
 function PasswordStrengthMeter({ password }) {
   if (!password) return null;
-  const score = [password.length >= 8, /[A-Z]/.test(password), /[0-9]/.test(password), /[^A-Za-z0-9]/.test(password)].filter(Boolean).length;
+  const score = [
+    password.length >= 8,
+    /[A-Z]/.test(password),
+    /[0-9]/.test(password),
+    /[^A-Za-z0-9]/.test(password),
+  ].filter(Boolean).length;
   const labels = ['Weak', 'Fair', 'Good', 'Strong'];
   const colors = ['#DC2626', '#EA580C', '#CA8A04', '#16A34A'];
   const color = colors[score - 1] || colors[0];
   return (
     <div style={{ marginTop: '8px' }}>
       <div style={{ display: 'flex', gap: '4px', marginBottom: '5px' }}>
-        {[0,1,2,3].map(i => (
-          <div key={i} style={{ flex: 1, height: '4px', borderRadius: '2px', background: i < score ? color : 'var(--border-default)', transition: 'background 0.2s' }} />
+        {[0, 1, 2, 3].map(i => (
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              height: '4px',
+              borderRadius: '2px',
+              background: i < score ? color : 'var(--border-default)',
+              transition: 'background 0.2s',
+            }}
+          />
         ))}
       </div>
       <div style={{ fontSize: '11px', color, textAlign: 'right', fontWeight: 700 }}>
@@ -1936,17 +2604,23 @@ function OtpInput({ value, onChange }) {
 
   const handleKeyDown = (idx, e) => {
     if (e.key === 'Backspace' && !value[idx] && idx > 0) {
-      const next = [...value]; next[idx - 1] = '';
+      const next = [...value];
+      next[idx - 1] = '';
       onChange(next);
       refs.current[idx - 1]?.focus();
     }
   };
 
-  const handlePaste = (e) => {
+  const handlePaste = e => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+    const pasted = e.clipboardData
+      .getData('text')
+      .replace(/[^0-9]/g, '')
+      .slice(0, 6);
     const next = Array(6).fill('');
-    pasted.split('').forEach((d, i) => { next[i] = d; });
+    pasted.split('').forEach((d, i) => {
+      next[i] = d;
+    });
     onChange(next);
     refs.current[Math.min(pasted.length, 5)]?.focus();
   };
@@ -1956,7 +2630,9 @@ function OtpInput({ value, onChange }) {
       {value.map((v, i) => (
         <input
           key={i}
-          ref={el => { refs.current[i] = el; }}
+          ref={el => {
+            refs.current[i] = el;
+          }}
           type="text"
           inputMode="numeric"
           pattern="[0-9]*"
@@ -1965,15 +2641,23 @@ function OtpInput({ value, onChange }) {
           onChange={e => handleChange(i, e.target.value)}
           onKeyDown={e => handleKeyDown(i, e)}
           onPaste={handlePaste}
-          onFocus={() => { setFocusedIdx(i); refs.current[i]?.select(); }}
+          onFocus={() => {
+            setFocusedIdx(i);
+            refs.current[i]?.select();
+          }}
           onBlur={() => setFocusedIdx(null)}
           style={{
-            width: '48px', height: '56px', textAlign: 'center',
-            fontSize: '24px', fontWeight: 900,
+            width: '48px',
+            height: '56px',
+            textAlign: 'center',
+            fontSize: '24px',
+            fontWeight: 900,
             border: `2px solid ${focusedIdx === i ? 'var(--accent-primary)' : 'var(--border-default)'}`,
-            borderRadius: '10px', outline: 'none',
+            borderRadius: '10px',
+            outline: 'none',
             fontFamily: "'Inter', sans-serif",
-            color: 'var(--text-primary)', background: 'var(--bg-page)',
+            color: 'var(--text-primary)',
+            background: 'var(--bg-page)',
             transition: 'border-color 0.15s',
           }}
         />
@@ -1984,32 +2668,35 @@ function OtpInput({ value, onChange }) {
 
 // ─── Login Page ───────────────────────────────────────────────────────────────
 function LoginPage({ onLogin, onToast }) {
-  const [view, setView]                         = useState('login');
-  const [email, setEmail]                       = useState('');
-  const [password, setPassword]                 = useState('');
-  const [showPassword, setShowPassword]         = useState(false);
-  const [rememberMe, setRememberMe]             = useState(false);
-  const [isLoading, setIsLoading]               = useState(false);
-  const [error, setError]                       = useState('');
-  const [lockState, setLockStateLocal]          = useState(() => getLockState());
-  const [countdown, setCountdown]               = useState(0);
-  const [forgotEmail, setForgotEmail]           = useState('');
-  const [otpValue, setOtpValue]                 = useState(['','','','','','']);
-  const [otpError, setOtpError]                 = useState('');
-  const [newPassword, setNewPassword]           = useState('');
-  const [confirmPassword, setConfirmPassword]   = useState('');
-  const [showNewPass, setShowNewPass]           = useState(false);
-  const [showConfPass, setShowConfPass]         = useState(false);
-  const [resetError, setResetError]             = useState('');
-  const [resendCooldown, setResendCooldown]     = useState(0);
-  const [showSignup, setShowSignup]             = useState(false);
+  const [view, setView] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [lockState, setLockStateLocal] = useState(() => getLockState());
+  const [countdown, setCountdown] = useState(0);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [otpValue, setOtpValue] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfPass, setShowConfPass] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [showSignup, setShowSignup] = useState(false);
 
   const isLocked = lockState.lockedUntil > Date.now();
 
   // Pre-fill from remember me
   useEffect(() => {
     const saved = localStorage.getItem(REMEMBER_KEY);
-    if (saved) { setEmail(saved); setRememberMe(true); }
+    if (saved) {
+      setEmail(saved);
+      setRememberMe(true);
+    }
   }, []);
 
   // Lockout countdown
@@ -2018,10 +2705,13 @@ function LoginPage({ onLogin, onToast }) {
     const tick = setInterval(() => {
       const remaining = Math.ceil((lockState.lockedUntil - Date.now()) / 1000);
       if (remaining <= 0) {
-        setCountdown(0); clearLockState();
+        setCountdown(0);
+        clearLockState();
         setLockStateLocal({ attempts: 0, lockedUntil: 0 });
         clearInterval(tick);
-      } else { setCountdown(remaining); }
+      } else {
+        setCountdown(remaining);
+      }
     }, 1000);
     setCountdown(Math.ceil((lockState.lockedUntil - Date.now()) / 1000));
     return () => clearInterval(tick);
@@ -2034,12 +2724,14 @@ function LoginPage({ onLogin, onToast }) {
     return () => clearInterval(t);
   }, [resendCooldown]);
 
-  const handleLogin = async (e) => {
+  const handleLogin = async e => {
     e.preventDefault();
     if (isLocked || isLoading) return;
-    setIsLoading(true); setError('');
+    setIsLoading(true);
+    setError('');
     const sanitised = email.trim().toLowerCase();
-    let user, apiError = null;
+    let user,
+      apiError = null;
     if (API_ENABLED) {
       // Real session: httpOnly cookie set by the BFF. The server enforces
       // its own rate limits; the local lockout below still slows brute force
@@ -2058,11 +2750,13 @@ function LoginPage({ onLogin, onToast }) {
       setLockState(newAttempts, lockedUntil);
       setLockStateLocal({ attempts: newAttempts, lockedUntil });
       setError(apiError || 'Invalid email or password');
-      setIsLoading(false); return;
+      setIsLoading(false);
+      return;
     }
     if (user._deactivated) {
       setError('Your account has been deactivated. Please contact an administrator.');
-      setIsLoading(false); return;
+      setIsLoading(false);
+      return;
     }
     clearLockState();
     if (rememberMe) localStorage.setItem(REMEMBER_KEY, sanitised);
@@ -2072,7 +2766,7 @@ function LoginPage({ onLogin, onToast }) {
     onLogin(user);
   };
 
-  const handleSendCode = async (e) => {
+  const handleSendCode = async e => {
     e.preventDefault();
     setForgotEmail(forgotEmail || email);
     setIsLoading(true);
@@ -2082,198 +2776,521 @@ function LoginPage({ onLogin, onToast }) {
     setResendCooldown(30);
   };
 
-  const handleVerifyCode = async (e) => {
+  const handleVerifyCode = async e => {
     e.preventDefault();
     const code = otpValue.join('');
-    if (code.length < 6) { setOtpError('Please enter all 6 digits'); return; }
-    setIsLoading(true); setOtpError('');
+    if (code.length < 6) {
+      setOtpError('Please enter all 6 digits');
+      return;
+    }
+    setIsLoading(true);
+    setOtpError('');
     await delay(AUTH_DELAY);
     setIsLoading(false);
     setView('forgot-password');
   };
 
-  const handleResetPassword = async (e) => {
+  const handleResetPassword = async e => {
     e.preventDefault();
-    if (newPassword.length < 8) { setResetError('Password must be at least 8 characters'); return; }
-    if (newPassword !== confirmPassword) { setResetError('Passwords do not match'); return; }
-    setIsLoading(true); setResetError('');
+    if (newPassword.length < 8) {
+      setResetError('Password must be at least 8 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResetError('Passwords do not match');
+      return;
+    }
+    setIsLoading(true);
+    setResetError('');
     await delay(AUTH_DELAY);
     setIsLoading(false);
     onToast?.('Password reset! Sign in with your new password.');
     setView('login');
-    setNewPassword(''); setConfirmPassword(''); setOtpValue(['','','','','','']);
+    setNewPassword('');
+    setConfirmPassword('');
+    setOtpValue(['', '', '', '', '', '']);
   };
 
   const resetToLogin = () => {
-    setView('login'); setError(''); setOtpError(''); setResetError('');
-    setForgotEmail(''); setOtpValue(['','','','','','']);
-    setNewPassword(''); setConfirmPassword('');
+    setView('login');
+    setError('');
+    setOtpError('');
+    setResetError('');
+    setForgotEmail('');
+    setOtpValue(['', '', '', '', '', '']);
+    setNewPassword('');
+    setConfirmPassword('');
   };
 
   const Spinner = () => (
-    <span style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+    <span
+      style={{
+        width: '16px',
+        height: '16px',
+        borderRadius: '50%',
+        border: '2px solid rgba(255,255,255,0.3)',
+        borderTopColor: '#fff',
+        display: 'inline-block',
+        animation: 'spin 0.7s linear infinite',
+      }}
+    />
   );
 
   const EyeToggle = ({ show, onToggle }) => (
-    <button type="button" onClick={onToggle} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '16px', lineHeight: 1, padding: '4px' }} aria-label={show ? 'Hide password' : 'Show password'}>
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{
+        position: 'absolute',
+        right: '12px',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        color: 'var(--text-muted)',
+        fontSize: '16px',
+        lineHeight: 1,
+        padding: '4px',
+      }}
+      aria-label={show ? 'Hide password' : 'Show password'}
+    >
       {show ? '🙈' : '👁'}
     </button>
   );
 
-  const FieldInput = ({ type, value, onChange, placeholder, autoComplete, extra = {} }) => (
-    <input type={type} value={value} onChange={onChange} placeholder={placeholder} aria-label={placeholder} autoComplete={autoComplete}
-      style={{ width: '100%', padding: '11px 44px 11px 14px', borderRadius: '8px', border: '1.5px solid var(--border-default)', fontFamily: "'Inter', sans-serif", fontSize: '14px', color: 'var(--text-primary)', background: 'var(--bg-page)', outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s', ...extra }}
-      onFocus={e => e.target.style.borderColor = 'var(--accent-primary)'}
-      onBlur={e => e.target.style.borderColor = 'var(--border-default)'}
-    />
-  );
-
-  const ErrorBanner = ({ msg }) => msg ? (
-    <div style={{ marginTop: '14px', padding: '12px 16px', borderRadius: '8px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', fontSize: '13px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-      ⚠ {msg}
-    </div>
-  ) : null;
+  const ErrorBanner = ({ msg }) =>
+    msg ? (
+      <div
+        style={{
+          marginTop: '14px',
+          padding: '12px 16px',
+          borderRadius: '8px',
+          background: '#FEF2F2',
+          border: '1px solid #FCA5A5',
+          color: '#DC2626',
+          fontSize: '13px',
+          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}
+      >
+        ⚠ {msg}
+      </div>
+    ) : null;
 
   const BackLink = ({ onClick }) => (
-    <button type="button" onClick={onClick} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '24px' }}>
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: 'none',
+        border: 'none',
+        color: 'var(--accent-primary)',
+        fontWeight: 700,
+        fontSize: '13px',
+        cursor: 'pointer',
+        padding: 0,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        marginBottom: '24px',
+      }}
+    >
       ← Back to sign in
     </button>
   );
 
-  const submitBtnStyle = (disabled) => ({
-    width: '100%', padding: '13px', background: disabled ? 'var(--border-strong)' : 'var(--accent-primary)',
-    color: '#fff', border: 'none', borderRadius: '8px', fontFamily: "'Inter', sans-serif",
-    fontWeight: 700, fontSize: '15px', cursor: disabled ? 'not-allowed' : 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-    transition: 'background 0.15s', marginTop: '8px',
+  const submitBtnStyle = disabled => ({
+    width: '100%',
+    padding: '13px',
+    background: disabled ? 'var(--border-strong)' : 'var(--accent-primary)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontFamily: "'Inter', sans-serif",
+    fontWeight: 700,
+    fontSize: '15px',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'background 0.15s',
+    marginTop: '8px',
   });
 
   const Label = ({ children }) => (
-    <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{children}</div>
+    <div
+      style={{
+        fontSize: '12px',
+        fontWeight: 700,
+        color: 'var(--text-secondary)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+        marginBottom: '6px',
+      }}
+    >
+      {children}
+    </div>
   );
 
   const renderRight = () => {
-    if (view === 'login') return (
-      <div>
-        <h1 style={{ fontSize: '28px', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '6px' }}>Welcome back 👋</h1>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '32px' }}>Sign in to your TechOps account</p>
-        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <Label>Email</Label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@pomelo.com" aria-label="Email" autoComplete="email" disabled={isLocked || isLoading}
-              style={{ width: '100%', padding: '11px 14px', borderRadius: '8px', border: '1.5px solid var(--border-default)', fontFamily: "'Inter', sans-serif", fontSize: '14px', color: 'var(--text-primary)', background: isLocked ? 'var(--bg-hover)' : 'var(--bg-page)', outline: 'none', boxSizing: 'border-box' }}
-              onFocus={e => e.target.style.borderColor = 'var(--accent-primary)'} onBlur={e => e.target.style.borderColor = 'var(--border-default)'} />
-          </div>
-          <div>
-            <Label>Password</Label>
-            <div style={{ position: 'relative' }}>
-              <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" aria-label="Password" autoComplete="current-password" disabled={isLocked || isLoading}
-                style={{ width: '100%', padding: '11px 44px 11px 14px', borderRadius: '8px', border: '1.5px solid var(--border-default)', fontFamily: "'Inter', sans-serif", fontSize: '14px', color: 'var(--text-primary)', background: isLocked ? 'var(--bg-hover)' : 'var(--bg-page)', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => e.target.style.borderColor = 'var(--accent-primary)'} onBlur={e => e.target.style.borderColor = 'var(--border-default)'} />
-              <EyeToggle show={showPassword} onToggle={() => setShowPassword(v => !v)} />
+    if (view === 'login')
+      return (
+        <div>
+          <h1
+            style={{
+              fontSize: '28px',
+              fontWeight: 900,
+              color: 'var(--text-primary)',
+              marginBottom: '6px',
+            }}
+          >
+            Welcome back 👋
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '32px' }}>
+            Sign in to your TechOps account
+          </p>
+          <form
+            onSubmit={handleLogin}
+            style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+          >
+            <div>
+              <Label>Email</Label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@pomelo.com"
+                aria-label="Email"
+                autoComplete="email"
+                disabled={isLocked || isLoading}
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: '8px',
+                  border: '1.5px solid var(--border-default)',
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: '14px',
+                  color: 'var(--text-primary)',
+                  background: isLocked ? 'var(--bg-hover)' : 'var(--bg-page)',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+                onFocus={e => (e.target.style.borderColor = 'var(--accent-primary)')}
+                onBlur={e => (e.target.style.borderColor = 'var(--border-default)')}
+              />
             </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '2px 0' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer', userSelect: 'none' }}>
-              <input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} style={{ accentColor: 'var(--accent-primary)' }} />
-              Remember me
-            </label>
-            <button type="button" onClick={() => setView('forgot-email')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: 0 }}>
-              Forgot password?
+            <div>
+              <Label>Password</Label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  aria-label="Password"
+                  autoComplete="current-password"
+                  disabled={isLocked || isLoading}
+                  style={{
+                    width: '100%',
+                    padding: '11px 44px 11px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--border-default)',
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: '14px',
+                    color: 'var(--text-primary)',
+                    background: isLocked ? 'var(--bg-hover)' : 'var(--bg-page)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => (e.target.style.borderColor = 'var(--accent-primary)')}
+                  onBlur={e => (e.target.style.borderColor = 'var(--border-default)')}
+                />
+                <EyeToggle show={showPassword} onToggle={() => setShowPassword(v => !v)} />
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                margin: '2px 0',
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  style={{ accentColor: 'var(--accent-primary)' }}
+                />
+                Remember me
+              </label>
+              <button
+                type="button"
+                onClick={() => setView('forgot-email')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--accent-primary)',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
+            <button
+              type="submit"
+              disabled={isLocked || isLoading}
+              style={submitBtnStyle(isLocked || isLoading)}
+            >
+              {isLoading ? <Spinner /> : 'Sign In'}
             </button>
-          </div>
-          <button type="submit" disabled={isLocked || isLoading} style={submitBtnStyle(isLocked || isLoading)}>
-            {isLoading ? <Spinner /> : 'Sign In'}
-          </button>
-          <ErrorBanner msg={error} />
-          {isLocked && (
-            <div style={{ padding: '12px 16px', borderRadius: '8px', background: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', fontSize: '13px', fontWeight: 700 }}>
-              🔒 Too many attempts. Try again in <strong>{countdown}s</strong>
-            </div>
-          )}
-        </form>
-        <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '14px', color: 'var(--text-secondary)' }}>
-          {"Don't have an account? "}
-          <button type="button" onClick={() => setShowSignup(true)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '14px', cursor: 'pointer', padding: 0 }}>
-            Sign up
-          </button>
-        </p>
-      </div>
-    );
-
-    if (view === 'forgot-email') return (
-      <div>
-        <BackLink onClick={resetToLogin} />
-        <h1 style={{ fontSize: '26px', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '6px' }}>Forgot your password?</h1>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '28px' }}>{"We'll send a 6-digit code to your email."}</p>
-        <form onSubmit={handleSendCode} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <Label>Email</Label>
-            <input type="email" value={forgotEmail || email} onChange={e => setForgotEmail(e.target.value)} placeholder="you@pomelo.com" aria-label="Email" autoComplete="email"
-              style={{ width: '100%', padding: '11px 14px', borderRadius: '8px', border: '1.5px solid var(--border-default)', fontFamily: "'Inter', sans-serif", fontSize: '14px', color: 'var(--text-primary)', background: 'var(--bg-page)', outline: 'none', boxSizing: 'border-box' }}
-              onFocus={e => e.target.style.borderColor = 'var(--accent-primary)'} onBlur={e => e.target.style.borderColor = 'var(--border-default)'} />
-          </div>
-          <button type="submit" disabled={isLoading} style={submitBtnStyle(isLoading)}>
-            {isLoading ? <Spinner /> : 'Send Reset Code'}
-          </button>
-        </form>
-      </div>
-    );
-
-    if (view === 'forgot-code') return (
-      <div>
-        <BackLink onClick={resetToLogin} />
-        <h1 style={{ fontSize: '26px', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '6px' }}>Check your email</h1>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-          Enter the 6-digit code sent to <strong>{forgotEmail || email}</strong>
-        </p>
-        <form onSubmit={handleVerifyCode}>
-          <OtpInput value={otpValue} onChange={setOtpValue} />
-          <ErrorBanner msg={otpError} />
-          <button type="submit" disabled={isLoading} style={submitBtnStyle(isLoading)}>
-            {isLoading ? <Spinner /> : 'Verify Code'}
-          </button>
-        </form>
-        <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '13px' }}>
-          {resendCooldown > 0
-            ? <span style={{ color: 'var(--text-muted)' }}>Resend code in {resendCooldown}s</span>
-            : <button type="button" onClick={() => setResendCooldown(30)} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>Resend code</button>
-          }
+            <ErrorBanner msg={error} />
+            {isLocked && (
+              <div
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  background: '#FEF2F2',
+                  border: '1px solid #FCA5A5',
+                  color: '#DC2626',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                }}
+              >
+                🔒 Too many attempts. Try again in <strong>{countdown}s</strong>
+              </div>
+            )}
+          </form>
+          <p
+            style={{
+              textAlign: 'center',
+              marginTop: '20px',
+              fontSize: '14px',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {"Don't have an account? "}
+            <button
+              type="button"
+              onClick={() => setShowSignup(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--accent-primary)',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              Sign up
+            </button>
+          </p>
         </div>
-      </div>
-    );
+      );
 
-    if (view === 'forgot-password') return (
-      <div>
-        <h1 style={{ fontSize: '26px', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '6px' }}>Create new password</h1>
-        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '28px' }}>Choose a strong password for your account.</p>
-        <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <Label>New Password</Label>
-            <div style={{ position: 'relative' }}>
-              <input type={showNewPass ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="••••••••" aria-label="New password" autoComplete="new-password"
-                style={{ width: '100%', padding: '11px 44px 11px 14px', borderRadius: '8px', border: '1.5px solid var(--border-default)', fontFamily: "'Inter', sans-serif", fontSize: '14px', color: 'var(--text-primary)', background: 'var(--bg-page)', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => e.target.style.borderColor = 'var(--accent-primary)'} onBlur={e => e.target.style.borderColor = 'var(--border-default)'} />
-              <EyeToggle show={showNewPass} onToggle={() => setShowNewPass(v => !v)} />
+    if (view === 'forgot-email')
+      return (
+        <div>
+          <BackLink onClick={resetToLogin} />
+          <h1
+            style={{
+              fontSize: '26px',
+              fontWeight: 900,
+              color: 'var(--text-primary)',
+              marginBottom: '6px',
+            }}
+          >
+            Forgot your password?
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '28px' }}>
+            {"We'll send a 6-digit code to your email."}
+          </p>
+          <form
+            onSubmit={handleSendCode}
+            style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+          >
+            <div>
+              <Label>Email</Label>
+              <input
+                type="email"
+                value={forgotEmail || email}
+                onChange={e => setForgotEmail(e.target.value)}
+                placeholder="you@pomelo.com"
+                aria-label="Email"
+                autoComplete="email"
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: '8px',
+                  border: '1.5px solid var(--border-default)',
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: '14px',
+                  color: 'var(--text-primary)',
+                  background: 'var(--bg-page)',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+                onFocus={e => (e.target.style.borderColor = 'var(--accent-primary)')}
+                onBlur={e => (e.target.style.borderColor = 'var(--border-default)')}
+              />
             </div>
-            <PasswordStrengthMeter password={newPassword} />
+            <button type="submit" disabled={isLoading} style={submitBtnStyle(isLoading)}>
+              {isLoading ? <Spinner /> : 'Send Reset Code'}
+            </button>
+          </form>
+        </div>
+      );
+
+    if (view === 'forgot-code')
+      return (
+        <div>
+          <BackLink onClick={resetToLogin} />
+          <h1
+            style={{
+              fontSize: '26px',
+              fontWeight: 900,
+              color: 'var(--text-primary)',
+              marginBottom: '6px',
+            }}
+          >
+            Check your email
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+            Enter the 6-digit code sent to <strong>{forgotEmail || email}</strong>
+          </p>
+          <form onSubmit={handleVerifyCode}>
+            <OtpInput value={otpValue} onChange={setOtpValue} />
+            <ErrorBanner msg={otpError} />
+            <button type="submit" disabled={isLoading} style={submitBtnStyle(isLoading)}>
+              {isLoading ? <Spinner /> : 'Verify Code'}
+            </button>
+          </form>
+          <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '13px' }}>
+            {resendCooldown > 0 ? (
+              <span style={{ color: 'var(--text-muted)' }}>Resend code in {resendCooldown}s</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setResendCooldown(30)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--accent-primary)',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                Resend code
+              </button>
+            )}
           </div>
-          <div>
-            <Label>Confirm Password</Label>
-            <div style={{ position: 'relative' }}>
-              <input type={showConfPass ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" aria-label="Confirm new password" autoComplete="new-password"
-                style={{ width: '100%', padding: '11px 44px 11px 14px', borderRadius: '8px', border: '1.5px solid var(--border-default)', fontFamily: "'Inter', sans-serif", fontSize: '14px', color: 'var(--text-primary)', background: 'var(--bg-page)', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={e => e.target.style.borderColor = 'var(--accent-primary)'} onBlur={e => e.target.style.borderColor = 'var(--border-default)'} />
-              <EyeToggle show={showConfPass} onToggle={() => setShowConfPass(v => !v)} />
+        </div>
+      );
+
+    if (view === 'forgot-password')
+      return (
+        <div>
+          <h1
+            style={{
+              fontSize: '26px',
+              fontWeight: 900,
+              color: 'var(--text-primary)',
+              marginBottom: '6px',
+            }}
+          >
+            Create new password
+          </h1>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '28px' }}>
+            Choose a strong password for your account.
+          </p>
+          <form
+            onSubmit={handleResetPassword}
+            style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+          >
+            <div>
+              <Label>New Password</Label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showNewPass ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="••••••••"
+                  aria-label="New password"
+                  autoComplete="new-password"
+                  style={{
+                    width: '100%',
+                    padding: '11px 44px 11px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--border-default)',
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: '14px',
+                    color: 'var(--text-primary)',
+                    background: 'var(--bg-page)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => (e.target.style.borderColor = 'var(--accent-primary)')}
+                  onBlur={e => (e.target.style.borderColor = 'var(--border-default)')}
+                />
+                <EyeToggle show={showNewPass} onToggle={() => setShowNewPass(v => !v)} />
+              </div>
+              <PasswordStrengthMeter password={newPassword} />
             </div>
-          </div>
-          <ErrorBanner msg={resetError} />
-          <button type="submit" disabled={isLoading} style={submitBtnStyle(isLoading)}>
-            {isLoading ? <Spinner /> : 'Reset Password'}
-          </button>
-        </form>
-      </div>
-    );
+            <div>
+              <Label>Confirm Password</Label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showConfPass ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  aria-label="Confirm new password"
+                  autoComplete="new-password"
+                  style={{
+                    width: '100%',
+                    padding: '11px 44px 11px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--border-default)',
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: '14px',
+                    color: 'var(--text-primary)',
+                    background: 'var(--bg-page)',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={e => (e.target.style.borderColor = 'var(--accent-primary)')}
+                  onBlur={e => (e.target.style.borderColor = 'var(--border-default)')}
+                />
+                <EyeToggle show={showConfPass} onToggle={() => setShowConfPass(v => !v)} />
+              </div>
+            </div>
+            <ErrorBanner msg={resetError} />
+            <button type="submit" disabled={isLoading} style={submitBtnStyle(isLoading)}>
+              {isLoading ? <Spinner /> : 'Reset Password'}
+            </button>
+          </form>
+        </div>
+      );
   };
 
   return (
@@ -2285,28 +3302,98 @@ function LoginPage({ onLogin, onToast }) {
       `}</style>
 
       {/* Left panel — hidden on mobile via .login-left media query */}
-      <div className="login-left" style={{ width: '42%', background: '#111111', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '44px 52px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 12px)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', bottom: '-80px', right: '-80px', width: '320px', height: '320px', borderRadius: '50%', background: 'rgba(124,58,237,0.08)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', top: '-60px', left: '-60px', width: '240px', height: '240px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+      <div
+        className="login-left"
+        style={{
+          width: '42%',
+          background: '#111111',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          padding: '44px 52px',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage:
+              'repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 12px)',
+            pointerEvents: 'none',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '-80px',
+            right: '-80px',
+            width: '320px',
+            height: '320px',
+            borderRadius: '50%',
+            background: 'rgba(124,58,237,0.08)',
+            pointerEvents: 'none',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            top: '-60px',
+            left: '-60px',
+            width: '240px',
+            height: '240px',
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.03)',
+            pointerEvents: 'none',
+          }}
+        />
 
         {/* Logo */}
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ color: '#fff', fontWeight: 900, fontSize: '22px', letterSpacing: '-0.01em' }}>Pomelo</div>
-          <div style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '11px', letterSpacing: '0.14em', textTransform: 'uppercase', marginTop: '1px' }}>TechOps Portal</div>
+          <div
+            style={{ color: '#fff', fontWeight: 900, fontSize: '22px', letterSpacing: '-0.01em' }}
+          >
+            Pomelo
+          </div>
+          <div
+            style={{
+              color: 'var(--accent-primary)',
+              fontWeight: 700,
+              fontSize: '11px',
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              marginTop: '1px',
+            }}
+          >
+            TechOps Portal
+          </div>
         </div>
 
         {/* Center content */}
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <h1 style={{ color: '#fff', fontSize: '30px', fontWeight: 900, lineHeight: 1.25, marginBottom: '32px' }}>
-            IT Support,<br />built for Pomelo teams
+          <h1
+            style={{
+              color: '#fff',
+              fontSize: '30px',
+              fontWeight: 900,
+              lineHeight: 1.25,
+              marginBottom: '32px',
+            }}
+          >
+            IT Support,
+            <br />
+            built for Pomelo teams
           </h1>
           {[
             { icon: '🎟', text: 'Submit & track IT tickets' },
             { icon: '📚', text: 'Access IT documentation' },
             { icon: '🛠', text: 'Powerful admin tools' },
           ].map(f => (
-            <div key={f.text} style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+            <div
+              key={f.text}
+              style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}
+            >
               <span style={{ fontSize: '18px', width: '28px', textAlign: 'center' }}>{f.icon}</span>
               <span style={{ color: 'rgba(255,255,255,0.78)', fontSize: '15px' }}>{f.text}</span>
             </div>
@@ -2314,7 +3401,14 @@ function LoginPage({ onLogin, onToast }) {
         </div>
 
         {/* Footer */}
-        <div style={{ position: 'relative', zIndex: 1, color: 'rgba(255,255,255,0.35)', fontSize: '12px' }}>
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            color: 'rgba(255,255,255,0.35)',
+            fontSize: '12px',
+          }}
+        >
           🔒 Internal use only · Pomelo Technology
         </div>
       </div>
@@ -2322,10 +3416,17 @@ function LoginPage({ onLogin, onToast }) {
       {/* Right panel — scroll-safe vertical centering: margin:auto keeps the form
           centered when it fits, and overflowY:auto lets shorter viewports scroll
           to the bottom CTA ("Sign up") instead of clipping it. */}
-      <div className="login-right" style={{ flex: 1, background: 'var(--bg-surface)', display: 'flex', overflowY: 'auto', padding: '48px 40px' }}>
-        <div style={{ width: '100%', maxWidth: '400px', margin: 'auto' }}>
-          {renderRight()}
-        </div>
+      <div
+        className="login-right"
+        style={{
+          flex: 1,
+          background: 'var(--bg-surface)',
+          display: 'flex',
+          overflowY: 'auto',
+          padding: '48px 40px',
+        }}
+      >
+        <div style={{ width: '100%', maxWidth: '400px', margin: 'auto' }}>{renderRight()}</div>
       </div>
 
       {showSignup && <SignupModal onClose={() => setShowSignup(false)} onToast={onToast} />}
@@ -2380,7 +3481,7 @@ const S = {
     alignItems: 'center',
     gap: '2px',
   },
-  navTab: (active) => ({
+  navTab: active => ({
     padding: '8px 12px',
     border: 'none',
     background: 'transparent',
@@ -2515,7 +3616,7 @@ const S = {
     cursor: 'pointer',
     appearance: 'none',
   },
-  badge: (color) => ({
+  badge: color => ({
     display: 'inline-block',
     padding: '3px 10px',
     borderRadius: '100px',
@@ -2564,28 +3665,56 @@ function Toast({ message, type = 'success', onDone }) {
 
   const variants = {
     success: { bg: '#111111', icon: '✅', title: 'Done!' },
-    error:   { bg: '#DC2626', icon: '❌', title: 'Something went wrong' },
-    info:    { bg: '#0369A1', icon: 'ℹ️',  title: 'Note' },
+    error: { bg: '#DC2626', icon: '❌', title: 'Something went wrong' },
+    info: { bg: '#0369A1', icon: 'ℹ️', title: 'Note' },
   };
   const v = variants[type] || variants.success;
 
   return (
-    <div style={{
-      position: 'fixed', bottom: '28px', right: '28px', zIndex: 9999,
-      background: v.bg, color: '#fff', padding: '14px 22px',
-      borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
-      display: 'flex', alignItems: 'center', gap: '12px',
-      animation: 'slideUp 0.3s ease',
-      maxWidth: '380px', fontFamily: "'Inter', sans-serif",
-    }}
-      role="status" aria-live="polite"
+    <div
+      style={{
+        position: 'fixed',
+        bottom: '28px',
+        right: '28px',
+        zIndex: 9999,
+        background: v.bg,
+        color: '#fff',
+        padding: '14px 22px',
+        borderRadius: '12px',
+        boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        animation: 'slideUp 0.3s ease',
+        maxWidth: '380px',
+        fontFamily: "'Inter', sans-serif",
+      }}
+      role="status"
+      aria-live="polite"
     >
       <span style={{ fontSize: '20px' }}>{v.icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '2px' }}>{v.title}</div>
-        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.72)', wordBreak: 'break-word' }}>{message}</div>
+        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.72)', wordBreak: 'break-word' }}>
+          {message}
+        </div>
       </div>
-      <button onClick={onDone} aria-label="Dismiss notification" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '0 0 0 4px', flexShrink: 0 }}>×</button>
+      <button
+        onClick={onDone}
+        aria-label="Dismiss notification"
+        style={{
+          background: 'none',
+          border: 'none',
+          color: 'rgba(255,255,255,0.5)',
+          cursor: 'pointer',
+          fontSize: '18px',
+          lineHeight: 1,
+          padding: '0 0 0 4px',
+          flexShrink: 0,
+        }}
+      >
+        ×
+      </button>
     </div>
   );
 }
@@ -2601,7 +3730,7 @@ function PrioritySuggester({ onSelect }) {
     'Is there a workaround available?',
   ];
 
-  const suggest = (ans) => {
+  const suggest = ans => {
     const all = [...answers, ans];
     if (all.length < 3) {
       setAnswers(all);
@@ -2618,13 +3747,47 @@ function PrioritySuggester({ onSelect }) {
     }
   };
 
-  const reset = () => { setStep(0); setAnswers([]); };
+  const reset = () => {
+    setStep(0);
+    setAnswers([]);
+  };
 
   return (
-    <div style={{ background: '#F0F4FF', border: '1.5px solid #BFDBFE', borderRadius: '10px', padding: '16px 20px' }}>
-      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <div
+      style={{
+        background: '#F0F4FF',
+        border: '1.5px solid #BFDBFE',
+        borderRadius: '10px',
+        padding: '16px 20px',
+      }}
+    >
+      <div
+        style={{
+          fontSize: '13px',
+          fontWeight: 700,
+          color: 'var(--text-primary)',
+          marginBottom: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}
+      >
         <span>🧠</span> Smart Priority Suggester
-        {step > 0 && <button onClick={reset} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '11px' }}>Reset</button>}
+        {step > 0 && (
+          <button
+            onClick={reset}
+            style={{
+              marginLeft: 'auto',
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              fontSize: '11px',
+            }}
+          >
+            Reset
+          </button>
+        )}
       </div>
       {step < 3 ? (
         <>
@@ -2632,8 +3795,15 @@ function PrioritySuggester({ onSelect }) {
             Q{step + 1}: {questions[step]}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={() => suggest(true)} style={{ ...S.orangeBtn, padding: '7px 18px', fontSize: '13px' }}>Yes</button>
-            <button onClick={() => suggest(false)} style={{ ...S.ghostBtn }}>No</button>
+            <button
+              onClick={() => suggest(true)}
+              style={{ ...S.orangeBtn, padding: '7px 18px', fontSize: '13px' }}
+            >
+              Yes
+            </button>
+            <button onClick={() => suggest(false)} style={{ ...S.ghostBtn }}>
+              No
+            </button>
           </div>
         </>
       ) : (
@@ -2645,180 +3815,21 @@ function PrioritySuggester({ onSelect }) {
   );
 }
 
-// ─── Doc Slide Panel ──────────────────────────────────────────────────────────
-function DocPanel({ doc, onClose, onReadFull }) {
-  return (
-    <>
-      <div onClick={onClose} role="presentation" style={{
-        position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 200,
-        animation: 'fadeIn 0.2s ease',
-      }} />
-      <div role="dialog" aria-modal="true" aria-label={doc?.title || 'Document preview'} style={{
-        position: 'fixed', right: 0, top: 0, bottom: 0, width: '520px', maxWidth: '95vw',
-        background: 'var(--bg-surface)', zIndex: 201, boxShadow: '-8px 0 40px rgba(0,0,0,0.15)',
-        display: 'flex', flexDirection: 'column',
-        animation: 'slideIn 0.25s ease',
-      }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '24px' }}>{doc.icon}</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--text-primary)' }}>{doc.title}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{doc.category}</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--text-muted)', lineHeight: 1 }}>×</button>
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
-          <MarkdownView content={doc.content} skipH1 />
-        </div>
-        {/* Read Full Article CTA */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-default)', background: 'var(--bg-page)' }}>
-          <button
-            onClick={() => { onClose(); onReadFull(doc); }}
-            style={{
-              ...S.orangeBtn, width: '100%', justifyContent: 'center',
-              display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', padding: '12px',
-            }}
-          >
-            Read Full Article <span style={{ fontSize: '16px' }}>→</span>
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ─── Doc Full Page ────────────────────────────────────────────────────────────
-function DocFullPage({ doc, allDocs, onClose, onSelect }) {
-  const [activeDoc, setActiveDoc] = useState(doc);
-  const contentRef = useRef(null);
-
-  // Scroll to top whenever article changes
-  useEffect(() => {
-    contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [activeDoc]);
-
-  const otherDocs = allDocs.filter(d => d.id !== activeDoc.id);
-  const categories = [...new Set(allDocs.map(d => d.category))];
-
-  const switchDoc = (d) => { setActiveDoc(d); onSelect?.(d); };
-
-  return (
-    <div style={{ display: 'flex', minHeight: '100%' }}>
-      {/* Left sidebar */}
-      <div style={{
-        width: '260px', flexShrink: 0, background: 'var(--bg-surface)',
-        borderRight: '1px solid var(--border-default)',
-        display: 'flex', flexDirection: 'column',
-        position: 'sticky', top: 0, maxHeight: 'calc(100vh - 60px)',
-        overflowY: 'auto',
-      }}>
-        {/* Sidebar back button */}
-        <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-default)' }}>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '13px', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '5px' }}
-          >
-            ← Back to Library
-          </button>
-        </div>
-
-        {/* Sidebar doc list grouped by category */}
-        <div style={{ padding: '12px 0', flex: 1 }}>
-          {categories.map(cat => {
-            const catDocs = allDocs.filter(d => d.category === cat);
-            return (
-              <div key={cat} style={{ marginBottom: '4px' }}>
-                <div style={{ padding: '6px 18px', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  {cat}
-                </div>
-                {catDocs.map(d => {
-                  const isActive = d.id === activeDoc.id;
-                  return (
-                    <button
-                      key={d.id}
-                      onClick={() => switchDoc(d)}
-                      style={{
-                        width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
-                        padding: '9px 18px', display: 'flex', alignItems: 'center', gap: '9px',
-                        background: isActive ? 'var(--accent-soft)' : 'transparent',
-                        borderRight: isActive ? '3px solid var(--accent-primary)' : '3px solid transparent',
-                        transition: 'background 0.1s',
-                        fontFamily: "'Inter', sans-serif",
-                      }}
-                      onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-page)'; }}
-                      onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      <span style={{ fontSize: '16px', flexShrink: 0 }}>{d.icon}</span>
-                      <span style={{ fontSize: '13px', fontWeight: isActive ? 700 : 400, color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)', lineHeight: 1.3 }}>{d.title}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Main article content */}
-      <div ref={contentRef} style={{ flex: 1, overflowY: 'auto', padding: '40px 56px', maxWidth: '780px' }}>
-        {/* Article header */}
-        <div style={{ marginBottom: '32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-            <span style={{ fontSize: '32px' }}>{activeDoc.icon}</span>
-            <span style={{ ...S.badge('var(--text-secondary)'), fontSize: '11px' }}>{activeDoc.category}</span>
-          </div>
-          <h1 style={{ fontSize: '28px', fontWeight: 900, color: 'var(--text-primary)', marginBottom: '10px', lineHeight: 1.2 }}>
-            {activeDoc.title}
-          </h1>
-          <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>{activeDoc.summary}</p>
-        </div>
-
-        {/* Divider */}
-        <div style={{ height: '1px', background: 'var(--border-default)', marginBottom: '28px' }} />
-
-        {/* Article body */}
-        <MarkdownView content={activeDoc.content} skipH1 />
-
-        {/* Next / Prev navigation */}
-        {otherDocs.length > 0 && (
-          <div style={{ marginTop: '48px', paddingTop: '24px', borderTop: '1px solid var(--border-default)' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '14px' }}>More Articles</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {otherDocs.slice(0, 3).map(d => (
-                <button
-                  key={d.id}
-                  onClick={() => switchDoc(d)}
-                  style={{
-                    ...S.card, textAlign: 'left', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-primary)'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(124,58,237,0.08)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; }}
-                >
-                  <span style={{ fontSize: '22px' }}>{d.icon}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{d.title}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{d.category}</div>
-                  </div>
-                  <span style={{ color: 'var(--accent-primary)', fontSize: '16px' }}>→</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ─── Ticket Detail ────────────────────────────────────────────────────────────
-function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, onAddNotification, currentUser }) {
+function TicketDetail({
+  ticket,
+  onBack,
+  onStatusChange,
+  onAssigneeChange,
+  onAddNotification,
+  currentUser,
+}) {
   const can = useCan();
-  const isAssignedToMe = !!currentUser?.email && !!ticket.assigneeEmail && ticket.assigneeEmail === currentUser.email;
+  const isAssignedToMe =
+    !!currentUser?.email && !!ticket.assigneeEmail && ticket.assigneeEmail === currentUser.email;
   const canViewAll = can('tickets.view_all');
-  const canSeeAudit = can('audit.view');
-  const canChangeStatus = can('tickets.status_change_any') || (isAssignedToMe && can('tickets.status_change_own'));
+  const canChangeStatus =
+    can('tickets.status_change_any') || (isAssignedToMe && can('tickets.status_change_own'));
   const canDeleteTicket = can('tickets.delete');
   const [confirmDel, setConfirmDel] = useState(false);
   const [newMsg, setNewMsg] = useState('');
@@ -2833,7 +3844,6 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
   const jiraCsat = useJiraCsat(ticket?.jiraKey, ticket?.status);
   const jiraWorklog = useJiraWorklog(ticket?.jiraKey);
 
-  const workflow = useJiraWorkflow();
   const statusOrder = ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
   const currentIdx = statusOrder.indexOf(ticket.status);
 
@@ -2842,7 +3852,9 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
   const assigneeContext = useMemo(() => {
     if (!canViewAll || !ticket.assignee) return null;
     const u = MOCK_USERS.find(u => u.name === ticket.assignee);
-    const open = MOCK_TICKETS.filter(t => t.assignee === ticket.assignee && (t.status === 'Open' || t.status === 'In Progress')).length;
+    const open = MOCK_TICKETS.filter(
+      t => t.assignee === ticket.assignee && (t.status === 'Open' || t.status === 'In Progress')
+    ).length;
     const total = MOCK_TICKETS.filter(t => t.assignee === ticket.assignee).length;
     return { dept: u?.department || 'Unknown', email: u?.email || null, open, total };
   }, [canViewAll, ticket.assignee]);
@@ -2861,7 +3873,11 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
     ticket.internalNotes.push(note);
     bumpTickets();
     setNewNote('');
-    recordAudit('ticket.internal_note', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title });
+    recordAudit('ticket.internal_note', _currentActor, {
+      type: 'ticket',
+      id: ticket.id,
+      label: ticket.title,
+    });
   };
 
   const sendMsg = async () => {
@@ -2895,12 +3911,24 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
           body: JSON.stringify({ key: ticket.jiraKey, body: text, author: _currentActor?.name }),
         });
         if (res.ok) {
-          setMessages(prev => prev.map(m => m === localMsg ? { ...m, synced: true } : m));
-          recordAudit('ticket.jira_comment', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title }, { jiraKey: ticket.jiraKey });
+          setMessages(prev => prev.map(m => (m === localMsg ? { ...m, synced: true } : m)));
+          recordAudit(
+            'ticket.jira_comment',
+            _currentActor,
+            { type: 'ticket', id: ticket.id, label: ticket.title },
+            { jiraKey: ticket.jiraKey }
+          );
         } else {
-          recordAudit('ticket.jira_comment_failed', _currentActor, { type: 'ticket', id: ticket.id, label: ticket.title }, { jiraKey: ticket.jiraKey, status: res.status });
+          recordAudit(
+            'ticket.jira_comment_failed',
+            _currentActor,
+            { type: 'ticket', id: ticket.id, label: ticket.title },
+            { jiraKey: ticket.jiraKey, status: res.status }
+          );
         }
-      } catch { /* keep local-only */ }
+      } catch {
+        /* keep local-only */
+      }
     }
   };
 
@@ -2914,7 +3942,9 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/v1/jira/issue/${encodeURIComponent(ticket.jiraKey)}/comments`);
+        const res = await fetch(
+          `/api/v1/jira/issue/${encodeURIComponent(ticket.jiraKey)}/comments`
+        );
         if (!res.ok) return;
         const data = await res.json();
         if (cancelled || !Array.isArray(data.comments)) return;
@@ -2922,7 +3952,12 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
         setMessages(prev => {
           const known = new Set(prev.map(m => `${m.from}|${m.text}`));
           const additions = data.comments
-            .filter(c => !known.has(`${c.author}|${c.body.replace(/^\[Posted via TechOps Portal by [^\]]+\]\n/, '')}`))
+            .filter(
+              c =>
+                !known.has(
+                  `${c.author}|${c.body.replace(/^\[Posted via TechOps Portal by [^\]]+\]\n/, '')}`
+                )
+            )
             .map(c => ({
               from: c.author,
               time: c.created ? c.created.slice(0, 16).replace('T', ' ') : '',
@@ -2932,45 +3967,175 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
             }));
           return additions.length === 0 ? prev : [...prev, ...additions];
         });
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [ticket?.jiraKey]);
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '14px', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          marginBottom: '20px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <button
+          onClick={onBack}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--accent-primary)',
+            fontWeight: 700,
+            fontSize: '14px',
+            cursor: 'pointer',
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
           ← Back to My Tickets
         </button>
-        {canDeleteTicket && (confirmDel ? (
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#DC2626', fontWeight: 700 }}>Delete this ticket permanently?</span>
-            <button onClick={() => { deleteTicket(ticket.id); onAddNotification?.({ type: 'ticket_deleted', title: `Ticket deleted: ${ticket.title}`, body: `${currentUser?.name || 'A staff member'} deleted ${ticket.id}.`, actorName: currentUser?.name || 'You' }); onBack(); }}
-              style={{ padding: '6px 12px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: '#DC2626', color: '#fff', fontWeight: 700, fontSize: '13px' }}>Yes, delete</button>
-            <button onClick={() => setConfirmDel(false)} style={{ padding: '6px 12px', borderRadius: '7px', border: '1px solid var(--border-default)', cursor: 'pointer', background: 'var(--bg-surface)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '13px' }}>Cancel</button>
-          </span>
-        ) : (
-          <button onClick={() => setConfirmDel(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '7px', border: '1px solid #FCA5A5', cursor: 'pointer', background: 'transparent', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
-            <Trash2 size={14} /> Delete ticket
-          </button>
-        ))}
+        {canDeleteTicket &&
+          (confirmDel ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13px', color: '#DC2626', fontWeight: 700 }}>
+                Delete this ticket permanently?
+              </span>
+              <button
+                onClick={() => {
+                  deleteTicket(ticket.id);
+                  onAddNotification?.({
+                    type: 'ticket_deleted',
+                    title: `Ticket deleted: ${ticket.title}`,
+                    body: `${currentUser?.name || 'A staff member'} deleted ${ticket.id}.`,
+                    actorName: currentUser?.name || 'You',
+                  });
+                  onBack();
+                }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: '#DC2626',
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                }}
+              >
+                Yes, delete
+              </button>
+              <button
+                onClick={() => setConfirmDel(false)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '7px',
+                  border: '1px solid var(--border-default)',
+                  cursor: 'pointer',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                }}
+              >
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmDel(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '7px',
+                border: '1px solid #FCA5A5',
+                cursor: 'pointer',
+                background: 'transparent',
+                color: '#DC2626',
+                fontWeight: 700,
+                fontSize: '13px',
+              }}
+            >
+              <Trash2 size={14} /> Delete ticket
+            </button>
+          ))}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          marginBottom: '20px',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: '4px' }}>{ticket.id}</div>
-          <div style={{ fontSize: '22px', fontWeight: 900, color: 'var(--text-primary)' }}>{ticket.title}</div>
+          <div
+            style={{
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              marginBottom: '4px',
+            }}
+          >
+            {ticket.id}
+          </div>
+          <div style={{ fontSize: '22px', fontWeight: 900, color: 'var(--text-primary)' }}>
+            {ticket.title}
+          </div>
           {(assigneeContext || ticket.requester) && (
             <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {canViewAll && ticket.requester && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: '#EFF6FF', borderRadius: '100px', border: '1px solid #BFDBFE', fontSize: '11px', color: '#1E3A8A', fontWeight: 600 }}>
-                  🙋 Submitted by <strong>{ticket.requester.name}</strong>{ticket.requester.email ? <> · {ticket.requester.email}</> : null}
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '5px 10px',
+                    background: '#EFF6FF',
+                    borderRadius: '100px',
+                    border: '1px solid #BFDBFE',
+                    fontSize: '11px',
+                    color: '#1E3A8A',
+                    fontWeight: 600,
+                  }}
+                >
+                  🙋 Submitted by <strong>{ticket.requester.name}</strong>
+                  {ticket.requester.email ? <> · {ticket.requester.email}</> : null}
                 </div>
               )}
               {assigneeContext && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px', background: 'var(--accent-soft)', borderRadius: '100px', border: '1px solid #C4B5FD', fontSize: '11px', color: 'var(--accent-primary)', fontWeight: 600 }}>
-                  👤 Assigned to <strong>{ticket.assignee}</strong> · {assigneeContext.dept} · {assigneeContext.open} open / {assigneeContext.total} total
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '5px 10px',
+                    background: 'var(--accent-soft)',
+                    borderRadius: '100px',
+                    border: '1px solid #C4B5FD',
+                    fontSize: '11px',
+                    color: 'var(--accent-primary)',
+                    fontWeight: 600,
+                  }}
+                >
+                  👤 Assigned to <strong>{ticket.assignee}</strong> · {assigneeContext.dept} ·{' '}
+                  {assigneeContext.open} open / {assigneeContext.total} total
                 </div>
               )}
             </div>
@@ -2985,17 +4150,78 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
       {/* JSM SLA cycles (Jira-authoritative) */}
       {jiraSla?.available && Array.isArray(jiraSla.cycles) && jiraSla.cycles.length > 0 && (
         <div style={{ ...S.card, marginBottom: '20px', borderLeft: '4px solid #3B82F6' }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px' }}>SLA (from Jira Service Management)</div>
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              marginBottom: '8px',
+            }}
+          >
+            SLA (from Jira Service Management)
+          </div>
           <div style={{ display: 'grid', gap: '6px' }}>
             {jiraSla.cycles.map(c => (
-              <div key={c.name} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '13px' }}>
+              <div
+                key={c.name}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  flexWrap: 'wrap',
+                  fontSize: '13px',
+                }}
+              >
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{c.name}</span>
-                {c.paused && <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontWeight: 700 }}>⏸ Paused</span>}
-                {c.breached
-                  ? <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: '#FEE2E2', color: '#B91C1C', fontWeight: 700 }}>🔴 Breached</span>
-                  : <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: '#DCFCE7', color: '#15803D', fontWeight: 700 }}>🟢 On track</span>}
-                {c.remainingTime && <span style={{ color: 'var(--text-secondary)' }}>Remaining: {c.remainingTime}</span>}
-                {c.elapsedTime && <span style={{ color: 'var(--text-muted)' }}>Elapsed: {c.elapsedTime}</span>}
+                {c.paused && (
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      background: 'var(--bg-hover)',
+                      color: 'var(--text-secondary)',
+                      fontWeight: 700,
+                    }}
+                  >
+                    ⏸ Paused
+                  </span>
+                )}
+                {c.breached ? (
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      background: '#FEE2E2',
+                      color: '#B91C1C',
+                      fontWeight: 700,
+                    }}
+                  >
+                    🔴 Breached
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      background: '#DCFCE7',
+                      color: '#15803D',
+                      fontWeight: 700,
+                    }}
+                  >
+                    🟢 On track
+                  </span>
+                )}
+                {c.remainingTime && (
+                  <span style={{ color: 'var(--text-secondary)' }}>
+                    Remaining: {c.remainingTime}
+                  </span>
+                )}
+                {c.elapsedTime && (
+                  <span style={{ color: 'var(--text-muted)' }}>Elapsed: {c.elapsedTime}</span>
+                )}
               </div>
             ))}
           </div>
@@ -3005,7 +4231,16 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
       {/* Linked Jira issues */}
       {jiraDetail?.links && jiraDetail.links.length > 0 && (
         <div style={{ ...S.card, marginBottom: '20px' }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px' }}>🔗 Linked issues</div>
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              marginBottom: '8px',
+            }}
+          >
+            🔗 Linked issues
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {jiraDetail.links.map(l => (
               <a
@@ -3013,12 +4248,40 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
                 href={`https://pomelofashion.atlassian.net/browse/${l.key}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'var(--bg-page)', borderRadius: '7px', textDecoration: 'none', color: 'var(--text-primary)' }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '8px 12px',
+                  background: 'var(--bg-page)',
+                  borderRadius: '7px',
+                  textDecoration: 'none',
+                  color: 'var(--text-primary)',
+                }}
               >
-                <span style={{ fontSize: '11px', padding: '2px 7px', borderRadius: '4px', background: 'var(--border-default)', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{l.label || l.type}</span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    padding: '2px 7px',
+                    borderRadius: '4px',
+                    background: 'var(--border-default)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {l.label || l.type}
+                </span>
                 <span style={{ fontSize: '12px', color: '#1D4ED8', fontWeight: 700 }}>{l.key}</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>{l.summary}</span>
-                {l.status && <span style={{ ...S.badge(statusColorFor(l.status)), fontSize: '10px' }}>{l.status}</span>}
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flex: 1 }}>
+                  {l.summary}
+                </span>
+                {l.status && (
+                  <span style={{ ...S.badge(statusColorFor(l.status)), fontSize: '10px' }}>
+                    {l.status}
+                  </span>
+                )}
               </a>
             ))}
           </div>
@@ -3030,28 +4293,85 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
 
       {/* CSAT (resolved tickets only) */}
       {jiraCsat?.available && jiraCsat.rating != null && (
-        <div style={{ ...S.card, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>Customer satisfaction</div>
+        <div
+          style={{
+            ...S.card,
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+            Customer satisfaction
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '20px' }}>
             {Array.from({ length: jiraCsat.max || 5 }).map((_, i) => (
-              <span key={i} style={{ color: i < jiraCsat.rating ? '#F59E0B' : 'var(--border-default)' }}>★</span>
+              <span
+                key={i}
+                style={{ color: i < jiraCsat.rating ? '#F59E0B' : 'var(--border-default)' }}
+              >
+                ★
+              </span>
             ))}
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 700, marginLeft: '4px' }}>{jiraCsat.rating}/{jiraCsat.max || 5}</span>
+            <span
+              style={{
+                fontSize: '13px',
+                color: 'var(--text-secondary)',
+                fontWeight: 700,
+                marginLeft: '4px',
+              }}
+            >
+              {jiraCsat.rating}/{jiraCsat.max || 5}
+            </span>
           </div>
-          {jiraCsat.comment && <div style={{ flex: 1, fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>"{jiraCsat.comment}"</div>}
+          {jiraCsat.comment && (
+            <div
+              style={{
+                flex: 1,
+                fontSize: '13px',
+                color: 'var(--text-secondary)',
+                fontStyle: 'italic',
+              }}
+            >
+              "{jiraCsat.comment}"
+            </div>
+          )}
         </div>
       )}
 
       {/* Worklog summary */}
       {jiraWorklog && jiraWorklog.totalSeconds > 0 && canViewAll && (
         <div style={{ ...S.card, marginBottom: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>⏱ Time logged ({Math.round(jiraWorklog.totalSeconds / 360) / 10}h total)</span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{jiraWorklog.entries.length} entries</span>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '8px',
+            }}
+          >
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+              ⏱ Time logged ({Math.round(jiraWorklog.totalSeconds / 360) / 10}h total)
+            </span>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              {jiraWorklog.entries.length} entries
+            </span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
             {jiraWorklog.totals.map(t => (
-              <span key={t.author} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '4px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontWeight: 700 }}>
+              <span
+                key={t.author}
+                style={{
+                  fontSize: '11px',
+                  padding: '3px 9px',
+                  borderRadius: '4px',
+                  background: 'var(--bg-hover)',
+                  color: 'var(--text-secondary)',
+                  fontWeight: 700,
+                }}
+              >
                 {t.author}: {t.hours}h
               </span>
             ))}
@@ -3062,26 +4382,119 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
       {/* Watchers */}
       {ticket?.jiraKey && jiraWatchers.watchCount > 0 && (
         <div style={{ ...S.card, marginBottom: '20px' }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px' }}>👁 Watchers ({jiraWatchers.watchCount})</div>
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              marginBottom: '8px',
+            }}
+          >
+            👁 Watchers ({jiraWatchers.watchCount})
+          </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {jiraWatchers.watchers.length === 0
-              ? <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Watcher list requires elevated Jira permissions.</span>
-              : jiraWatchers.watchers.map(w => (
-                  <span key={w.accountId} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '100px', background: '#EFF6FF', color: '#1E3A8A', fontWeight: 600 }}>{w.displayName}</span>
-                ))}
+            {jiraWatchers.watchers.length === 0 ? (
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Watcher list requires elevated Jira permissions.
+              </span>
+            ) : (
+              jiraWatchers.watchers.map(w => (
+                <span
+                  key={w.accountId}
+                  style={{
+                    fontSize: '11px',
+                    padding: '3px 9px',
+                    borderRadius: '100px',
+                    background: '#EFF6FF',
+                    color: '#1E3A8A',
+                    fontWeight: 600,
+                  }}
+                >
+                  {w.displayName}
+                </span>
+              ))
+            )}
           </div>
         </div>
       )}
 
       {/* Jira issue metadata badges */}
-      {jiraDetail && (jiraDetail.issueType || jiraDetail.labels.length > 0 || jiraDetail.components.length > 0 || jiraDetail.fixVersions.length > 0) && (
-        <div style={{ ...S.card, marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-          {jiraDetail.issueType && <span style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '4px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontWeight: 700 }}>📋 {jiraDetail.issueType}</span>}
-          {jiraDetail.components.map(c => <span key={c.id} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '4px', background: '#ECFCCB', color: '#3F6212', fontWeight: 700 }}>🧩 {c.name}</span>)}
-          {jiraDetail.labels.map(l => <span key={l} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '100px', background: '#FAF5FF', color: '#6B21A8', fontWeight: 600 }}>#{l}</span>)}
-          {jiraDetail.fixVersions.map(v => <span key={v} style={{ fontSize: '11px', padding: '3px 9px', borderRadius: '4px', background: '#FFF7ED', color: 'var(--accent-primary)', fontWeight: 700 }}>🏷 fixVersion: {v}</span>)}
-        </div>
-      )}
+      {jiraDetail &&
+        (jiraDetail.issueType ||
+          jiraDetail.labels.length > 0 ||
+          jiraDetail.components.length > 0 ||
+          jiraDetail.fixVersions.length > 0) && (
+          <div
+            style={{
+              ...S.card,
+              marginBottom: '20px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px',
+              alignItems: 'center',
+            }}
+          >
+            {jiraDetail.issueType && (
+              <span
+                style={{
+                  fontSize: '11px',
+                  padding: '3px 9px',
+                  borderRadius: '4px',
+                  background: 'var(--bg-hover)',
+                  color: 'var(--text-secondary)',
+                  fontWeight: 700,
+                }}
+              >
+                📋 {jiraDetail.issueType}
+              </span>
+            )}
+            {jiraDetail.components.map(c => (
+              <span
+                key={c.id}
+                style={{
+                  fontSize: '11px',
+                  padding: '3px 9px',
+                  borderRadius: '4px',
+                  background: '#ECFCCB',
+                  color: '#3F6212',
+                  fontWeight: 700,
+                }}
+              >
+                🧩 {c.name}
+              </span>
+            ))}
+            {jiraDetail.labels.map(l => (
+              <span
+                key={l}
+                style={{
+                  fontSize: '11px',
+                  padding: '3px 9px',
+                  borderRadius: '100px',
+                  background: '#FAF5FF',
+                  color: '#6B21A8',
+                  fontWeight: 600,
+                }}
+              >
+                #{l}
+              </span>
+            ))}
+            {jiraDetail.fixVersions.map(v => (
+              <span
+                key={v}
+                style={{
+                  fontSize: '11px',
+                  padding: '3px 9px',
+                  borderRadius: '4px',
+                  background: '#FFF7ED',
+                  color: 'var(--accent-primary)',
+                  fontWeight: 700,
+                }}
+              >
+                🏷 fixVersion: {v}
+              </span>
+            ))}
+          </div>
+        )}
 
       {/* Attachments — merges locally-persisted files (with data URLs for in-tab
           preview) and Jira-side attachments (linked at their Jira content URLs). */}
@@ -3090,15 +4503,55 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
       {canViewAll && (
         <div style={{ ...S.card, marginBottom: '20px', borderLeft: '4px solid #FBBF24' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>Internal notes</span>
-            <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Admin only</span>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+              Internal notes
+            </span>
+            <span
+              style={{
+                fontSize: '10px',
+                padding: '2px 7px',
+                borderRadius: '4px',
+                background: '#FEF3C7',
+                color: '#92400E',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}
+            >
+              Admin only
+            </span>
           </div>
           {internalNotes.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                marginBottom: '12px',
+              }}
+            >
               {internalNotes.map(n => (
-                <div key={n.id} style={{ padding: '10px 12px', background: '#FFFBEB', borderRadius: '8px', border: '1px solid #FDE68A' }}>
-                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{n.text}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>{n.author} · {new Date(n.ts).toLocaleString()}</div>
+                <div
+                  key={n.id}
+                  style={{
+                    padding: '10px 12px',
+                    background: '#FFFBEB',
+                    borderRadius: '8px',
+                    border: '1px solid #FDE68A',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '13px',
+                      color: 'var(--text-primary)',
+                      whiteSpace: 'pre-wrap',
+                    }}
+                  >
+                    {n.text}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    {n.author} · {new Date(n.ts).toLocaleString()}
+                  </div>
                 </div>
               ))}
             </div>
@@ -3108,12 +4561,37 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
               type="text"
               value={newNote}
               onChange={e => setNewNote(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') addInternalNote(); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') addInternalNote();
+              }}
               placeholder="Leave a note other admins will see…"
               aria-label="Add internal note"
-              style={{ flex: 1, padding: '9px 14px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", outline: 'none', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+              style={{
+                flex: 1,
+                padding: '9px 14px',
+                border: '1.5px solid var(--border-default)',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontFamily: "'Inter', sans-serif",
+                outline: 'none',
+                background: 'var(--bg-input)',
+                color: 'var(--text-primary)',
+              }}
             />
-            <button onClick={addInternalNote} disabled={!newNote.trim()} style={{ padding: '9px 16px', background: newNote.trim() ? '#111111' : 'var(--border-default)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: newNote.trim() ? 'pointer' : 'not-allowed' }}>
+            <button
+              onClick={addInternalNote}
+              disabled={!newNote.trim()}
+              style={{
+                padding: '9px 16px',
+                background: newNote.trim() ? '#111111' : 'var(--border-default)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: newNote.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >
               Add note
             </button>
           </div>
@@ -3122,39 +4600,108 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
 
       {/* Status Tracker */}
       <div style={{ ...S.card, marginBottom: '20px' }}>
-        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '16px' }}>Status Tracker</div>
+        <div
+          style={{
+            fontSize: '13px',
+            fontWeight: 700,
+            color: 'var(--text-secondary)',
+            marginBottom: '16px',
+          }}
+        >
+          Status Tracker
+        </div>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {statusOrder.map((s, i) => (
-            <div key={s} style={{ display: 'flex', alignItems: 'center', flex: i < statusOrder.length - 1 ? 1 : 0 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                <div style={{
-                  width: '28px', height: '28px', borderRadius: '50%',
-                  background: i <= currentIdx ? 'var(--accent-primary)' : 'var(--border-default)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: i <= currentIdx ? '#fff' : 'var(--text-muted)',
-                  fontSize: '13px', fontWeight: 700,
-                  border: i === currentIdx ? '3px solid #FDBA74' : '3px solid transparent',
-                  boxSizing: 'border-box',
-                }}>
+            <div
+              key={s}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                flex: i < statusOrder.length - 1 ? 1 : 0,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <div
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: i <= currentIdx ? 'var(--accent-primary)' : 'var(--border-default)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: i <= currentIdx ? '#fff' : 'var(--text-muted)',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    border: i === currentIdx ? '3px solid #FDBA74' : '3px solid transparent',
+                    boxSizing: 'border-box',
+                  }}
+                >
                   {i < currentIdx ? '✓' : i + 1}
                 </div>
-                <div style={{ fontSize: '11px', color: i <= currentIdx ? 'var(--accent-primary)' : 'var(--text-muted)', fontWeight: i === currentIdx ? 700 : 400, whiteSpace: 'nowrap' }}>{s}</div>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: i <= currentIdx ? 'var(--accent-primary)' : 'var(--text-muted)',
+                    fontWeight: i === currentIdx ? 700 : 400,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {s}
+                </div>
               </div>
               {i < statusOrder.length - 1 && (
-                <div style={{ flex: 1, height: '2px', background: i < currentIdx ? 'var(--accent-primary)' : 'var(--border-default)', margin: '0 4px', marginBottom: '20px' }} />
+                <div
+                  style={{
+                    flex: 1,
+                    height: '2px',
+                    background: i < currentIdx ? 'var(--accent-primary)' : 'var(--border-default)',
+                    margin: '0 4px',
+                    marginBottom: '20px',
+                  }}
+                />
               )}
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: '16px',
+          marginBottom: '20px',
+        }}
+      >
         {/* Timeline — merges local actions + Jira changelog when ticket is linked */}
         <div style={S.card}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '14px' }}>Activity Timeline</div>
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              marginBottom: '14px',
+            }}
+          >
+            Activity Timeline
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {(() => {
-              const localEntries = (ticket.timeline || []).map((t, i) => ({ key: `l-${i}`, when: t.date, actor: t.actor, action: t.action, source: 'local' }));
+              const localEntries = (ticket.timeline || []).map((t, i) => ({
+                key: `l-${i}`,
+                when: t.date,
+                actor: t.actor,
+                action: t.action,
+                source: 'local',
+              }));
               const jiraEntries = (jiraChangelog || []).flatMap(h =>
                 h.changes.map((c, idx) => ({
                   key: `j-${h.id}-${idx}`,
@@ -3164,16 +4711,45 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
                   source: 'jira',
                 }))
               );
-              const merged = [...localEntries, ...jiraEntries].sort((a, b) => String(b.when).localeCompare(String(a.when)));
+              const merged = [...localEntries, ...jiraEntries].sort((a, b) =>
+                String(b.when).localeCompare(String(a.when))
+              );
               return merged.map((t, i) => (
                 <div key={t.key} style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: t.source === 'jira' ? '#1D4ED8' : 'var(--accent-primary)', flexShrink: 0, marginTop: '3px' }} />
-                    {i < merged.length - 1 && <div style={{ width: '1px', flex: 1, background: 'var(--border-default)', marginTop: '4px' }} />}
+                    <div
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: t.source === 'jira' ? '#1D4ED8' : 'var(--accent-primary)',
+                        flexShrink: 0,
+                        marginTop: '3px',
+                      }}
+                    />
+                    {i < merged.length - 1 && (
+                      <div
+                        style={{
+                          width: '1px',
+                          flex: 1,
+                          background: 'var(--border-default)',
+                          marginTop: '4px',
+                        }}
+                      />
+                    )}
                   </div>
                   <div style={{ paddingBottom: '8px' }}>
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{t.action} {t.source === 'jira' && <span style={{ fontSize: '10px', color: '#1D4ED8', fontWeight: 700 }}>· Jira</span>}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{String(t.when).slice(0, 16).replace('T', ' ')} · {t.actor}</div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {t.action}{' '}
+                      {t.source === 'jira' && (
+                        <span style={{ fontSize: '10px', color: '#1D4ED8', fontWeight: 700 }}>
+                          · Jira
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      {String(t.when).slice(0, 16).replace('T', ' ')} · {t.actor}
+                    </div>
                   </div>
                 </div>
               ));
@@ -3183,7 +4759,16 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
 
         {/* Details */}
         <div style={S.card}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '14px' }}>Details</div>
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              marginBottom: '14px',
+            }}
+          >
+            Details
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Assignee</span>
@@ -3192,14 +4777,27 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
                   <select
                     value={ticket.assignee || ''}
                     onChange={e => onAssigneeChange(ticket.id, e.target.value || null)}
-                    style={{ ...S.select, width: 'auto', padding: '3px 24px 3px 8px', fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}
+                    style={{
+                      ...S.select,
+                      width: 'auto',
+                      padding: '3px 24px 3px 8px',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                    }}
                   >
                     <option value="">Unassigned</option>
-                    {listAssignableUsers().map(a => <option key={a.email} value={a.name}>{a.name}</option>)}
+                    {listAssignableUsers().map(a => (
+                      <option key={a.email} value={a.name}>
+                        {a.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               ) : (
-                <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>{ticket.assignee || 'Unassigned'}</span>
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                  {ticket.assignee || 'Unassigned'}
+                </span>
               )}
             </div>
             {[
@@ -3213,46 +4811,156 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
             ].map(([k, v]) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{k}</span>
-                <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>{v}</span>
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                  {v}
+                </span>
               </div>
             ))}
           </div>
-          <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Description</div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.description}</div>
+          <div
+            style={{
+              marginTop: '14px',
+              paddingTop: '14px',
+              borderTop: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: 'var(--text-secondary)',
+                marginBottom: '6px',
+              }}
+            >
+              Description
+            </div>
+            <div
+              style={{
+                fontSize: '13px',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {ticket.description}
+            </div>
           </div>
           {ticket.currentResult && (
-            <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Current result</div>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.currentResult}</div>
+            <div
+              style={{
+                marginTop: '14px',
+                paddingTop: '14px',
+                borderTop: '1px solid var(--border-subtle)',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                  marginBottom: '6px',
+                }}
+              >
+                Current result
+              </div>
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {ticket.currentResult}
+              </div>
             </div>
           )}
           {ticket.expectedResult && (
-            <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Expected result</div>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.expectedResult}</div>
+            <div
+              style={{
+                marginTop: '14px',
+                paddingTop: '14px',
+                borderTop: '1px solid var(--border-subtle)',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                  marginBottom: '6px',
+                }}
+              >
+                Expected result
+              </div>
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {ticket.expectedResult}
+              </div>
             </div>
           )}
           {/* Attachment summary line is replaced by the dedicated preview card above. */}
-          <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)' }}>
+          <div
+            style={{
+              marginTop: '14px',
+              paddingTop: '14px',
+              borderTop: '1px solid var(--border-subtle)',
+            }}
+          >
             {canChangeStatus ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flexShrink: 0 }}>Change Status</span>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                  Change Status
+                </span>
                 <div style={{ position: 'relative', flex: 1 }}>
                   <select
                     value={ticket.status}
                     onChange={e => onStatusChange(ticket.id, e.target.value)}
                     style={{ ...S.select, padding: '6px 28px 6px 10px', fontSize: '13px' }}
                   >
-                    {statusOrder.map(s => <option key={s} value={s}>{s}</option>)}
+                    {statusOrder.map(s => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
                   </select>
-                  <span style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)', fontSize: '11px' }}>▾</span>
+                  <span
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      pointerEvents: 'none',
+                      color: 'var(--text-muted)',
+                      fontSize: '11px',
+                    }}
+                  >
+                    ▾
+                  </span>
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px', background: 'var(--bg-page)', borderRadius: '7px', border: '1px solid var(--border-default)' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 10px',
+                  background: 'var(--bg-page)',
+                  borderRadius: '7px',
+                  border: '1px solid var(--border-default)',
+                }}
+              >
                 <span style={{ fontSize: '14px' }}>🔒</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Status updates are managed by the IT team.</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Status updates are managed by the IT team.
+                </span>
               </div>
             )}
           </div>
@@ -3261,30 +4969,76 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
 
       {/* Messaging */}
       <div style={S.card}>
-        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '14px' }}>Messages</div>
-        <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+        <div
+          style={{
+            fontSize: '13px',
+            fontWeight: 700,
+            color: 'var(--text-secondary)',
+            marginBottom: '14px',
+          }}
+        >
+          Messages
+        </div>
+        <div
+          style={{
+            maxHeight: '280px',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            marginBottom: '16px',
+          }}
+        >
           {messages.map((m, i) => {
             const isYou = m.from === 'You';
             return (
-              <div key={i} style={{ display: 'flex', flexDirection: isYou ? 'row-reverse' : 'row', gap: '8px', alignItems: 'flex-end' }}>
-                <div style={{
-                  width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
-                  background: isYou ? 'var(--accent-primary)' : '#111111',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontSize: '11px', fontWeight: 700,
-                }}>
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  flexDirection: isYou ? 'row-reverse' : 'row',
+                  gap: '8px',
+                  alignItems: 'flex-end',
+                }}
+              >
+                <div
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    background: isYou ? 'var(--accent-primary)' : '#111111',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                  }}
+                >
                   {m.from[0]}
                 </div>
                 <div style={{ maxWidth: '70%' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '3px', textAlign: isYou ? 'right' : 'left' }}>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--text-muted)',
+                      marginBottom: '3px',
+                      textAlign: isYou ? 'right' : 'left',
+                    }}
+                  >
                     {m.from} · {m.time}
                   </div>
-                  <div style={{
-                    background: isYou ? 'var(--accent-primary)' : 'var(--bg-hover)',
-                    color: isYou ? '#fff' : 'var(--text-secondary)',
-                    padding: '10px 14px', borderRadius: isYou ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
-                    fontSize: '13px', lineHeight: 1.5,
-                  }}>
+                  <div
+                    style={{
+                      background: isYou ? 'var(--accent-primary)' : 'var(--bg-hover)',
+                      color: isYou ? '#fff' : 'var(--text-secondary)',
+                      padding: '10px 14px',
+                      borderRadius: isYou ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
+                      fontSize: '13px',
+                      lineHeight: 1.5,
+                    }}
+                  >
                     {m.text}
                   </div>
                 </div>
@@ -3302,11 +5056,22 @@ function TicketDetail({ ticket, onBack, role, onStatusChange, onAssigneeChange, 
               placeholder="Type a message…"
               style={{ ...S.input, flex: 1 }}
             />
-            <button onClick={sendMsg} style={{ ...S.orangeBtn, whiteSpace: 'nowrap' }}>Send</button>
+            <button onClick={sendMsg} style={{ ...S.orangeBtn, whiteSpace: 'nowrap' }}>
+              Send
+            </button>
           </div>
         )}
         {ticket.status === 'Closed' && (
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', textAlign: 'center', padding: '8px' }}>This ticket is closed.</div>
+          <div
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-muted)',
+              textAlign: 'center',
+              padding: '8px',
+            }}
+          >
+            This ticket is closed.
+          </div>
         )}
       </div>
     </div>
@@ -3321,12 +5086,27 @@ function SlaChip({ ticket }) {
   if (!target) return null;
   const ageHrs = (Date.now() - new Date(ticket.created).getTime()) / 3600000;
   const overdueHrs = Math.max(0, ageHrs - target.resolution);
-  const fmt = h => h >= 24 ? `${Math.floor(h / 24)}d` : `${Math.round(h)}h`;
-  const palette = state === 'breached'
-    ? { bg: '#FEE2E2', fg: '#B91C1C', label: `🔴 SLA breached +${fmt(overdueHrs)}` }
-    : { bg: '#FEF3C7', fg: '#92400E', label: `🟡 SLA at risk` };
+  const fmt = h => (h >= 24 ? `${Math.floor(h / 24)}d` : `${Math.round(h)}h`);
+  const palette =
+    state === 'breached'
+      ? { bg: '#FEE2E2', fg: '#B91C1C', label: `🔴 SLA breached +${fmt(overdueHrs)}` }
+      : { bg: '#FEF3C7', fg: '#92400E', label: `🟡 SLA at risk` };
   const title = `Priority ${ticket.priority}: resolution target ${target.resolution}h; age ${fmt(ageHrs)}`;
-  return <span title={title} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: palette.bg, color: palette.fg, fontWeight: 700 }}>{palette.label}</span>;
+  return (
+    <span
+      title={title}
+      style={{
+        fontSize: '10px',
+        padding: '2px 7px',
+        borderRadius: '4px',
+        background: palette.bg,
+        color: palette.fg,
+        fontWeight: 700,
+      }}
+    >
+      {palette.label}
+    </span>
+  );
 }
 
 // ─── Jira sync chip ───────────────────────────────────────────────────────────
@@ -3334,19 +5114,35 @@ function JiraSyncChip({ ticket }) {
   if (!ticket) return null;
   const state = ticket.jiraSyncState || (ticket.jiraKey ? 'synced' : 'local-only');
   const palette = {
-    'synced': { bg: '#DBEAFE', fg: '#1D4ED8', label: `🔵 ${ticket.jiraKey || 'Jira'}` },
-    'syncing': { bg: '#FEF3C7', fg: '#92400E', label: '🔄 Syncing…' },
-    'error': { bg: '#FEE2E2', fg: '#B91C1C', label: '❌ Sync error' },
-    'diverged': { bg: '#FFEDD5', fg: 'var(--accent-primary)', label: '⚠️ Diverged' },
+    synced: { bg: '#DBEAFE', fg: '#1D4ED8', label: `🔵 ${ticket.jiraKey || 'Jira'}` },
+    syncing: { bg: '#FEF3C7', fg: '#92400E', label: '🔄 Syncing…' },
+    error: { bg: '#FEE2E2', fg: '#B91C1C', label: '❌ Sync error' },
+    diverged: { bg: '#FFEDD5', fg: 'var(--accent-primary)', label: '⚠️ Diverged' },
     'local-only': { bg: 'var(--bg-hover)', fg: 'var(--text-secondary)', label: '⚪ Local only' },
   };
   const p = palette[state] || palette['local-only'];
-  const title = state === 'error' ? (ticket.jiraSyncError || 'Sync error')
-    : state === 'synced' && ticket.jiraSyncedAt ? `Synced with ${ticket.jiraKey} at ${new Date(ticket.jiraSyncedAt).toLocaleString()}`
-    : state === 'local-only' ? 'No Jira link — submit while Jira is configured to create one'
-    : '';
+  const title =
+    state === 'error'
+      ? ticket.jiraSyncError || 'Sync error'
+      : state === 'synced' && ticket.jiraSyncedAt
+        ? `Synced with ${ticket.jiraKey} at ${new Date(ticket.jiraSyncedAt).toLocaleString()}`
+        : state === 'local-only'
+          ? 'No Jira link — submit while Jira is configured to create one'
+          : '';
   return (
-    <span title={title} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: p.bg, color: p.fg, fontWeight: 700 }}>{p.label}</span>
+    <span
+      title={title}
+      style={{
+        fontSize: '10px',
+        padding: '2px 7px',
+        borderRadius: '4px',
+        background: p.bg,
+        color: p.fg,
+        fontWeight: 700,
+      }}
+    >
+      {p.label}
+    </span>
   );
 }
 
@@ -3359,18 +5155,40 @@ function DevChip({ ticket }) {
   const d = devSummary(ticket);
   if (!d.hasAny) return null;
   const allMerged = d.prCount > 0 && d.prSummary.merged === d.prCount;
-  const palette = d.builds.status === 'failing'
-    ? { bg: '#FEE2E2', fg: '#B91C1C' }
-    : allMerged
-      ? { bg: '#F3E8FF', fg: '#7E22CE' }
-      : { bg: '#EFF6FF', fg: '#1D4ED8' };
-  const buildIcon = d.builds.status === 'failing' ? '❌' : d.builds.status === 'pending' ? '🟡' : '✅';
-  const title = `${d.prCount} pull request${d.prCount !== 1 ? 's' : ''}` +
+  const palette =
+    d.builds.status === 'failing'
+      ? { bg: '#FEE2E2', fg: '#B91C1C' }
+      : allMerged
+        ? { bg: '#F3E8FF', fg: '#7E22CE' }
+        : { bg: '#EFF6FF', fg: '#1D4ED8' };
+  const buildIcon =
+    d.builds.status === 'failing' ? '❌' : d.builds.status === 'pending' ? '🟡' : '✅';
+  const title =
+    `${d.prCount} pull request${d.prCount !== 1 ? 's' : ''}` +
     (d.branches ? ` · ${d.branches} branches` : '') +
-    (d.builds.failing ? ` · ${d.builds.failing} build${d.builds.failing > 1 ? 's' : ''} failing` : d.builds.total ? ' · builds passing' : '');
+    (d.builds.failing
+      ? ` · ${d.builds.failing} build${d.builds.failing > 1 ? 's' : ''} failing`
+      : d.builds.total
+        ? ' · builds passing'
+        : '');
   return (
-    <span aria-label={`Development: ${d.prCount} pull requests`} title={title} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: palette.bg, color: palette.fg, fontWeight: 700 }}>
-      🔀 {d.prCount}{d.builds.total ? <> {buildIcon}</> : null}
+    <span
+      aria-label={`Development: ${d.prCount} pull requests`}
+      title={title}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        fontSize: '10px',
+        padding: '2px 7px',
+        borderRadius: '4px',
+        background: palette.bg,
+        color: palette.fg,
+        fontWeight: 700,
+      }}
+    >
+      🔀 {d.prCount}
+      {d.builds.total ? <> {buildIcon}</> : null}
     </span>
   );
 }
@@ -3385,15 +5203,43 @@ function PrCard({ pr }) {
   const sm = prStatusMeta(pr.status);
   const cm = prCheckMeta(pr.checks?.status);
   const reviewerInitials = (pr.reviews || []).slice(0, 3).map(r =>
-    (r.reviewer || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    (r.reviewer || '?')
+      .split(' ')
+      .map(w => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase()
   );
   return (
-    <div style={{ background: 'var(--bg-page)', borderRadius: '10px', border: '1px solid var(--border-default)', overflow: 'hidden' }}>
+    <div
+      style={{
+        background: 'var(--bg-page)',
+        borderRadius: '10px',
+        border: '1px solid var(--border-default)',
+        overflow: 'hidden',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px' }}>
-        <span title={sm.label} style={{ fontSize: '15px', flexShrink: 0 }}>{sm.icon}</span>
+        <span title={sm.label} style={{ fontSize: '15px', flexShrink: 0 }}>
+          {sm.icon}
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <a href={pr.url} target="_blank" rel="noopener noreferrer" aria-label={`Open pull request #${pr.number} on GitHub`}
-            style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <a
+            href={pr.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open pull request #${pr.number} on GitHub`}
+            style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              textDecoration: 'none',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {pr.title} ↗
           </a>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -3403,26 +5249,116 @@ function PrCard({ pr }) {
         {reviewerInitials.length > 0 && (
           <div style={{ display: 'flex', flexShrink: 0 }}>
             {reviewerInitials.map((ini, i) => (
-              <span key={i} title="Reviewer" style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'var(--accent-soft)', color: 'var(--accent-primary)', fontSize: '9px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--bg-surface)', marginLeft: i ? '-7px' : 0 }}>{ini}</span>
+              <span
+                key={i}
+                title="Reviewer"
+                style={{
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '50%',
+                  background: 'var(--accent-soft)',
+                  color: 'var(--accent-primary)',
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid var(--bg-surface)',
+                  marginLeft: i ? '-7px' : 0,
+                }}
+              >
+                {ini}
+              </span>
             ))}
           </div>
         )}
-        <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '100px', background: sm.bg, color: sm.fg, fontWeight: 700, flexShrink: 0 }}>{sm.label}</span>
-        {cm && <span title={cm.label} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '100px', background: cm.bg, color: cm.fg, fontWeight: 700, flexShrink: 0 }}>{cm.icon}</span>}
-        <button onClick={() => setOpen(o => !o)} aria-label={open ? 'Collapse details' : 'Expand details'} aria-expanded={open}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--border-strong)', fontSize: '14px', flexShrink: 0, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>›</button>
+        <span
+          style={{
+            fontSize: '10px',
+            padding: '2px 8px',
+            borderRadius: '100px',
+            background: sm.bg,
+            color: sm.fg,
+            fontWeight: 700,
+            flexShrink: 0,
+          }}
+        >
+          {sm.label}
+        </span>
+        {cm && (
+          <span
+            title={cm.label}
+            style={{
+              fontSize: '11px',
+              padding: '2px 8px',
+              borderRadius: '100px',
+              background: cm.bg,
+              color: cm.fg,
+              fontWeight: 700,
+              flexShrink: 0,
+            }}
+          >
+            {cm.icon}
+          </span>
+        )}
+        <button
+          onClick={() => setOpen(o => !o)}
+          aria-label={open ? 'Collapse details' : 'Expand details'}
+          aria-expanded={open}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--border-strong)',
+            fontSize: '14px',
+            flexShrink: 0,
+            transform: open ? 'rotate(90deg)' : 'none',
+            transition: 'transform 0.15s',
+          }}
+        >
+          ›
+        </button>
       </div>
 
       {open && (
-        <div style={{ padding: '0 14px 14px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-default)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--text-secondary)', marginTop: '12px' }}>
-            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>{pr.sourceBranch}</span>
+        <div
+          style={{
+            padding: '0 14px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            borderTop: '1px solid var(--border-default)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              flexWrap: 'wrap',
+              fontSize: '12px',
+              color: 'var(--text-secondary)',
+              marginTop: '12px',
+            }}
+          >
+            <span
+              style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}
+            >
+              {pr.sourceBranch}
+            </span>
             <span>→</span>
-            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}>{pr.targetBranch}</span>
+            <span
+              style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-primary)' }}
+            >
+              {pr.targetBranch}
+            </span>
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-            <strong style={{ color: 'var(--text-primary)' }}>{pr.author?.name || pr.author?.login || '—'}</strong>
-            {' · '}+{pr.additions ?? 0} / −{pr.deletions ?? 0} · {pr.changedFiles ?? 0} files · {pr.commentCount ?? 0} comments
+            <strong style={{ color: 'var(--text-primary)' }}>
+              {pr.author?.name || pr.author?.login || '—'}
+            </strong>
+            {' · '}+{pr.additions ?? 0} / −{pr.deletions ?? 0} · {pr.changedFiles ?? 0} files ·{' '}
+            {pr.commentCount ?? 0} comments
           </div>
           {pr.checks && (
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -3434,19 +5370,60 @@ function PrCard({ pr }) {
           {pr.reviews && pr.reviews.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {pr.reviews.map((r, i) => {
-                const rp = r.state === 'APPROVED' ? { bg: '#DCFCE7', fg: '#15803D', label: '✓ Approved' }
-                  : r.state === 'CHANGES_REQUESTED' ? { bg: '#FEE2E2', fg: '#B91C1C', label: '✕ Changes requested' }
-                  : { bg: 'var(--bg-hover)', fg: 'var(--text-secondary)', label: '💬 Commented' };
+                const rp =
+                  r.state === 'APPROVED'
+                    ? { bg: '#DCFCE7', fg: '#15803D', label: '✓ Approved' }
+                    : r.state === 'CHANGES_REQUESTED'
+                      ? { bg: '#FEE2E2', fg: '#B91C1C', label: '✕ Changes requested' }
+                      : {
+                          bg: 'var(--bg-hover)',
+                          fg: 'var(--text-secondary)',
+                          label: '💬 Commented',
+                        };
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', fontSize: '12px' }}>
-                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{r.reviewer}</span>
-                    <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '100px', background: rp.bg, color: rp.fg, fontWeight: 700 }}>{rp.label}</span>
+                  <div
+                    key={i}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '10px',
+                      fontSize: '12px',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                      {r.reviewer}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        padding: '2px 8px',
+                        borderRadius: '100px',
+                        background: rp.bg,
+                        color: rp.fg,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {rp.label}
+                    </span>
                   </div>
                 );
               })}
             </div>
           )}
-          <a href={pr.url} target="_blank" rel="noopener noreferrer" style={{ ...S.orangeBtn, textDecoration: 'none', textAlign: 'center', display: 'block', fontSize: '13px', padding: '8px' }}>
+          <a
+            href={pr.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              ...S.orangeBtn,
+              textDecoration: 'none',
+              textAlign: 'center',
+              display: 'block',
+              fontSize: '13px',
+              padding: '8px',
+            }}
+          >
             Open in GitHub ↗
           </a>
         </div>
@@ -3460,43 +5437,141 @@ function PrCard({ pr }) {
 // line. Shows the merged / open / failing breakdown and one PrCard per PR.
 function DevelopmentPopup({ ticket, prs, onClose }) {
   useEffect(() => {
-    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    const handleKey = e => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
   const summary = prSummary(prs);
   const Count = ({ value, label, color }) => (
-    <div aria-label={`${label}: ${value}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '56px' }}>
+    <div
+      aria-label={`${label}: ${value}`}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '56px' }}
+    >
       <span style={{ fontSize: '20px', fontWeight: 900, color }}>{value}</span>
-      <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+      <span
+        style={{
+          fontSize: '10px',
+          fontWeight: 700,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+        }}
+      >
+        {label}
+      </span>
     </div>
   );
   return (
     <>
-      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 320, animation: 'fadeIn 0.15s ease' }} />
-      <div role="dialog" aria-modal="true" aria-label="Pull requests" style={{
-        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        background: 'var(--bg-surface)', borderRadius: '16px', zIndex: 321,
-        width: '600px', maxWidth: '95vw', maxHeight: '85vh',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.2s ease',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}>
-        <div style={{ background: '#111111', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+      <div
+        onClick={onClose}
+        role="presentation"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'var(--bg-overlay)',
+          zIndex: 320,
+          animation: 'fadeIn 0.15s ease',
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Pull requests"
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)',
+          borderRadius: '16px',
+          zIndex: 321,
+          width: '600px',
+          maxWidth: '95vw',
+          maxHeight: '85vh',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          animation: 'slideUp 0.2s ease',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            background: '#111111',
+            padding: '18px 22px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexShrink: 0,
+          }}
+        >
           <div>
-            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 700, marginBottom: '4px', letterSpacing: '0.06em' }}>{ticket.id}</div>
-            <div style={{ fontSize: '16px', fontWeight: 900, color: '#fff' }}>Pull Requests ({summary.total})</div>
+            <div
+              style={{
+                fontSize: '11px',
+                color: 'rgba(255,255,255,0.4)',
+                fontWeight: 700,
+                marginBottom: '4px',
+                letterSpacing: '0.06em',
+              }}
+            >
+              {ticket.id}
+            </div>
+            <div style={{ fontSize: '16px', fontWeight: 900, color: '#fff' }}>
+              Pull Requests ({summary.total})
+            </div>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: '22px',
+              cursor: 'pointer',
+              lineHeight: 1,
+              padding: 0,
+            }}
+          >
+            ×
+          </button>
         </div>
 
-        <div style={{ display: 'flex', gap: '18px', justifyContent: 'center', padding: '16px 22px', borderBottom: '1px solid var(--border-default)', flexShrink: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '18px',
+            justifyContent: 'center',
+            padding: '16px 22px',
+            borderBottom: '1px solid var(--border-default)',
+            flexShrink: 0,
+          }}
+        >
           <Count value={summary.merged} label="Merged" color="#7E22CE" />
           <Count value={summary.open + summary.draft} label="Open" color="#1D4ED8" />
-          <Count value={summary.failing} label="Failing" color={summary.failing > 0 ? '#B91C1C' : 'var(--text-muted)'} />
+          <Count
+            value={summary.failing}
+            label="Failing"
+            color={summary.failing > 0 ? '#B91C1C' : 'var(--text-muted)'}
+          />
         </div>
 
-        <div style={{ overflowY: 'auto', padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {prs.map(pr => <PrCard key={pr.id || pr.number} pr={pr} />)}
+        <div
+          style={{
+            overflowY: 'auto',
+            padding: '16px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+          }}
+        >
+          {prs.map(pr => (
+            <PrCard key={pr.id || pr.number} pr={pr} />
+          ))}
         </div>
       </div>
     </>
@@ -3514,57 +5589,157 @@ function DevelopmentPanel({ ticket }) {
   if (!d.hasAny) return null;
 
   const prMeta = d.prStatus ? prStatusMeta(d.prStatus) : null;
-  const buildLine = d.builds.status === 'failing'
-    ? { icon: '🔴', text: `${d.builds.failing} build${d.builds.failing > 1 ? 's' : ''} failing`, color: '#B91C1C' }
-    : d.builds.status === 'pending'
-      ? { icon: '🟡', text: `${d.builds.pending} build${d.builds.pending > 1 ? 's' : ''} running`, color: '#92400E' }
-      : d.builds.total
-        ? { icon: '🟢', text: 'Builds passing', color: '#15803D' }
-        : null;
+  const buildLine =
+    d.builds.status === 'failing'
+      ? {
+          icon: '🔴',
+          text: `${d.builds.failing} build${d.builds.failing > 1 ? 's' : ''} failing`,
+          color: '#B91C1C',
+        }
+      : d.builds.status === 'pending'
+        ? {
+            icon: '🟡',
+            text: `${d.builds.pending} build${d.builds.pending > 1 ? 's' : ''} running`,
+            color: '#92400E',
+          }
+        : d.builds.total
+          ? { icon: '🟢', text: 'Builds passing', color: '#15803D' }
+          : null;
 
   const Row = ({ icon, children, onClick, ...rest }) => {
-    const base = { display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 10px', borderRadius: '8px', fontSize: '13px', width: '100%', textAlign: 'left' };
-    const content = <><span style={{ width: '18px', textAlign: 'center', flexShrink: 0 }}>{icon}</span><span style={{ flex: 1 }}>{children}</span></>;
-    return onClick
-      ? <button onClick={onClick} {...rest} style={{ ...base, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--accent-primary)', fontWeight: 700 }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>{content}</button>
-      : <div {...rest} style={{ ...base, color: 'var(--text-secondary)' }}>{content}</div>;
+    const base = {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '9px 10px',
+      borderRadius: '8px',
+      fontSize: '13px',
+      width: '100%',
+      textAlign: 'left',
+    };
+    const content = (
+      <>
+        <span style={{ width: '18px', textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+        <span style={{ flex: 1 }}>{children}</span>
+      </>
+    );
+    return onClick ? (
+      <button
+        onClick={onClick}
+        {...rest}
+        style={{
+          ...base,
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          color: 'var(--accent-primary)',
+          fontWeight: 700,
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+      >
+        {content}
+      </button>
+    ) : (
+      <div {...rest} style={{ ...base, color: 'var(--text-secondary)' }}>
+        {content}
+      </div>
+    );
   };
 
   return (
-    <div style={{ ...S.card, marginBottom: '20px', borderLeft: `4px solid ${d.builds.status === 'failing' ? '#EF4444' : '#6366F1'}`, padding: '16px 18px' }}>
+    <div
+      style={{
+        ...S.card,
+        marginBottom: '20px',
+        borderLeft: `4px solid ${d.builds.status === 'failing' ? '#EF4444' : '#6366F1'}`,
+        padding: '16px 18px',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-        <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>🧬 Development</span>
-        {source === 'jira' && <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#DBEAFE', color: '#1D4ED8', fontWeight: 700 }}>via Jira</span>}
+        <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)' }}>
+          🧬 Development
+        </span>
+        {source === 'jira' && (
+          <span
+            style={{
+              fontSize: '10px',
+              padding: '2px 7px',
+              borderRadius: '4px',
+              background: '#DBEAFE',
+              color: '#1D4ED8',
+              fontWeight: 700,
+            }}
+          >
+            via Jira
+          </span>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
         {d.branches > 0 && (
-          <Row icon="⎇">{d.branches} branch{d.branches > 1 ? 'es' : ''}</Row>
+          <Row icon="⎇">
+            {d.branches} branch{d.branches > 1 ? 'es' : ''}
+          </Row>
         )}
         {d.commits > 0 && (
           <Row icon="◆">
             {d.commits} commit{d.commits > 1 ? 's' : ''}
-            {d.lastCommitAt && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> · {relativeTime(d.lastCommitAt)}</span>}
+            {d.lastCommitAt && (
+              <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>
+                {' '}
+                · {relativeTime(d.lastCommitAt)}
+              </span>
+            )}
           </Row>
         )}
         {d.prCount > 0 && (
-          <Row icon="⇄" onClick={() => setPopupOpen(true)} aria-label={`${d.prCount} pull requests`}>
+          <Row
+            icon="⇄"
+            onClick={() => setPopupOpen(true)}
+            aria-label={`${d.prCount} pull requests`}
+          >
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
               {d.prCount} pull request{d.prCount > 1 ? 's' : ''}
-              {prMeta && <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '3px', background: prMeta.bg, color: prMeta.fg, fontWeight: 800, letterSpacing: '0.03em' }}>{prMeta.label.toUpperCase()}</span>}
+              {prMeta && (
+                <span
+                  style={{
+                    fontSize: '10px',
+                    padding: '2px 7px',
+                    borderRadius: '3px',
+                    background: prMeta.bg,
+                    color: prMeta.fg,
+                    fontWeight: 800,
+                    letterSpacing: '0.03em',
+                  }}
+                >
+                  {prMeta.label.toUpperCase()}
+                </span>
+              )}
             </span>
           </Row>
         )}
         {buildLine && (
           <Row icon="↻" onClick={() => setPopupOpen(true)} aria-label="Build status">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: buildLine.color, fontWeight: 700 }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                color: buildLine.color,
+                fontWeight: 700,
+              }}
+            >
               {buildLine.text} {buildLine.icon}
             </span>
           </Row>
         )}
       </div>
 
-      {popupOpen && <DevelopmentPopup ticket={ticket} prs={prs} onClose={() => setPopupOpen(false)} />}
+      {popupOpen && (
+        <DevelopmentPopup ticket={ticket} prs={prs} onClose={() => setPopupOpen(false)} />
+      )}
     </div>
   );
 }
@@ -3572,7 +5747,7 @@ function DevelopmentPanel({ ticket }) {
 // ─── Recent Activity feed (Home) ──────────────────────────────────────────────
 // Live view of the most-recently-updated tickets, plus (admin only) the last
 // few audit entries so admins see admin actions on their dashboard.
-function RecentActivityFeed({ role, onTicket, setSection }) { // eslint-disable-line no-unused-vars
+function RecentActivityFeed({ onTicket, setSection }) {
   const can = useCan();
   const canSeeAudit = can('audit.view');
   const [, _setV] = useState(0);
@@ -3580,16 +5755,15 @@ function RecentActivityFeed({ role, onTicket, setSection }) { // eslint-disable-
   useEffect(() => subscribeAudit(_setV), []);
 
   const recentTickets = useMemo(() => {
-    return MOCK_TICKETS
-      .slice()
+    return MOCK_TICKETS.slice()
       .sort((a, b) => (b.updated || '').localeCompare(a.updated || ''))
       .slice(0, canSeeAudit ? 3 : 5);
-  }, [canSeeAudit]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canSeeAudit]);
 
   const recentAudit = useMemo(() => {
     if (!canSeeAudit) return [];
     return listAudit().slice(0, 3);
-  }, [canSeeAudit]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canSeeAudit]);
 
   const auditLabel = a => AUDIT_ACTION_LABELS[a] || a;
 
@@ -3606,10 +5780,29 @@ function RecentActivityFeed({ role, onTicket, setSection }) { // eslint-disable-
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>Recent Activity</div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '14px',
+        }}
+      >
+        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+          Recent Activity
+        </div>
         {canSeeAudit && (
-          <button onClick={() => setSection('audit')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}>
+          <button
+            onClick={() => setSection('audit')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--accent-primary)',
+              fontWeight: 700,
+              fontSize: '12px',
+              cursor: 'pointer',
+            }}
+          >
             View full audit log →
           </button>
         )}
@@ -3619,29 +5812,83 @@ function RecentActivityFeed({ role, onTicket, setSection }) { // eslint-disable-
           <button
             key={t.id}
             onClick={() => onTicket(t)}
-            style={{ ...S.card, display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', width: '100%', textAlign: 'left', cursor: 'pointer', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-primary)'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(124,58,237,0.08)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)'; }}
+            style={{
+              ...S.card,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              padding: '14px 18px',
+              width: '100%',
+              textAlign: 'left',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = 'var(--accent-primary)';
+              e.currentTarget.style.boxShadow = '0 2px 10px rgba(124,58,237,0.08)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = 'var(--border-default)';
+              e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.05)';
+            }}
           >
             <span style={S.badge(PRIORITY_COLORS[t.priority])}>{t.priority}</span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{t.title}</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{t.id} · {t.category} · updated {t.updated}</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                {t.title}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {t.id} · {t.category} · updated {t.updated}
+              </div>
             </div>
             <span style={S.badge(STATUS_COLORS[t.status])}>{t.status}</span>
-            <span style={{ color: 'var(--border-strong)', fontSize: '16px', flexShrink: 0 }}>↗</span>
+            <span style={{ color: 'var(--border-strong)', fontSize: '16px', flexShrink: 0 }}>
+              ↗
+            </span>
           </button>
         ))}
         {recentAudit.length > 0 && (
-          <div style={{ marginTop: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Admin actions</div>
+          <div
+            style={{
+              marginTop: '6px',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            Admin actions
+          </div>
         )}
         {recentAudit.map(e => (
-          <div key={e.id} style={{ ...S.card, display: 'flex', alignItems: 'center', gap: '14px', padding: '10px 16px' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0 }}>{auditLabel(e.action)}</div>
-            <div style={{ flex: 1, fontSize: '12px', color: 'var(--text-secondary)' }}>
-              {e.actorName}{e.targetLabel ? ` · ${e.targetLabel}` : ''}
+          <div
+            key={e.id}
+            style={{
+              ...S.card,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              padding: '10px 16px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                flexShrink: 0,
+              }}
+            >
+              {auditLabel(e.action)}
             </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>{fmtAgo(e.timestamp)}</div>
+            <div style={{ flex: 1, fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {e.actorName}
+              {e.targetLabel ? ` · ${e.targetLabel}` : ''}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>
+              {fmtAgo(e.timestamp)}
+            </div>
           </div>
         ))}
       </div>
@@ -3654,54 +5901,187 @@ function TicketPopupModal({ ticket, onClose }) {
   const can = useCan();
   const [confirmDel, setConfirmDel] = useState(false);
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleKey = e => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
   return (
     <>
-      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 300, animation: 'fadeIn 0.15s ease' }} />
-      <div role="dialog" aria-modal="true" aria-label={ticket?.title || 'Ticket details'} style={{
-        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        background: 'var(--bg-surface)', borderRadius: '16px', zIndex: 301,
-        width: '540px', maxWidth: '95vw', maxHeight: '85vh',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.2s ease',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}>
+      <div
+        onClick={onClose}
+        role="presentation"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'var(--bg-overlay)',
+          zIndex: 300,
+          animation: 'fadeIn 0.15s ease',
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={ticket?.title || 'Ticket details'}
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)',
+          borderRadius: '16px',
+          zIndex: 301,
+          width: '540px',
+          maxWidth: '95vw',
+          maxHeight: '85vh',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          animation: 'slideUp 0.2s ease',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
         {/* Header */}
-        <div style={{ background: '#111111', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+        <div
+          style={{
+            background: '#111111',
+            padding: '18px 22px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            flexShrink: 0,
+          }}
+        >
           <div>
-            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', fontWeight: 700, marginBottom: '4px', letterSpacing: '0.06em' }}>{ticket.id}</div>
-            <div style={{ fontSize: '16px', fontWeight: 900, color: '#fff', lineHeight: 1.3 }}>{ticket.title}</div>
+            <div
+              style={{
+                fontSize: '11px',
+                color: 'rgba(255,255,255,0.4)',
+                fontWeight: 700,
+                marginBottom: '4px',
+                letterSpacing: '0.06em',
+              }}
+            >
+              {ticket.id}
+            </div>
+            <div style={{ fontSize: '16px', fontWeight: 900, color: '#fff', lineHeight: 1.3 }}>
+              {ticket.title}
+            </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: 0, marginLeft: '14px', flexShrink: 0 }}>×</button>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: '22px',
+              cursor: 'pointer',
+              lineHeight: 1,
+              padding: 0,
+              marginLeft: '14px',
+              flexShrink: 0,
+            }}
+          >
+            ×
+          </button>
         </div>
 
         {/* Scrollable body */}
-        <div style={{ overflowY: 'auto', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div
+          style={{
+            overflowY: 'auto',
+            padding: '20px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}
+        >
           {/* Badges */}
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <span style={S.badge(PRIORITY_COLORS[ticket.priority])}>{ticket.priority}</span>
             <span style={S.badge(STATUS_COLORS[ticket.status])}>{ticket.status}</span>
-            <span style={{ ...S.badge('var(--text-secondary)'), fontSize: '11px' }}>{ticket.category}</span>
+            <span style={{ ...S.badge('var(--text-secondary)'), fontSize: '11px' }}>
+              {ticket.category}
+            </span>
           </div>
 
           {/* Description */}
           <div style={{ background: 'var(--bg-page)', borderRadius: '8px', padding: '14px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Description</div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.description}</div>
+            <div
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                marginBottom: '6px',
+              }}
+            >
+              Description
+            </div>
+            <div
+              style={{
+                fontSize: '13px',
+                color: 'var(--text-secondary)',
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {ticket.description}
+            </div>
           </div>
           {ticket.currentResult && (
             <div style={{ background: 'var(--bg-page)', borderRadius: '8px', padding: '14px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Current result</div>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.currentResult}</div>
+              <div
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  marginBottom: '6px',
+                }}
+              >
+                Current result
+              </div>
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {ticket.currentResult}
+              </div>
             </div>
           )}
           {ticket.expectedResult && (
             <div style={{ background: 'var(--bg-page)', borderRadius: '8px', padding: '14px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Expected result</div>
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{ticket.expectedResult}</div>
+              <div
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  marginBottom: '6px',
+                }}
+              >
+                Expected result
+              </div>
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                {ticket.expectedResult}
+              </div>
             </div>
           )}
 
@@ -3715,26 +6095,75 @@ function TicketPopupModal({ ticket, onClose }) {
               ['Created', ticket.created],
               ['Last Updated', ticket.updated],
             ].map(([k, v]) => (
-              <div key={k} style={{ background: 'var(--bg-page)', borderRadius: '8px', padding: '10px 12px' }}>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>{k}</div>
-                <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>{v}</div>
+              <div
+                key={k}
+                style={{ background: 'var(--bg-page)', borderRadius: '8px', padding: '10px 12px' }}
+              >
+                <div
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    marginBottom: '3px',
+                  }}
+                >
+                  {k}
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>
+                  {v}
+                </div>
               </div>
             ))}
           </div>
 
           {/* Timeline */}
           <div>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Activity Timeline</div>
+            <div
+              style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: 'var(--text-secondary)',
+                marginBottom: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              Activity Timeline
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {ticket.timeline.map((t, i) => (
                 <div key={i} style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-primary)', flexShrink: 0, marginTop: '3px' }} />
-                    {i < ticket.timeline.length - 1 && <div style={{ width: '1px', flex: 1, background: 'var(--border-default)', marginTop: '3px' }} />}
+                    <div
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: 'var(--accent-primary)',
+                        flexShrink: 0,
+                        marginTop: '3px',
+                      }}
+                    />
+                    {i < ticket.timeline.length - 1 && (
+                      <div
+                        style={{
+                          width: '1px',
+                          flex: 1,
+                          background: 'var(--border-default)',
+                          marginTop: '3px',
+                        }}
+                      />
+                    )}
                   </div>
                   <div style={{ paddingBottom: '6px' }}>
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{t.action}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>{t.date} · {t.actor}</div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {t.action}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '1px' }}>
+                      {t.date} · {t.actor}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -3742,22 +6171,96 @@ function TicketPopupModal({ ticket, onClose }) {
           </div>
 
           {/* Message count */}
-          <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-            💬 {ticket.messages?.length || 0} message{ticket.messages?.length !== 1 ? 's' : ''} — open ticket in My Tickets to reply
+          <div
+            style={{
+              borderTop: '1px solid var(--border-subtle)',
+              paddingTop: '12px',
+              fontSize: '13px',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            💬 {ticket.messages?.length || 0} message{ticket.messages?.length !== 1 ? 's' : ''} —
+            open ticket in My Tickets to reply
           </div>
         </div>
 
         {/* Footer — admin/developer delete (gated by tickets.delete) */}
         {can('tickets.delete') && (
-          <div style={{ flexShrink: 0, borderTop: '1px solid var(--border-default)', padding: '12px 22px', background: 'var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+          <div
+            style={{
+              flexShrink: 0,
+              borderTop: '1px solid var(--border-default)',
+              padding: '12px 22px',
+              background: 'var(--bg-surface)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '8px',
+            }}
+          >
             {confirmDel ? (
               <>
-                <span style={{ fontSize: '13px', color: '#DC2626', fontWeight: 700, marginRight: 'auto' }}>Delete this ticket permanently?</span>
-                <button onClick={() => { deleteTicket(ticket.id); onClose(); }} style={{ padding: '7px 14px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: '#DC2626', color: '#fff', fontWeight: 700, fontSize: '13px' }}>Yes, delete</button>
-                <button onClick={() => setConfirmDel(false)} style={{ padding: '7px 14px', borderRadius: '7px', border: '1px solid var(--border-default)', cursor: 'pointer', background: 'var(--bg-surface)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '13px' }}>Cancel</button>
+                <span
+                  style={{
+                    fontSize: '13px',
+                    color: '#DC2626',
+                    fontWeight: 700,
+                    marginRight: 'auto',
+                  }}
+                >
+                  Delete this ticket permanently?
+                </span>
+                <button
+                  onClick={() => {
+                    deleteTicket(ticket.id);
+                    onClose();
+                  }}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: '#DC2626',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                  }}
+                >
+                  Yes, delete
+                </button>
+                <button
+                  onClick={() => setConfirmDel(false)}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: '7px',
+                    border: '1px solid var(--border-default)',
+                    cursor: 'pointer',
+                    background: 'var(--bg-surface)',
+                    color: 'var(--text-secondary)',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                  }}
+                >
+                  Cancel
+                </button>
               </>
             ) : (
-              <button onClick={() => setConfirmDel(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: '1px solid #FCA5A5', cursor: 'pointer', background: 'transparent', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
+              <button
+                onClick={() => setConfirmDel(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 14px',
+                  borderRadius: '7px',
+                  border: '1px solid #FCA5A5',
+                  cursor: 'pointer',
+                  background: 'transparent',
+                  color: '#DC2626',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                }}
+              >
                 <Trash2 size={14} /> Delete ticket
               </button>
             )}
@@ -3769,62 +6272,137 @@ function TicketPopupModal({ ticket, onClose }) {
 }
 
 // ─── Profile Modal ────────────────────────────────────────────────────────────
-function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) { // eslint-disable-line no-unused-vars
+function ProfileModal({ currentUser, setCurrentUser, onClose, onLogout }) {
   const { can, currentRole } = useRbacCtx();
   const canEditOwnProfile = can('users.edit');
   const [form, setForm, clearDraft] = usePersistentState('profile-edit', { ...currentUser });
-  const initials = form.name.split(' ').map(n => n[0]).join('').toUpperCase();
+  const initials = form.name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase();
 
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleKey = e => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
-  const save = () => { setCurrentUser(form); clearDraft(); onClose(); };
+  const save = () => {
+    setCurrentUser(form);
+    clearDraft();
+    onClose();
+  };
 
   return (
     <>
-      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 400, animation: 'fadeIn 0.15s ease' }} />
-      <div role="dialog" aria-modal="true" aria-label="Profile" style={{
-        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        background: 'var(--bg-surface)', borderRadius: '16px', zIndex: 401,
-        width: '400px', maxWidth: '95vw',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.2s ease',
-        overflow: 'hidden',
-      }}>
+      <div
+        onClick={onClose}
+        role="presentation"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'var(--bg-overlay)',
+          zIndex: 400,
+          animation: 'fadeIn 0.15s ease',
+        }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Profile"
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)',
+          borderRadius: '16px',
+          zIndex: 401,
+          width: '400px',
+          maxWidth: '95vw',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          animation: 'slideUp 0.2s ease',
+          overflow: 'hidden',
+        }}
+      >
         {/* Header */}
         <div style={{ background: '#111111', padding: '20px 22px 40px', position: 'relative' }}>
-          <button onClick={onClose} style={{ position: 'absolute', top: '14px', right: '16px', background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
-          <div style={{ fontSize: '14px', fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>My Profile</div>
+          <button
+            onClick={onClose}
+            style={{
+              position: 'absolute',
+              top: '14px',
+              right: '16px',
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: '22px',
+              cursor: 'pointer',
+              lineHeight: 1,
+              padding: 0,
+            }}
+          >
+            ×
+          </button>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>
+            My Profile
+          </div>
         </div>
 
         {/* Avatar — overlapping header */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '-32px', marginBottom: '16px' }}>
-          <div style={{
-            width: '64px', height: '64px', borderRadius: '50%',
-            background: 'var(--accent-primary)', border: '3px solid #fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: '22px', fontWeight: 900,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          }}>{initials}</div>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            marginTop: '-32px',
+            marginBottom: '16px',
+          }}
+        >
+          <div
+            style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              background: 'var(--accent-primary)',
+              border: '3px solid #fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontSize: '22px',
+              fontWeight: 900,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}
+          >
+            {initials}
+          </div>
         </div>
 
         {/* Role badge — sourced from the role registry so custom roles
             (Developer, Admin, ...) render correctly, not just superadmin/user. */}
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-          <span style={{
-            display: 'inline-block', padding: '4px 14px', borderRadius: '100px',
-            background: (currentRole?.color || 'var(--text-primary)') + '18',
-            color: currentRole?.color || 'var(--text-primary)',
-            fontSize: '12px', fontWeight: 700,
-          }}>
+          <span
+            style={{
+              display: 'inline-block',
+              padding: '4px 14px',
+              borderRadius: '100px',
+              background: (currentRole?.color || 'var(--text-primary)') + '18',
+              color: currentRole?.color || 'var(--text-primary)',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
             {currentRole?.label || 'User'}
           </span>
         </div>
 
         {/* Fields */}
-        <div style={{ padding: '0 22px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div
+          style={{ padding: '0 22px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+        >
           {[
             { key: 'name', label: 'Full Name' },
             { key: 'email', label: 'Email' },
@@ -3839,15 +6417,31 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
                   style={S.input}
                 />
               ) : (
-                <div style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: 700, padding: '10px 0', borderBottom: '1px solid var(--border-subtle)' }}>{form[key]}</div>
+                <div
+                  style={{
+                    fontSize: '14px',
+                    color: 'var(--text-primary)',
+                    fontWeight: 700,
+                    padding: '10px 0',
+                    borderBottom: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  {form[key]}
+                </div>
               )}
             </div>
           ))}
 
           {canEditOwnProfile && (
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}>
-              <button onClick={onClose} style={S.ghostBtn}>Cancel</button>
-              <button onClick={save} style={S.orangeBtn}>Save Changes</button>
+            <div
+              style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', paddingTop: '4px' }}
+            >
+              <button onClick={onClose} style={S.ghostBtn}>
+                Cancel
+              </button>
+              <button onClick={save} style={S.orangeBtn}>
+                Save Changes
+              </button>
             </div>
           )}
         </div>
@@ -3858,11 +6452,16 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
           <button
             onClick={onLogout}
             style={{
-              width: '100%', background: 'transparent',
-              color: '#DC2626', border: '1.5px solid #DC2626',
-              borderRadius: '8px', padding: '10px',
-              fontFamily: "'Inter', sans-serif", fontWeight: 700,
-              fontSize: '14px', cursor: 'pointer',
+              width: '100%',
+              background: 'transparent',
+              color: '#DC2626',
+              border: '1.5px solid #DC2626',
+              borderRadius: '8px',
+              padding: '10px',
+              fontFamily: "'Inter', sans-serif",
+              fontWeight: 700,
+              fontSize: '14px',
+              cursor: 'pointer',
             }}
           >
             Sign Out
@@ -3873,221 +6472,15 @@ function ProfileModal({ currentUser, setCurrentUser, role, onClose, onLogout }) 
   );
 }
 
-// ─── New Document Modal ───────────────────────────────────────────────────────
-function NewDocModal({ onSave, onClose }) {
-  const [form, setForm, clearDraft] = usePersistentState('doc-new', { icon: '', title: '', category: '', summary: '', content: '' });
-  const [errors, setErrors] = useState({});
-
-  useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
-  const validate = () => {
-    const e = {};
-    if (!form.icon.trim()) e.icon = 'Required';
-    if (!form.title.trim()) e.title = 'Required';
-    if (!form.category.trim()) e.category = 'Required';
-    if (!form.summary.trim()) e.summary = 'Required';
-    if (!form.content.trim()) e.content = 'Required';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const handleSave = () => {
-    if (!validate()) return;
-    onSave({ id: Date.now(), ...form });
-    clearDraft();
-  };
-
-  const err = (k) => errors[k] ? <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '4px' }}>{errors[k]}</div> : null;
-
-  return (
-    <>
-      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 500, animation: 'fadeIn 0.15s ease' }} />
-      <div role="dialog" aria-modal="true" aria-label="New document" style={{
-        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        background: 'var(--bg-surface)', borderRadius: '16px', zIndex: 501,
-        width: '600px', maxWidth: '95vw', maxHeight: '88vh',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.2s ease',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      }}>
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--text-primary)' }}>Create New Document</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
-        </div>
-
-        <div style={{ overflowY: 'auto', padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr 1fr', gap: '14px' }}>
-            <div>
-              <label style={S.label}>Icon</label>
-              <input value={form.icon} onChange={e => setForm(f => ({ ...f, icon: e.target.value }))} maxLength={2} placeholder="📄" aria-label="Document icon" style={{ ...S.input, textAlign: 'center', fontSize: '20px' }} />
-              {err('icon')}
-            </div>
-            <div>
-              <label style={S.label}>Title *</label>
-              <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Document title" aria-label="Document title" style={{ ...S.input, borderColor: errors.title ? '#DC2626' : 'var(--border-default)' }} />
-              {err('title')}
-            </div>
-            <div>
-              <label style={S.label}>Category *</label>
-              <input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} placeholder="e.g. Security" aria-label="Category" style={{ ...S.input, borderColor: errors.category ? '#DC2626' : 'var(--border-default)' }} />
-              {err('category')}
-            </div>
-          </div>
-          <div>
-            <label style={S.label}>Summary *</label>
-            <textarea value={form.summary} onChange={e => setForm(f => ({ ...f, summary: e.target.value }))} placeholder="One or two sentences describing the document." aria-label="Document summary" style={{ ...S.textarea, minHeight: '72px', borderColor: errors.summary ? '#DC2626' : 'var(--border-default)' }} />
-            {err('summary')}
-          </div>
-          <div>
-            <label style={S.label}>Content * <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--text-muted)' }}>— supports # headings, ## subheadings, - bullet lists, **bold**</span></label>
-            <textarea value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} placeholder={'# Document Title\n\n## Section\nYour content here...'} aria-label="Document content (Markdown)" style={{ ...S.textarea, minHeight: '220px', fontFamily: 'monospace', fontSize: '13px', borderColor: errors.content ? '#DC2626' : 'var(--border-default)' }} />
-            {err('content')}
-          </div>
-        </div>
-
-        <div style={{ padding: '14px 24px', borderTop: '1px solid var(--border-default)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-          <button onClick={onClose} style={S.ghostBtn}>Cancel</button>
-          <button onClick={handleSave} style={S.orangeBtn}>Create Document</button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ─── Suggestion Components ────────────────────────────────────────────────────
-function EditSuggestionModal({ suggestion, onSave, onClose }) {
-  const [form, setForm] = useState({ title: suggestion.title, description: suggestion.description });
-
-  useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
-  return (
-    <>
-      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 500, animation: 'fadeIn 0.15s ease' }} />
-      <div role="dialog" aria-modal="true" aria-label="Edit suggestion" style={{
-        position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-        background: 'var(--bg-surface)', borderRadius: '14px', zIndex: 501,
-        width: '480px', maxWidth: '95vw',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.2s ease',
-        overflow: 'hidden',
-      }}>
-        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: '15px', fontWeight: 900, color: 'var(--text-primary)' }}>Edit Suggestion</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '22px', cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
-        </div>
-        <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div>
-            <label style={S.label}>Title</label>
-            <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} aria-label="Suggestion title" style={S.input} />
-          </div>
-          <div>
-            <label style={S.label}>Description</label>
-            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} aria-label="Suggestion description" style={{ ...S.textarea, minHeight: '100px' }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            <button onClick={onClose} style={S.ghostBtn}>Cancel</button>
-            <button onClick={() => onSave({ ...suggestion, ...form })} style={S.orangeBtn}>Save Changes</button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function SuggestionCard({ suggestion, currentUser, role, onEdit, onDelete }) { // eslint-disable-line no-unused-vars
-  const can = useCan();
-  const isOwn = suggestion.author === currentUser.name;
-  const canEdit = isOwn;
-  const canDelete = isOwn || can('tickets.delete');
-  const initials = suggestion.author.split(' ').map(n => n[0]).join('').toUpperCase();
-  const timeAgo = (() => {
-    const diff = Date.now() - new Date(suggestion.timestamp).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return new Date(suggestion.timestamp).toLocaleDateString();
-  })();
-
-  return (
-    <div style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-          <div style={{
-            width: '30px', height: '30px', borderRadius: '50%', background: '#111111',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: '11px', fontWeight: 700, flexShrink: 0,
-          }}>{initials}</div>
-          <div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{suggestion.author}</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{timeAgo}</div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {canEdit && (
-            <button onClick={() => onEdit(suggestion)} style={{ background: 'none', border: '1.5px solid var(--border-default)', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-secondary)', fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>Edit</button>
-          )}
-          {canDelete && (
-            <button onClick={() => onDelete(suggestion.id)} style={{ background: 'none', border: '1.5px solid #FECACA', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '12px', color: '#DC2626', fontFamily: "'Inter', sans-serif", fontWeight: 700 }}>Delete</button>
-          )}
-        </div>
-      </div>
-      <div style={{ fontSize: '15px', fontWeight: 900, color: 'var(--text-primary)' }}>{suggestion.title}</div>
-      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{suggestion.description}</div>
-    </div>
-  );
-}
-
-function NewSuggestionForm({ currentUser, onSubmit }) {
-  const [form, setForm, clearDraft] = usePersistentState('suggestion-new', { title: '', description: '' });
-  const [errors, setErrors] = useState({});
-
-  const submit = () => {
-    const e = {};
-    if (!form.title.trim()) e.title = 'Required';
-    if (!form.description.trim()) e.description = 'Required';
-    setErrors(e);
-    if (Object.keys(e).length > 0) return;
-    onSubmit({ id: Date.now(), ...form, author: currentUser.name, timestamp: new Date().toISOString() });
-    clearDraft();
-    setErrors({});
-  };
-
-  return (
-    <div style={{ ...S.card, marginBottom: '16px', background: '#FAFBFF', border: '1.5px solid #BFDBFE' }}>
-      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>💡 Suggest a Documentation Topic</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <div>
-          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="Topic title — what should be documented?" aria-label="Suggestion title" style={{ ...S.input, borderColor: errors.title ? '#DC2626' : 'var(--border-default)' }} />
-          {errors.title && <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '3px' }}>{errors.title}</div>}
-        </div>
-        <div>
-          <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe what you need — why it would be helpful, who it's for, what it should cover." aria-label="Suggestion description" style={{ ...S.textarea, minHeight: '80px', borderColor: errors.description ? '#DC2626' : 'var(--border-default)' }} />
-          {errors.description && <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '3px' }}>{errors.description}</div>}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={submit} style={S.orangeBtn}>Post Suggestion</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Pages ────────────────────────────────────────────────────────────────────
-function HomePage({ setSection, role, currentUser }) { // eslint-disable-line no-unused-vars
+function HomePage({ setSection, role }) {
   const can = useCan();
   const canViewAll = can('tickets.view_all');
   const open = MOCK_TICKETS.filter(t => t.status === 'Open' || t.status === 'In Progress').length;
-  const resolved = MOCK_TICKETS.filter(t => t.status === 'Resolved' || t.status === 'Closed').length;
+  const resolved = MOCK_TICKETS.filter(
+    t => t.status === 'Resolved' || t.status === 'Closed'
+  ).length;
   const [activeTicket, setActiveTicket] = useState(null);
-  const firstName = currentUser?.name?.split(' ')[0] || 'there';
 
   // Admin-only stats: critical open, oldest unresolved age, p50 resolution time, SLA breaches
   const adminStats = useMemo(() => {
@@ -4096,32 +6489,111 @@ function HomePage({ setSection, role, currentUser }) { // eslint-disable-line no
     const isOpen = t => !DONE_STATUSES.has(t.status);
     const critical = MOCK_TICKETS.filter(t => t.priority === 'Critical' && isOpen(t)).length;
     const unresolved = MOCK_TICKETS.filter(isOpen);
-    const oldestAgeDays = unresolved.length === 0 ? 0 : Math.max(...unresolved.map(t => Math.floor((now - new Date(t.created).getTime()) / 86400000)));
+    const oldestAgeDays =
+      unresolved.length === 0
+        ? 0
+        : Math.max(
+            ...unresolved.map(t => Math.floor((now - new Date(t.created).getTime()) / 86400000))
+          );
     const resolvedTickets = MOCK_TICKETS.filter(t => DONE_STATUSES.has(t.status));
-    const avgResolutionDays = resolvedTickets.length === 0 ? 0 :
-      Math.round(resolvedTickets.reduce((acc, t) => acc + Math.max(0, (new Date(t.updated) - new Date(t.created)) / 86400000), 0) / resolvedTickets.length);
+    const avgResolutionDays =
+      resolvedTickets.length === 0
+        ? 0
+        : Math.round(
+            resolvedTickets.reduce(
+              (acc, t) => acc + Math.max(0, (new Date(t.updated) - new Date(t.created)) / 86400000),
+              0
+            ) / resolvedTickets.length
+          );
     const slaBreached = MOCK_TICKETS.filter(t => slaStateFor(t) === 'breached').length;
     const slaAtRisk = MOCK_TICKETS.filter(t => slaStateFor(t) === 'at-risk').length;
-    return { critical, oldestAgeDays, avgResolutionDays, unresolvedCount: unresolved.length, slaBreached, slaAtRisk };
+    return {
+      critical,
+      oldestAgeDays,
+      avgResolutionDays,
+      unresolvedCount: unresolved.length,
+      slaBreached,
+      slaAtRisk,
+    };
   }, [canViewAll]);
 
   return (
     <div>
       {/* Edge-to-edge hero banner */}
-      <div style={{ position: 'relative', left: '50%', transform: 'translateX(-50%)', width: '100vw', marginTop: '-32px', marginBottom: '28px', background: 'linear-gradient(150deg, #111111 0%, #1F0F40 55%, #3F1E80 100%)', padding: '64px 40px 68px', textAlign: 'center', overflow: 'hidden' }}>
+      <div
+        style={{
+          position: 'relative',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '100vw',
+          marginTop: '-32px',
+          marginBottom: '28px',
+          background: 'linear-gradient(150deg, #111111 0%, #1F0F40 55%, #3F1E80 100%)',
+          padding: '64px 40px 68px',
+          textAlign: 'center',
+          overflow: 'hidden',
+        }}
+      >
         {/* Subtle radial glow */}
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 70% 80% at 50% 120%, rgba(43,79,138,0.6) 0%, transparent 70%)', pointerEvents: 'none' }} />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background:
+              'radial-gradient(ellipse 70% 80% at 50% 120%, rgba(43,79,138,0.6) 0%, transparent 70%)',
+            pointerEvents: 'none',
+          }}
+        />
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent-primary)', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '14px' }}>
+          <div
+            style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              color: 'var(--accent-primary)',
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              marginBottom: '14px',
+            }}
+          >
             IT Service Management
           </div>
-          <h1 style={{ fontSize: '48px', fontWeight: 900, color: '#fff', margin: '0 0 14px', lineHeight: 1.1, letterSpacing: '-0.01em' }}>
+          <h1
+            style={{
+              fontSize: '48px',
+              fontWeight: 900,
+              color: '#fff',
+              margin: '0 0 14px',
+              lineHeight: 1.1,
+              letterSpacing: '-0.01em',
+            }}
+          >
             Pomelo TechOps Portal
           </h1>
-          <p style={{ fontSize: '16px', color: 'rgba(255,255,255,0.65)', margin: '0 0 36px', fontWeight: 400 }}>
+          <p
+            style={{
+              fontSize: '16px',
+              color: 'rgba(255,255,255,0.65)',
+              margin: '0 0 36px',
+              fontWeight: 400,
+            }}
+          >
             Your single hub for IT support, documentation, and service requests.
           </p>
-          <button onClick={() => setSection('submit')} style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', borderRadius: '100px', padding: '16px 40px', fontFamily: "'Inter', sans-serif", fontWeight: 900, fontSize: '16px', cursor: 'pointer', letterSpacing: '0.01em' }}>
+          <button
+            onClick={() => setSection('submit')}
+            style={{
+              background: 'var(--accent-primary)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '100px',
+              padding: '16px 40px',
+              fontFamily: "'Inter', sans-serif",
+              fontWeight: 900,
+              fontSize: '16px',
+              cursor: 'pointer',
+              letterSpacing: '0.01em',
+            }}
+          >
             Submit a Ticket
           </button>
         </div>
@@ -4133,15 +6605,64 @@ function HomePage({ setSection, role, currentUser }) { // eslint-disable-line no
         if (featured.length === 0) return null;
         return (
           <div style={{ marginBottom: '20px' }}>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: '#92400E', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>📌 Featured by IT</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+            <div
+              style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#92400E',
+                marginBottom: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              📌 Featured by IT
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                gap: '12px',
+              }}
+            >
               {featured.slice(0, 3).map(d => (
-                <button key={d.id} onClick={() => setSection('docs')} style={{ textAlign: 'left', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', padding: '14px 16px', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                <button
+                  key={d.id}
+                  onClick={() => setSection('docs')}
+                  style={{
+                    textAlign: 'left',
+                    background: '#FFFBEB',
+                    border: '1px solid #FDE68A',
+                    borderRadius: '10px',
+                    padding: '14px 16px',
+                    cursor: 'pointer',
+                    fontFamily: "'Inter', sans-serif",
+                  }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontSize: '22px' }}>{d.icon || '📄'}</span>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
-                      <div style={{ fontSize: '11px', color: '#92400E', fontWeight: 700, marginTop: '2px' }}>{d.category}</div>
+                      <div
+                        style={{
+                          fontSize: '14px',
+                          fontWeight: 700,
+                          color: 'var(--text-primary)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {d.title}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '11px',
+                          color: '#92400E',
+                          fontWeight: 700,
+                          marginTop: '2px',
+                        }}
+                      >
+                        {d.category}
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -4152,44 +6673,145 @@ function HomePage({ setSection, role, currentUser }) { // eslint-disable-line no
       })()}
 
       {adminStats && (
-        <div style={{ background: 'linear-gradient(135deg, #111111 0%, #000000 100%)', borderRadius: '14px', padding: '20px 24px', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #111111 0%, #000000 100%)',
+            borderRadius: '14px',
+            padding: '20px 24px',
+            marginBottom: '20px',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '14px',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ background: 'var(--accent-primary)', borderRadius: '8px', width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px' }}>🛠</div>
+              <div
+                style={{
+                  background: 'var(--accent-primary)',
+                  borderRadius: '8px',
+                  width: '34px',
+                  height: '34px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '17px',
+                }}
+              >
+                🛠
+              </div>
               <div>
-                <div style={{ color: '#fff', fontWeight: 900, fontSize: '14px' }}>Admin dashboard</div>
-                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', marginTop: '2px' }}>Live ticket health across the queue</div>
+                <div style={{ color: '#fff', fontWeight: 900, fontSize: '14px' }}>
+                  Admin dashboard
+                </div>
+                <div
+                  style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', marginTop: '2px' }}
+                >
+                  Live ticket health across the queue
+                </div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '22px', flexWrap: 'wrap' }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ color: 'var(--accent-primary)', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{adminStats.unresolvedCount}</div>
-                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>Open</div>
+                <div
+                  style={{
+                    color: 'var(--accent-primary)',
+                    fontWeight: 900,
+                    fontSize: '22px',
+                    lineHeight: 1,
+                  }}
+                >
+                  {adminStats.unresolvedCount}
+                </div>
+                <div
+                  style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}
+                >
+                  Open
+                </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{adminStats.critical}</div>
-                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>Critical Active</div>
+                <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>
+                  {adminStats.critical}
+                </div>
+                <div
+                  style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}
+                >
+                  Critical Active
+                </div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ color: '#FBBF24', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{adminStats.oldestAgeDays}d</div>
-                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>Oldest Unresolved</div>
+                <div style={{ color: '#FBBF24', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>
+                  {adminStats.oldestAgeDays}d
+                </div>
+                <div
+                  style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}
+                >
+                  Oldest Unresolved
+                </div>
               </div>
               <button
                 onClick={() => setSection('mytickets')}
                 title={`${adminStats.slaBreached} breached + ${adminStats.slaAtRisk} at risk — click for My Tickets`}
-                style={{ textAlign: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+                style={{
+                  textAlign: 'center',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontFamily: 'inherit',
+                }}
               >
-                <div style={{ color: adminStats.slaBreached > 0 ? '#FCA5A5' : '#fff', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>
+                <div
+                  style={{
+                    color: adminStats.slaBreached > 0 ? '#FCA5A5' : '#fff',
+                    fontWeight: 900,
+                    fontSize: '22px',
+                    lineHeight: 1,
+                  }}
+                >
                   {adminStats.slaBreached}
-                  {adminStats.slaAtRisk > 0 && <span style={{ fontSize: '13px', color: '#FBBF24', marginLeft: '4px' }}>+{adminStats.slaAtRisk}</span>}
+                  {adminStats.slaAtRisk > 0 && (
+                    <span style={{ fontSize: '13px', color: '#FBBF24', marginLeft: '4px' }}>
+                      +{adminStats.slaAtRisk}
+                    </span>
+                  )}
                 </div>
-                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>SLA Breached</div>
+                <div
+                  style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}
+                >
+                  SLA Breached
+                </div>
               </button>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ color: '#fff', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{adminStats.avgResolutionDays}d</div>
-                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}>Avg Resolution</div>
+                <div style={{ color: '#fff', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>
+                  {adminStats.avgResolutionDays}d
+                </div>
+                <div
+                  style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '3px' }}
+                >
+                  Avg Resolution
+                </div>
               </div>
-              <button onClick={() => setSection('admin')} style={{ alignSelf: 'center', background: 'rgba(124,58,237,0.2)', color: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', borderRadius: '7px', padding: '8px 14px', fontFamily: "'Inter', sans-serif", fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+              <button
+                onClick={() => setSection('admin')}
+                style={{
+                  alignSelf: 'center',
+                  background: 'rgba(124,58,237,0.2)',
+                  color: 'var(--accent-primary)',
+                  border: '1px solid var(--accent-primary)',
+                  borderRadius: '7px',
+                  padding: '8px 14px',
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
                 Open Console →
               </button>
             </div>
@@ -4197,7 +6819,14 @@ function HomePage({ setSection, role, currentUser }) { // eslint-disable-line no
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '28px' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '16px',
+          marginBottom: '28px',
+        }}
+      >
         {[
           { num: MOCK_TICKETS.length, label: 'Total Tickets', color: 'var(--text-primary)' },
           { num: open, label: 'Active', color: 'var(--accent-primary)' },
@@ -4210,28 +6839,68 @@ function HomePage({ setSection, role, currentUser }) { // eslint-disable-line no
         ))}
       </div>
 
-      <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '14px' }}>Quick Actions</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '28px' }}>
+      <div
+        style={{
+          fontSize: '16px',
+          fontWeight: 700,
+          color: 'var(--text-primary)',
+          marginBottom: '14px',
+        }}
+      >
+        Quick Actions
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: '12px',
+          marginBottom: '28px',
+        }}
+      >
         {[
           { icon: '🔑', label: 'Password Reset', desc: 'Reset account or MFA', section: 'docs' },
-          { icon: '🖥️', label: 'Hardware Request', desc: 'Replacement or loaner', section: 'submit' },
+          {
+            icon: '🖥️',
+            label: 'Hardware Request',
+            desc: 'Replacement or loaner',
+            section: 'submit',
+          },
           { icon: '🌐', label: 'VPN Setup', desc: 'Remote access guide', section: 'docs' },
           { icon: '🎟️', label: 'My Tickets', desc: 'View & track requests', section: 'mytickets' },
         ].map(q => (
-          <button key={q.label} onClick={() => setSection(q.section)} style={{
-            background: 'var(--bg-surface)', border: '1.5px solid var(--border-default)', borderRadius: '10px',
-            padding: '16px 20px', cursor: 'pointer', textAlign: 'left',
-            display: 'flex', alignItems: 'center', gap: '14px',
-            transition: 'border-color 0.15s, box-shadow 0.15s',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-primary)'; e.currentTarget.style.boxShadow = '0 2px 10px rgba(124,58,237,0.1)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; }}
+          <button
+            key={q.label}
+            onClick={() => setSection(q.section)}
+            style={{
+              background: 'var(--bg-surface)',
+              border: '1.5px solid var(--border-default)',
+              borderRadius: '10px',
+              padding: '16px 20px',
+              cursor: 'pointer',
+              textAlign: 'left',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              transition: 'border-color 0.15s, box-shadow 0.15s',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = 'var(--accent-primary)';
+              e.currentTarget.style.boxShadow = '0 2px 10px rgba(124,58,237,0.1)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = 'var(--border-default)';
+              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)';
+            }}
           >
             <span style={{ fontSize: '24px' }}>{q.icon}</span>
             <div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{q.label}</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{q.desc}</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                {q.label}
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                {q.desc}
+              </div>
             </div>
           </button>
         ))}
@@ -4239,46 +6908,114 @@ function HomePage({ setSection, role, currentUser }) { // eslint-disable-line no
 
       <RecentActivityFeed role={role} onTicket={setActiveTicket} setSection={setSection} />
 
-      {activeTicket && <TicketPopupModal ticket={activeTicket} onClose={() => setActiveTicket(null)} />}
+      {activeTicket && (
+        <TicketPopupModal ticket={activeTicket} onClose={() => setActiveTicket(null)} />
+      )}
     </div>
   );
 }
 
-const PLATFORMS = ['Shopify', 'Lazada', 'Shopee', 'TikTok Shop', 'Amazon', 'Tmall', 'JD.com', 'Nykaa', 'Internal Tools', 'Other'];
-const SHOPS = ['Pomelo TH', 'Pomelo MY', 'Pomelo SG', 'Pomelo PH', 'Pomelo ID', 'Pomelo VN', 'Shopee TH', 'Shopee SG', 'Lazada TH', 'Lazada SG', 'Tiktok TH', 'TMall', 'RED', 'JD', 'Zalora SG', 'Zalora HK', 'Nykaa Ind', 'All Shops', 'Not Applicable'];
-const DEPARTMENTS = ['Marketing', 'Merchandising', 'Tech & Engineering', 'Finance', 'HR & People', 'Operations', 'Creative', 'Customer Experience', 'Leadership', 'Other'];
+const PLATFORMS = [
+  'Shopify',
+  'Lazada',
+  'Shopee',
+  'TikTok Shop',
+  'Amazon',
+  'Tmall',
+  'JD.com',
+  'Nykaa',
+  'Internal Tools',
+  'Other',
+];
+const SHOPS = [
+  'Pomelo TH',
+  'Pomelo MY',
+  'Pomelo SG',
+  'Pomelo PH',
+  'Pomelo ID',
+  'Pomelo VN',
+  'Shopee TH',
+  'Shopee SG',
+  'Lazada TH',
+  'Lazada SG',
+  'Tiktok TH',
+  'TMall',
+  'RED',
+  'JD',
+  'Zalora SG',
+  'Zalora HK',
+  'Nykaa Ind',
+  'All Shops',
+  'Not Applicable',
+];
+const DEPARTMENTS = [
+  'Marketing',
+  'Merchandising',
+  'Tech & Engineering',
+  'Finance',
+  'HR & People',
+  'Operations',
+  'Creative',
+  'Customer Experience',
+  'Leadership',
+  'Other',
+];
 
 const EMPTY_FORM = {
-  email: '', title: '', description: '', currentResult: '',
-  expectedResult: '', platforms: [], shop: '', priority: '',
-  department: '', files: [],
-  issueType: '', components: [], labels: '',
+  email: '',
+  title: '',
+  description: '',
+  currentResult: '',
+  expectedResult: '',
+  platforms: [],
+  shop: '',
+  priority: '',
+  department: '',
+  files: [],
+  issueType: '',
+  components: [],
+  labels: '',
 };
 
 function PlatformCheckbox({ value, selected, onChange }) {
   const checked = selected.includes(value);
   return (
-    <label style={{
-      display: 'flex', alignItems: 'center', gap: '8px',
-      padding: '7px 12px', borderRadius: '7px', cursor: 'pointer',
-      background: checked ? 'var(--accent-soft)' : 'var(--bg-page)',
-      border: `1.5px solid ${checked ? 'var(--accent-primary)' : 'var(--border-default)'}`,
-      fontSize: '13px', color: checked ? 'var(--accent-primary)' : 'var(--text-secondary)',
-      fontWeight: checked ? 700 : 400, transition: 'all 0.15s',
-      userSelect: 'none',
-    }}>
+    <label
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '7px 12px',
+        borderRadius: '7px',
+        cursor: 'pointer',
+        background: checked ? 'var(--accent-soft)' : 'var(--bg-page)',
+        border: `1.5px solid ${checked ? 'var(--accent-primary)' : 'var(--border-default)'}`,
+        fontSize: '13px',
+        color: checked ? 'var(--accent-primary)' : 'var(--text-secondary)',
+        fontWeight: checked ? 700 : 400,
+        transition: 'all 0.15s',
+        userSelect: 'none',
+      }}
+    >
       <input
         type="checkbox"
         checked={checked}
         onChange={() => onChange(value)}
         style={{ display: 'none' }}
       />
-      <span style={{
-        width: '15px', height: '15px', borderRadius: '4px', flexShrink: 0,
-        background: checked ? 'var(--accent-primary)' : '#fff',
-        border: `1.5px solid ${checked ? 'var(--accent-primary)' : 'var(--border-strong)'}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
+      <span
+        style={{
+          width: '15px',
+          height: '15px',
+          borderRadius: '4px',
+          flexShrink: 0,
+          background: checked ? 'var(--accent-primary)' : '#fff',
+          border: `1.5px solid ${checked ? 'var(--accent-primary)' : 'var(--border-strong)'}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         {checked && <span style={{ color: '#fff', fontSize: '10px', lineHeight: 1 }}>✓</span>}
       </span>
       {value}
@@ -4287,14 +7024,21 @@ function PlatformCheckbox({ value, selected, onChange }) {
 }
 
 function FieldHint({ text }) {
-  return <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.5 }}>{text}</div>;
+  return (
+    <div
+      style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.5 }}
+    >
+      {text}
+    </div>
+  );
 }
 
-function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-line no-unused-vars
+function SubmitPage({ setSection, showToast, currentUser }) {
   const workflow = useJiraWorkflow();
   const issueTypes = useIssueTypes();
   const components = useComponents();
-  const initialStatus = (workflow.statuses.find(s => s.category === 'new') || workflow.statuses[0])?.name || 'To Do';
+  const initialStatus =
+    (workflow.statuses.find(s => s.category === 'new') || workflow.statuses[0])?.name || 'To Do';
   const [form, setForm, clearDraft] = usePersistentState('submit', EMPTY_FORM, { omit: ['files'] });
   const [triage, setTriage] = useState(null); // { priority, reasoning, suggestedDocs, confidence }
   const [triaging, setTriaging] = useState(false);
@@ -4341,24 +7085,25 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
 
   const handleChange = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const togglePlatform = (p) => {
+  const togglePlatform = p => {
     setForm(f => ({
       ...f,
       platforms: f.platforms.includes(p) ? f.platforms.filter(x => x !== p) : [...f.platforms, p],
     }));
   };
 
-  const handleFiles = (e) => {
+  const handleFiles = e => {
     const picked = Array.from(e.target.files || []);
     setForm(f => ({ ...f, files: [...f.files, ...picked] }));
   };
 
-  const removeFile = (idx) => setForm(f => ({ ...f, files: f.files.filter((_, i) => i !== idx) }));
+  const removeFile = idx => setForm(f => ({ ...f, files: f.files.filter((_, i) => i !== idx) }));
 
   const validate = () => {
     const e = {};
     if (!form.email.trim()) e.email = 'Required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email address';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+      e.email = 'Enter a valid email address';
     if (!form.title.trim()) e.title = 'Required';
     if (!form.description.trim()) e.description = 'Required';
     if (!form.priority) e.priority = 'Required';
@@ -4371,7 +7116,7 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
 
   const [submitting, setSubmitting] = useState(false);
 
-  const buildLocalTicket = (id) => {
+  const buildLocalTicket = id => {
     const today = new Date().toISOString().slice(0, 10);
     const defaults = getSettings();
     return {
@@ -4395,7 +7140,10 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
       platforms: [...form.platforms],
       issueType: form.issueType || null,
       components: [...form.components],
-      labels: form.labels.split(',').map(s => s.trim()).filter(Boolean),
+      labels: form.labels
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean),
       attachmentCount: form.files.length,
       attachments: [], // populated below in submit() once files are read
       timeline: [{ date: today, actor: currentUser?.name || form.email, action: 'Ticket opened' }],
@@ -4430,23 +7178,34 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
       if (form.files.length > 0) {
         try {
           const payload = {
-            files: await Promise.all(form.files.slice(0, 10).map(file => new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => {
-                const dataUrl = reader.result || '';
-                const dataBase64 = String(dataUrl).split(',')[1] || '';
-                resolve({ filename: file.name, contentType: file.type || 'application/octet-stream', dataBase64 });
-              };
-              reader.onerror = () => reject(new Error('read'));
-              reader.readAsDataURL(file);
-            }))),
+            files: await Promise.all(
+              form.files.slice(0, 10).map(
+                file =>
+                  new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const dataUrl = reader.result || '';
+                      const dataBase64 = String(dataUrl).split(',')[1] || '';
+                      resolve({
+                        filename: file.name,
+                        contentType: file.type || 'application/octet-stream',
+                        dataBase64,
+                      });
+                    };
+                    reader.onerror = () => reject(new Error('read'));
+                    reader.readAsDataURL(file);
+                  })
+              )
+            ),
           };
           await fetch(`/api/v1/jira/issue/${encodeURIComponent(jiraKey)}/attachments`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });
-        } catch { /* attachments are best-effort */ }
+        } catch {
+          /* attachments are best-effort */
+        }
       }
       setSubmitting(false);
     } else {
@@ -4474,21 +7233,27 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
     if (API_ENABLED) {
       // Persist to the backend; adopt the server's identity (uuid + canonical
       // key) on the local copy so later mutations target the real row.
-      ticketsApi.createTicket({
-        title: ticket.title,
-        description: ticket.description || '',
-        ...(ticket.category ? { category: ticket.category } : {}),
-        priority: ticket.priority || 'Medium',
-        ...(ticket.department ? { department: ticket.department } : {}),
-        ...(ticket.shop ? { shop: ticket.shop } : {}),
-        platforms: ticket.platforms || [],
-      }).then(res => {
-        if (res.error) return console.warn('[api] backend mirror failed:', res.error);
-        const localId = ticket.id;
-        updateTickets(ts => ts.map(x => x.id === localId
-          ? { ...x, id: res.data.key, key: res.data.key, uuid: res.data.id }
-          : x));
-      });
+      ticketsApi
+        .createTicket({
+          title: ticket.title,
+          description: ticket.description || '',
+          ...(ticket.category ? { category: ticket.category } : {}),
+          priority: ticket.priority || 'Medium',
+          ...(ticket.department ? { department: ticket.department } : {}),
+          ...(ticket.shop ? { shop: ticket.shop } : {}),
+          platforms: ticket.platforms || [],
+        })
+        .then(res => {
+          if (res.error) return console.warn('[api] backend mirror failed:', res.error);
+          const localId = ticket.id;
+          updateTickets(ts =>
+            ts.map(x =>
+              x.id === localId
+                ? { ...x, id: res.data.key, key: res.data.key, uuid: res.data.id }
+                : x
+            )
+          );
+        });
     }
     showToast(`Your ticket ${ticketId} has been submitted.${extraNote}`);
     clearDraft();
@@ -4497,17 +7262,21 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
     setSection?.('mytickets');
   };
 
-  const err = (k) => errors[k] ? <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '4px' }}>{errors[k]}</div> : null;
-  const borderOf = (k) => ({ borderColor: errors[k] ? '#DC2626' : 'var(--border-default)' });
+  const err = k =>
+    errors[k] ? (
+      <div style={{ fontSize: '12px', color: '#DC2626', marginTop: '4px' }}>{errors[k]}</div>
+    ) : null;
+  const borderOf = k => ({ borderColor: errors[k] ? '#DC2626' : 'var(--border-default)' });
 
   return (
     <div>
       <div style={S.pageTitle}>Submit a Ticket</div>
-      <div style={S.pageSub}>Fill in all the details below so the TechOps team can action your request efficiently.</div>
+      <div style={S.pageSub}>
+        Fill in all the details below so the TechOps team can action your request efficiently.
+      </div>
 
       <div style={{ ...S.card, maxWidth: '760px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
-
           {/* Email */}
           <div>
             <label style={S.label}>Email *</label>
@@ -4531,7 +7300,11 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
               placeholder="Short, direct summary of your issue or request"
               style={{ ...S.input, ...borderOf('title') }}
             />
-            <FieldHint text={'Keep it concise and specific — e.g. "Product images not uploading on Shopify TH".'} />
+            <FieldHint
+              text={
+                'Keep it concise and specific — e.g. "Product images not uploading on Shopify TH".'
+              }
+            />
             {err('title')}
           </div>
 
@@ -4577,7 +7350,12 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
             <label style={S.label}>Platform Impacted *</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '2px' }}>
               {PLATFORMS.map(p => (
-                <PlatformCheckbox key={p} value={p} selected={form.platforms} onChange={togglePlatform} />
+                <PlatformCheckbox
+                  key={p}
+                  value={p}
+                  selected={form.platforms}
+                  onChange={togglePlatform}
+                />
               ))}
             </div>
             <FieldHint text="Select all platforms that are affected by this issue or request." />
@@ -4595,9 +7373,24 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
                   style={{ ...S.select, ...borderOf('shop') }}
                 >
                   <option value="">Select shop</option>
-                  {SHOPS.map(s => <option key={s} value={s}>{s}</option>)}
+                  {SHOPS.map(s => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
                 </select>
-                <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }}>▾</span>
+                <span
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    pointerEvents: 'none',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  ▾
+                </span>
               </div>
               <FieldHint text="Which shop is affected or needs to be updated?" />
               {err('shop')}
@@ -4611,9 +7404,24 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
                   style={{ ...S.select, ...borderOf('department') }}
                 >
                   <option value="">Select department</option>
-                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                  {DEPARTMENTS.map(d => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
                 </select>
-                <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }}>▾</span>
+                <span
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    pointerEvents: 'none',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  ▾
+                </span>
               </div>
               <FieldHint text="Which department are you part of?" />
               {err('department')}
@@ -4630,13 +7438,34 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
                 style={S.select}
               >
                 <option value="">Auto-detect</option>
-                {issueTypes.issueTypes.filter(t => !t.subtask).map(t => (
-                  <option key={t.id} value={t.name}>{t.name}</option>
-                ))}
+                {issueTypes.issueTypes
+                  .filter(t => !t.subtask)
+                  .map(t => (
+                    <option key={t.id} value={t.name}>
+                      {t.name}
+                    </option>
+                  ))}
               </select>
-              <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }}>▾</span>
+              <span
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  pointerEvents: 'none',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                ▾
+              </span>
             </div>
-            <FieldHint text={issueTypes.source === 'jira' ? `Live from your Jira project (${issueTypes.issueTypes.length} types).` : 'Using fallback types — connect Jira to load your project\'s real types.'} />
+            <FieldHint
+              text={
+                issueTypes.source === 'jira'
+                  ? `Live from your Jira project (${issueTypes.issueTypes.length} types).`
+                  : "Using fallback types — connect Jira to load your project's real types."
+              }
+            />
           </div>
 
           {/* Components (from Jira) — only render if any exist */}
@@ -4647,18 +7476,34 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
                 {components.components.map(c => {
                   const checked = form.components.includes(c.name);
                   return (
-                    <label key={c.id} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '6px',
-                      padding: '6px 12px', borderRadius: '6px', cursor: 'pointer',
-                      background: checked ? 'var(--accent-soft)' : 'var(--bg-page)',
-                      border: `1.5px solid ${checked ? 'var(--accent-primary)' : 'var(--border-default)'}`,
-                      fontSize: '12px', color: checked ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                      fontWeight: checked ? 700 : 400, userSelect: 'none',
-                    }}>
+                    <label
+                      key={c.id}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        background: checked ? 'var(--accent-soft)' : 'var(--bg-page)',
+                        border: `1.5px solid ${checked ? 'var(--accent-primary)' : 'var(--border-default)'}`,
+                        fontSize: '12px',
+                        color: checked ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                        fontWeight: checked ? 700 : 400,
+                        userSelect: 'none',
+                      }}
+                    >
                       <input
                         type="checkbox"
                         checked={checked}
-                        onChange={() => handleChange('components', checked ? form.components.filter(x => x !== c.name) : [...form.components, c.name])}
+                        onChange={() =>
+                          handleChange(
+                            'components',
+                            checked
+                              ? form.components.filter(x => x !== c.name)
+                              : [...form.components, c.name]
+                          )
+                        }
                         style={{ width: '14px', height: '14px' }}
                       />
                       {c.name}
@@ -4685,14 +7530,34 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
 
           {/* Priority */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '6px',
+                gap: '8px',
+                flexWrap: 'wrap',
+              }}
+            >
               <label style={{ ...S.label, marginBottom: 0 }}>Priority *</label>
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   onClick={runTriage}
                   disabled={triaging}
-                  style={{ background: 'none', border: 'none', color: triaging ? 'var(--text-muted)' : 'var(--accent-primary)', fontSize: '13px', fontWeight: 600, cursor: triaging ? 'wait' : 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: triaging ? 'var(--text-muted)' : 'var(--accent-primary)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: triaging ? 'wait' : 'pointer',
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                  }}
                 >
                   <Sparkles size={14} strokeWidth={2} />
                   {triaging ? 'Triaging…' : 'AI Suggest'}
@@ -4700,41 +7565,135 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
                 <button
                   type="button"
                   onClick={() => setShowSuggester(!showSuggester)}
-                  style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent-primary)',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
                 >
                   {showSuggester ? 'Hide suggester' : '🧠 Smart Suggester'}
                 </button>
               </div>
             </div>
             {triageError && (
-              <div style={{ marginBottom: '8px', padding: '8px 12px', background: '#FEF2F2', color: '#B91C1C', borderRadius: '7px', fontSize: '12px', fontWeight: 600 }}>
+              <div
+                style={{
+                  marginBottom: '8px',
+                  padding: '8px 12px',
+                  background: '#FEF2F2',
+                  color: '#B91C1C',
+                  borderRadius: '7px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                }}
+              >
                 ⚠ {triageError}
               </div>
             )}
             {triage && (
-              <div style={{ marginBottom: '10px', padding: '12px 14px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#1E3A8A', textTransform: 'uppercase', letterSpacing: '0.06em' }}>✨ AI suggested</span>
+              <div
+                style={{
+                  marginBottom: '10px',
+                  padding: '12px 14px',
+                  background: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: '10px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '6px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#1E3A8A',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    ✨ AI suggested
+                  </span>
                   <span style={S.badge(PRIORITY_COLORS[triage.priority])}>{triage.priority}</span>
-                  <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#DBEAFE', color: '#1E3A8A', fontWeight: 700 }}>{triage.confidence} confidence</span>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      background: '#DBEAFE',
+                      color: '#1E3A8A',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {triage.confidence} confidence
+                  </span>
                   <button
                     type="button"
-                    onClick={() => { handleChange('priority', triage.priority); }}
-                    style={{ marginLeft: 'auto', padding: '5px 12px', background: '#1D4ED8', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                    onClick={() => {
+                      handleChange('priority', triage.priority);
+                    }}
+                    style={{
+                      marginLeft: 'auto',
+                      padding: '5px 12px',
+                      background: '#1D4ED8',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
                   >
                     Accept
                   </button>
                 </div>
-                {triage.reasoning && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{triage.reasoning}</div>}
+                {triage.reasoning && (
+                  <div
+                    style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}
+                  >
+                    {triage.reasoning}
+                  </div>
+                )}
                 {triage.suggestedDocs.length > 0 && (
-                  <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700 }}>📚 Relevant docs:</span>
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span
+                      style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700 }}
+                    >
+                      📚 Relevant docs:
+                    </span>
                     {triage.suggestedDocs.map(d => (
                       <button
                         key={d}
                         type="button"
                         onClick={() => setSection?.('docs')}
-                        style={{ padding: '4px 10px', background: 'var(--bg-surface)', border: '1px solid #BFDBFE', borderRadius: '100px', fontSize: '12px', color: '#1E3A8A', fontWeight: 600, cursor: 'pointer' }}
+                        style={{
+                          padding: '4px 10px',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid #BFDBFE',
+                          borderRadius: '100px',
+                          fontSize: '12px',
+                          color: '#1E3A8A',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
                       >
                         {d} →
                       </button>
@@ -4750,22 +7709,56 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
                 style={{ ...S.select, ...borderOf('priority') }}
               >
                 <option value="">Select priority</option>
-                {Object.keys(PRIORITY_COLORS).map(p => <option key={p} value={p}>{p}</option>)}
+                {Object.keys(PRIORITY_COLORS).map(p => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
               </select>
-              <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)' }}>▾</span>
+              <span
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  pointerEvents: 'none',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                ▾
+              </span>
             </div>
             <FieldHint text="Consider business impact, effort required, and deadline. See the Priority Guide for definitions." />
             {err('priority')}
             {showSuggester && (
               <div style={{ marginTop: '10px' }}>
-                <PrioritySuggester onSelect={(p) => { handleChange('priority', p); setShowSuggester(false); }} />
+                <PrioritySuggester
+                  onSelect={p => {
+                    handleChange('priority', p);
+                    setShowSuggester(false);
+                  }}
+                />
               </div>
             )}
             {form.priority && (
-              <div style={{ marginTop: '10px', background: PRIORITY_COLORS[form.priority] + '10', border: `1.5px solid ${PRIORITY_COLORS[form.priority]}30`, borderRadius: '8px', padding: '10px 14px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <div
+                style={{
+                  marginTop: '10px',
+                  background: PRIORITY_COLORS[form.priority] + '10',
+                  border: `1.5px solid ${PRIORITY_COLORS[form.priority]}30`,
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'center',
+                }}
+              >
                 <span style={S.badge(PRIORITY_COLORS[form.priority])}>{form.priority}</span>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  Response: <strong>{SLA_DATA.find(s => s.priority === form.priority)?.response}</strong> · Resolution: <strong>{SLA_DATA.find(s => s.priority === form.priority)?.resolution}</strong>
+                  Response:{' '}
+                  <strong>{SLA_DATA.find(s => s.priority === form.priority)?.response}</strong> ·
+                  Resolution:{' '}
+                  <strong>{SLA_DATA.find(s => s.priority === form.priority)?.resolution}</strong>
                 </div>
               </div>
             )}
@@ -4777,17 +7770,38 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
             <div
               onClick={() => fileInputRef.current?.click()}
               style={{
-                border: '2px dashed var(--border-default)', borderRadius: '10px', padding: '24px',
-                textAlign: 'center', cursor: 'pointer', background: 'var(--bg-page)',
+                border: '2px dashed var(--border-default)',
+                borderRadius: '10px',
+                padding: '24px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                background: 'var(--bg-page)',
                 transition: 'border-color 0.15s',
               }}
-              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-primary)'}
-              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent-primary)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-default)')}
             >
               <div style={{ fontSize: '28px', marginBottom: '8px' }}>📎</div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>Click to upload files</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Screenshots, exports, spreadsheets — any files that help illustrate the issue</div>
-              <input ref={fileInputRef} type="file" multiple onChange={handleFiles} style={{ display: 'none' }} />
+              <div
+                style={{
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                  marginBottom: '4px',
+                }}
+              >
+                Click to upload files
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Screenshots, exports, spreadsheets — any files that help illustrate the issue
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFiles}
+                style={{ display: 'none' }}
+              />
             </div>
             {form.files.length > 0 && (
               <SubmitFilesPreview files={form.files} onRemove={removeFile} />
@@ -4796,20 +7810,62 @@ function SubmitPage({ setSection, showToast, currentUser }) { // eslint-disable-
           </div>
 
           {/* Actions */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '4px', borderTop: '1px solid var(--border-subtle)' }}>
-            <button onClick={() => { clearDraft(); setErrors({}); if (fileInputRef.current) fileInputRef.current.value = ''; }} disabled={submitting} style={{ ...S.ghostBtn, opacity: submitting ? 0.5 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}>Clear Form</button>
-            <button onClick={submit} disabled={submitting} style={{ ...S.orangeBtn, opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '7px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px',
+              paddingTop: '4px',
+              borderTop: '1px solid var(--border-subtle)',
+            }}
+          >
+            <button
+              onClick={() => {
+                clearDraft();
+                setErrors({});
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }}
+              disabled={submitting}
+              style={{
+                ...S.ghostBtn,
+                opacity: submitting ? 0.5 : 1,
+                cursor: submitting ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Clear Form
+            </button>
+            <button
+              onClick={submit}
+              disabled={submitting}
+              style={{
+                ...S.orangeBtn,
+                opacity: submitting ? 0.7 : 1,
+                cursor: submitting ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+              }}
+            >
               {submitting ? (
                 <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0.8s linear infinite' }}>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    style={{ animation: 'spin 0.8s linear infinite' }}
+                  >
                     <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
                   </svg>
                   Submitting…
                 </>
-              ) : 'Submit Ticket'}
+              ) : (
+                'Submit Ticket'
+              )}
             </button>
           </div>
-
         </div>
       </div>
     </div>
@@ -4820,7 +7876,9 @@ function PriorityGuidePage() {
   return (
     <div>
       <div style={S.pageTitle}>Priority Guide</div>
-      <div style={S.pageSub}>Use this guide to select the right priority when submitting a ticket.</div>
+      <div style={S.pageSub}>
+        Use this guide to select the right priority when submitting a ticket.
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '720px' }}>
         {[
@@ -4828,50 +7886,107 @@ function PriorityGuidePage() {
             priority: 'Critical',
             color: '#DC2626',
             icon: '🚨',
-            definition: 'Complete work stoppage affecting one or more teams. Business-critical systems are fully down.',
-            examples: ['Production website is down', 'Payment processing is failing', 'All users locked out of a core system'],
-            avoid: 'Don\'t use Critical for issues that have workarounds or affect only one person.',
+            definition:
+              'Complete work stoppage affecting one or more teams. Business-critical systems are fully down.',
+            examples: [
+              'Production website is down',
+              'Payment processing is failing',
+              'All users locked out of a core system',
+            ],
+            avoid: "Don't use Critical for issues that have workarounds or affect only one person.",
           },
           {
             priority: 'High',
             color: '#EA580C',
             icon: '🔴',
-            definition: 'Significant disruption to work with no easy workaround. Time-sensitive impact.',
-            examples: ['VPN not working for remote employee with no backup', 'Critical software crash with no alternative', 'Security concern requiring immediate attention'],
-            avoid: 'Don\'t use High if there\'s a reasonable workaround available.',
+            definition:
+              'Significant disruption to work with no easy workaround. Time-sensitive impact.',
+            examples: [
+              'VPN not working for remote employee with no backup',
+              'Critical software crash with no alternative',
+              'Security concern requiring immediate attention',
+            ],
+            avoid: "Don't use High if there's a reasonable workaround available.",
           },
           {
             priority: 'Medium',
             color: '#CA8A04',
             icon: '🟡',
             definition: 'Issue affecting productivity but work can continue. A workaround exists.',
-            examples: ['Slow system performance', 'Non-urgent software bugs', 'Peripheral device malfunction with spare available'],
-            avoid: 'Don\'t use Medium for requests (e.g., new software installs) — use Low.',
+            examples: [
+              'Slow system performance',
+              'Non-urgent software bugs',
+              'Peripheral device malfunction with spare available',
+            ],
+            avoid: "Don't use Medium for requests (e.g., new software installs) — use Low.",
           },
           {
             priority: 'Low',
             color: '#16A34A',
             icon: '🟢',
             definition: 'Minor issues, general requests, or planned tasks with no time pressure.',
-            examples: ['New software installation request', 'Hardware upgrade for future use', 'General "how do I" questions'],
-            avoid: 'Don\'t use Low if the issue is actively blocking any work.',
+            examples: [
+              'New software installation request',
+              'Hardware upgrade for future use',
+              'General "how do I" questions',
+            ],
+            avoid: "Don't use Low if the issue is actively blocking any work.",
           },
         ].map(p => (
           <div key={p.priority} style={{ ...S.card, borderLeft: `4px solid ${p.color}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}
+            >
               <span style={{ fontSize: '20px' }}>{p.icon}</span>
               <div style={{ fontSize: '18px', fontWeight: 900, color: p.color }}>{p.priority}</div>
             </div>
-            <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '12px', lineHeight: 1.6 }}>{p.definition}</div>
+            <div
+              style={{
+                fontSize: '14px',
+                color: 'var(--text-secondary)',
+                marginBottom: '12px',
+                lineHeight: 1.6,
+              }}
+            >
+              {p.definition}
+            </div>
             <div style={{ marginBottom: '10px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Examples</div>
+              <div
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                  marginBottom: '6px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                Examples
+              </div>
               {p.examples.map((e, i) => (
-                <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '3px' }}>
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    fontSize: '13px',
+                    color: 'var(--text-secondary)',
+                    marginBottom: '3px',
+                  }}
+                >
                   <span style={{ color: p.color }}>•</span> {e}
                 </div>
               ))}
             </div>
-            <div style={{ background: '#FFF8F6', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', color: '#92400E' }}>
+            <div
+              style={{
+                background: '#FFF8F6',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                fontSize: '12px',
+                color: '#92400E',
+              }}
+            >
               ⚠️ {p.avoid}
             </div>
           </div>
@@ -4885,7 +8000,9 @@ function SLAPage() {
   return (
     <div>
       <div style={S.pageTitle}>SLA & Standards</div>
-      <div style={S.pageSub}>Our committed response and resolution times for each priority level.</div>
+      <div style={S.pageSub}>
+        Our committed response and resolution times for each priority level.
+      </div>
 
       <div style={{ ...S.card, marginBottom: '24px' }}>
         <div style={{ overflowX: 'auto' }}>
@@ -4893,20 +8010,67 @@ function SLAPage() {
             <thead>
               <tr style={{ borderBottom: '2px solid var(--border-default)' }}>
                 {['Priority', 'Response Time', 'Resolution Target', 'Status'].map(h => (
-                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                  <th
+                    key={h}
+                    style={{
+                      padding: '10px 16px',
+                      textAlign: 'left',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: 'var(--text-secondary)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {SLA_DATA.map((row, i) => (
-                <tr key={row.priority} style={{ borderBottom: '1px solid var(--border-subtle)', background: i % 2 === 0 ? 'var(--bg-page)' : 'var(--bg-surface)' }}>
+                <tr
+                  key={row.priority}
+                  style={{
+                    borderBottom: '1px solid var(--border-subtle)',
+                    background: i % 2 === 0 ? 'var(--bg-page)' : 'var(--bg-surface)',
+                  }}
+                >
                   <td style={{ padding: '14px 16px' }}>
                     <span style={S.badge(row.color)}>{row.priority}</span>
                   </td>
-                  <td style={{ padding: '14px 16px', fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{row.response}</td>
-                  <td style={{ padding: '14px 16px', fontSize: '14px', color: 'var(--text-secondary)' }}>{row.resolution}</td>
+                  <td
+                    style={{
+                      padding: '14px 16px',
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    {row.response}
+                  </td>
+                  <td
+                    style={{
+                      padding: '14px 16px',
+                      fontSize: '14px',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {row.resolution}
+                  </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <span style={{ fontSize: '12px', color: '#16A34A', fontWeight: 700, background: '#DCFCE7', padding: '3px 10px', borderRadius: '100px' }}>Active</span>
+                    <span
+                      style={{
+                        fontSize: '12px',
+                        color: '#16A34A',
+                        fontWeight: 700,
+                        background: '#DCFCE7',
+                        padding: '3px 10px',
+                        borderRadius: '100px',
+                      }}
+                    >
+                      Active
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -4917,7 +8081,16 @@ function SLAPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <div style={S.card}>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>Support Hours</div>
+          <div
+            style={{
+              fontSize: '15px',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              marginBottom: '12px',
+            }}
+          >
+            Support Hours
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {[
               ['Monday – Friday', '9:30 AM – 6:30 PM (ICT)'],
@@ -4925,7 +8098,10 @@ function SLAPage() {
               ['Sunday & Public Holidays', 'Emergency only'],
               ['Emergency Channel', 'Slack #techops-urgent'],
             ].map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+              <div
+                key={k}
+                style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}
+              >
                 <span style={{ color: 'var(--text-secondary)' }}>{k}</span>
                 <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v}</span>
               </div>
@@ -4933,7 +8109,16 @@ function SLAPage() {
           </div>
         </div>
         <div style={S.card}>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>Standards & Compliance</div>
+          <div
+            style={{
+              fontSize: '15px',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              marginBottom: '12px',
+            }}
+          >
+            Standards & Compliance
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {[
               'All tickets acknowledged within SLA response time',
@@ -4942,7 +8127,15 @@ function SLAPage() {
               'Monthly SLA report shared with department heads',
               'Escalation to IT Manager after 2× resolution time',
             ].map((item, i) => (
-              <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                }}
+              >
                 <span style={{ color: 'var(--accent-primary)', flexShrink: 0 }}>✓</span> {item}
               </div>
             ))}
@@ -4953,7 +8146,7 @@ function SLAPage() {
   );
 }
 
-function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused-vars
+function MyTicketsPage({ role, currentUser }) {
   const can = useCan();
   const [, _setTicketsVersion] = useState(0);
   useEffect(() => subscribeTickets(_setTicketsVersion), []);
@@ -5010,49 +8203,86 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
 
   const handleStatusChange = (id, newStatus) => {
     const ticket = tickets.find(t => t.id === id);
-    updateTickets(ts => ts.map(t => t.id === id ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) } : t));
+    updateTickets(ts =>
+      ts.map(t =>
+        t.id === id
+          ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) }
+          : t
+      )
+    );
     mirror(ticket?.uuid && ticketsApi.updateTicket(ticket.uuid, { status: newStatus }));
     if (ticket?.jiraKey) pushJiraTransition(ticket, newStatus);
   };
 
   const handleAssigneeChange = (id, assignee) => {
     const ticket = tickets.find(t => t.id === id);
-    updateTickets(ts => ts.map(t => t.id === id ? { ...t, assignee } : t));
-    mirror(ticket?.uuid && ticketsApi.assignTicket(ticket.uuid, emailForAssignee(assignee) || null, assignee || undefined));
+    updateTickets(ts => ts.map(t => (t.id === id ? { ...t, assignee } : t)));
+    mirror(
+      ticket?.uuid &&
+        ticketsApi.assignTicket(
+          ticket.uuid,
+          emailForAssignee(assignee) || null,
+          assignee || undefined
+        )
+    );
   };
 
-  const toggleBulk = (id) => {
+  const toggleBulk = id => {
     setBulkIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
-  const bulkSetStatus = (newStatus) => {
+  const bulkSetStatus = newStatus => {
     if (bulkIds.size === 0) return;
     const today = new Date().toISOString().slice(0, 10);
     const affected = tickets.filter(t => bulkIds.has(t.id));
-    updateTickets(ts => ts.map(t => bulkIds.has(t.id) ? { ...t, status: newStatus, updated: today } : t));
+    updateTickets(ts =>
+      ts.map(t => (bulkIds.has(t.id) ? { ...t, status: newStatus, updated: today } : t))
+    );
     affected.forEach(t => mirror(t.uuid && ticketsApi.updateTicket(t.uuid, { status: newStatus })));
-    recordAudit('ticket.bulk_status', _currentActor, null, { count: bulkIds.size, status: newStatus });
+    recordAudit('ticket.bulk_status', _currentActor, null, {
+      count: bulkIds.size,
+      status: newStatus,
+    });
     // Push Jira transitions for any linked tickets (best-effort, parallel).
     affected.filter(t => t.jiraKey).forEach(t => pushJiraTransition(t, newStatus));
     setBulkIds(new Set());
   };
 
-  const bulkReassign = (assignee) => {
+  const bulkReassign = assignee => {
     if (bulkIds.size === 0) return;
     const assigneeEmail = emailForAssignee(assignee);
     const affected = tickets.filter(t => bulkIds.has(t.id));
-    updateTickets(ts => ts.map(t => bulkIds.has(t.id) ? { ...t, assignee, assigneeEmail } : t));
-    affected.forEach(t => mirror(t.uuid && ticketsApi.assignTicket(t.uuid, assigneeEmail || null, assignee || undefined)));
-    recordAudit('ticket.bulk_reassign', _currentActor, null, { count: bulkIds.size, assignee, assigneeEmail });
+    updateTickets(ts => ts.map(t => (bulkIds.has(t.id) ? { ...t, assignee, assigneeEmail } : t)));
+    affected.forEach(t =>
+      mirror(
+        t.uuid && ticketsApi.assignTicket(t.uuid, assigneeEmail || null, assignee || undefined)
+      )
+    );
+    recordAudit('ticket.bulk_reassign', _currentActor, null, {
+      count: bulkIds.size,
+      assignee,
+      assigneeEmail,
+    });
     setBulkIds(new Set());
   };
 
   if (selected) {
-    return <TicketDetail ticket={selected} onBack={() => setSelectedId(null)} role={role} currentUser={currentUser} onStatusChange={handleStatusChange} onAssigneeChange={handleAssigneeChange} onAddNotification={addNotification} />;
+    return (
+      <TicketDetail
+        ticket={selected}
+        onBack={() => setSelectedId(null)}
+        role={role}
+        currentUser={currentUser}
+        onStatusChange={handleStatusChange}
+        onAssigneeChange={handleAssigneeChange}
+        onAddNotification={addNotification}
+      />
+    );
   }
 
   return (
@@ -5062,81 +8292,256 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
 
       <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
         {statuses.map(s => (
-          <button key={s} onClick={() => setFilter(s)} style={{
-            padding: '7px 14px', borderRadius: '100px', border: '1.5px solid',
-            borderColor: filter === s ? 'var(--accent-primary)' : 'var(--border-default)',
-            background: filter === s ? 'var(--accent-soft)' : 'var(--bg-surface)',
-            color: filter === s ? 'var(--accent-primary)' : 'var(--text-secondary)',
-            fontFamily: "'Inter', sans-serif",
-            fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-          }}>{s}</button>
+          <button
+            key={s}
+            onClick={() => setFilter(s)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '100px',
+              border: '1.5px solid',
+              borderColor: filter === s ? 'var(--accent-primary)' : 'var(--border-default)',
+              background: filter === s ? 'var(--accent-soft)' : 'var(--bg-surface)',
+              color: filter === s ? 'var(--accent-primary)' : 'var(--text-secondary)',
+              fontFamily: "'Inter', sans-serif",
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {s}
+          </button>
         ))}
       </div>
 
       {isAdmin && (
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '18px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <select aria-label="Filter by priority" value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} style={{ padding: '7px 12px', border: '1.5px solid var(--border-default)', borderRadius: '7px', fontSize: '12px', fontWeight: 700, background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '10px',
+            marginBottom: '18px',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+          }}
+        >
+          <select
+            aria-label="Filter by priority"
+            value={priorityFilter}
+            onChange={e => setPriorityFilter(e.target.value)}
+            style={{
+              padding: '7px 12px',
+              border: '1.5px solid var(--border-default)',
+              borderRadius: '7px',
+              fontSize: '12px',
+              fontWeight: 700,
+              background: 'var(--bg-input)',
+              color: 'var(--text-primary)',
+            }}
+          >
             <option value="All">All priorities</option>
-            <option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+            <option>Critical</option>
+            <option>High</option>
+            <option>Medium</option>
+            <option>Low</option>
           </select>
-          <select aria-label="Filter by assignee" value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} style={{ padding: '7px 12px', border: '1.5px solid var(--border-default)', borderRadius: '7px', fontSize: '12px', fontWeight: 700, background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
-            {assignees.map(a => <option key={a} value={a}>{a === 'All' ? 'All assignees' : a}</option>)}
+          <select
+            aria-label="Filter by assignee"
+            value={assigneeFilter}
+            onChange={e => setAssigneeFilter(e.target.value)}
+            style={{
+              padding: '7px 12px',
+              border: '1.5px solid var(--border-default)',
+              borderRadius: '7px',
+              fontSize: '12px',
+              fontWeight: 700,
+              background: 'var(--bg-input)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {assignees.map(a => (
+              <option key={a} value={a}>
+                {a === 'All' ? 'All assignees' : a}
+              </option>
+            ))}
           </select>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={staleOnly} onChange={e => setStaleOnly(e.target.checked)} aria-label="Show stale tickets only" />
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={staleOnly}
+              onChange={e => setStaleOnly(e.target.checked)}
+              aria-label="Show stale tickets only"
+            />
             Stale (no update in 7+ days)
           </label>
           <button
             onClick={async () => {
               setRefreshMsg('Refreshing…');
               const result = await pollJira('PESD1');
-              if (!result) { setRefreshMsg('Refresh failed — Jira unreachable.'); return; }
-              setRefreshMsg(result.unavailable
-                ? 'Jira unavailable — local tickets unchanged.'
-                : `Refreshed: ${result.count} updated, ${result.reconciled || 0} reconciled, ${result.imported || 0} imported.`);
+              if (!result) {
+                setRefreshMsg('Refresh failed — Jira unreachable.');
+                return;
+              }
+              setRefreshMsg(
+                result.unavailable
+                  ? 'Jira unavailable — local tickets unchanged.'
+                  : `Refreshed: ${result.count} updated, ${result.reconciled || 0} reconciled, ${result.imported || 0} imported.`
+              );
               setTimeout(() => setRefreshMsg(''), 5000);
             }}
-            style={{ marginLeft: 'auto', padding: '7px 12px', background: '#111111', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+            style={{
+              marginLeft: 'auto',
+              padding: '7px 12px',
+              background: '#111111',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '7px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
           >
             🔄 Refresh from Jira
           </button>
         </div>
       )}
       {isAdmin && refreshMsg && (
-        <div style={{ marginBottom: '12px', padding: '8px 12px', background: 'var(--bg-hover)', borderRadius: '6px', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+        <div
+          style={{
+            marginBottom: '12px',
+            padding: '8px 12px',
+            background: 'var(--bg-hover)',
+            borderRadius: '6px',
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+            fontWeight: 600,
+          }}
+        >
           {refreshMsg}
         </div>
       )}
 
       {isAdmin && bulkIds.size > 0 && (
-        <div style={{ background: '#111111', color: '#fff', padding: '12px 18px', borderRadius: '10px', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+        <div
+          style={{
+            background: '#111111',
+            color: '#fff',
+            padding: '12px 18px',
+            borderRadius: '10px',
+            marginBottom: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            flexWrap: 'wrap',
+          }}
+        >
           <span style={{ fontSize: '13px', fontWeight: 700 }}>{bulkIds.size} selected</span>
-          <select aria-label="Bulk change status" defaultValue="" onChange={e => { if (e.target.value) { bulkSetStatus(e.target.value); e.target.value = ''; } }} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: 700 }}>
-            <option value="" disabled>Change status to…</option>
-            {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          <select
+            aria-label="Bulk change status"
+            defaultValue=""
+            onChange={e => {
+              if (e.target.value) {
+                bulkSetStatus(e.target.value);
+                e.target.value = '';
+              }
+            }}
+            style={{
+              padding: '6px 10px',
+              borderRadius: '6px',
+              border: 'none',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            <option value="" disabled>
+              Change status to…
+            </option>
+            {STATUS_OPTIONS.map(s => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
-          <select aria-label="Bulk reassign" defaultValue="" onChange={e => { if (e.target.value) { bulkReassign(e.target.value === '__none' ? null : e.target.value); e.target.value = ''; } }} style={{ padding: '6px 10px', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: 700 }}>
-            <option value="" disabled>Reassign to…</option>
+          <select
+            aria-label="Bulk reassign"
+            defaultValue=""
+            onChange={e => {
+              if (e.target.value) {
+                bulkReassign(e.target.value === '__none' ? null : e.target.value);
+                e.target.value = '';
+              }
+            }}
+            style={{
+              padding: '6px 10px',
+              borderRadius: '6px',
+              border: 'none',
+              fontSize: '12px',
+              fontWeight: 700,
+            }}
+          >
+            <option value="" disabled>
+              Reassign to…
+            </option>
             <option value="__none">Unassigned</option>
-            {assignees.filter(a => a !== 'All' && a !== 'Unassigned').map(a => <option key={a} value={a}>{a}</option>)}
+            {assignees
+              .filter(a => a !== 'All' && a !== 'Unassigned')
+              .map(a => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
           </select>
-          <button onClick={() => setBulkIds(new Set())} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Clear</button>
+          <button
+            onClick={() => setBulkIds(new Set())}
+            style={{
+              marginLeft: 'auto',
+              background: 'rgba(255,255,255,0.15)',
+              color: '#fff',
+              border: 'none',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Clear
+          </button>
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {filtered.length === 0 && (
-          <div style={{ ...S.card, textAlign: 'center', color: 'var(--text-muted)', padding: '40px' }}>No tickets found.</div>
+          <div
+            style={{ ...S.card, textAlign: 'center', color: 'var(--text-muted)', padding: '40px' }}
+          >
+            No tickets found.
+          </div>
         )}
         {filtered.map(t => {
           const checked = bulkIds.has(t.id);
           const ageDays = Math.floor((Date.now() - new Date(t.updated).getTime()) / 86400000);
           const isStale = ageDays >= 7 && t.status !== 'Resolved' && t.status !== 'Closed';
           return (
-            <div key={t.id} style={{
-              ...S.card, padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '14px',
-              borderColor: checked ? 'var(--accent-primary)' : 'var(--border-default)',
-            }}>
+            <div
+              key={t.id}
+              style={{
+                ...S.card,
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                borderColor: checked ? 'var(--accent-primary)' : 'var(--border-default)',
+              }}
+            >
               {isAdmin && (
                 <input
                   type="checkbox"
@@ -5147,21 +8552,65 @@ function MyTicketsPage({ role, currentUser }) { // eslint-disable-line no-unused
                   style={{ flexShrink: 0, width: '16px', height: '16px', cursor: 'pointer' }}
                 />
               )}
-              <button onClick={() => setSelectedId(t.id)} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{t.title}</span>
-                  {isAdmin && isStale && <span style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', fontWeight: 700 }}>Stale {ageDays}d</span>}
+              <button
+                onClick={() => setSelectedId(t.id)}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  background: 'none',
+                  border: 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontFamily: 'inherit',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '4px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {t.title}
+                  </span>
+                  {isAdmin && isStale && (
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        padding: '2px 7px',
+                        borderRadius: '4px',
+                        background: '#FEF3C7',
+                        color: '#92400E',
+                        fontWeight: 700,
+                      }}
+                    >
+                      Stale {ageDays}d
+                    </span>
+                  )}
                   {isAdmin && <SlaChip ticket={t} />}
                   {isAdmin && <JiraSyncChip ticket={t} />}
                   <DevChip ticket={t} />
                 </div>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  {t.id} · {t.category} · Updated {t.updated}{isAdmin && t.assignee && <> · 👤 {t.assignee}</>}
+                  {t.id} · {t.category} · Updated {t.updated}
+                  {isAdmin && t.assignee && <> · 👤 {t.assignee}</>}
                 </div>
               </button>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
                 <span style={S.badge(PRIORITY_COLORS[t.priority])}>{t.priority}</span>
-                <span style={{ ...S.badge(statusColorFor(t.status)), background: statusColorFor(t.status) + '18', color: statusColorFor(t.status) }}>{t.status}</span>
+                <span
+                  style={{
+                    ...S.badge(statusColorFor(t.status)),
+                    background: statusColorFor(t.status) + '18',
+                    color: statusColorFor(t.status),
+                  }}
+                >
+                  {t.status}
+                </span>
                 <span style={{ color: 'var(--border-strong)', fontSize: '16px' }}>›</span>
               </div>
             </div>
@@ -5199,7 +8648,9 @@ function DeveloperPortalPage({ currentUser }) {
   const stats = useMemo(() => {
     const open = mine.filter(t => !DONE_STATUSES.has(t.status));
     const inProgress = mine.filter(t => t.status === 'In Progress').length;
-    const ages = open.map(t => Math.max(0, (Date.now() - new Date(t.updated || t.created).getTime()) / 86400000));
+    const ages = open.map(t =>
+      Math.max(0, (Date.now() - new Date(t.updated || t.created).getTime()) / 86400000)
+    );
     const avgAge = ages.length ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0;
     return { assigned: mine.length, openCount: open.length, inProgress, avgAge };
   }, [mine]);
@@ -5215,9 +8666,19 @@ function DeveloperPortalPage({ currentUser }) {
     t.updated = new Date().toISOString().slice(0, 10);
     bumpTickets();
     mirror(t.uuid && ticketsApi.updateTicket(t.uuid, { status: newStatus }));
-    recordAudit('ticket.status_change', _currentActor, { type: 'ticket', id: t.id, label: t.title }, { from: prev, to: newStatus });
+    recordAudit(
+      'ticket.status_change',
+      _currentActor,
+      { type: 'ticket', id: t.id, label: t.title },
+      { from: prev, to: newStatus }
+    );
     if (t.jiraKey) pushJiraTransition(t, newStatus).catch(() => {});
-    addNotification({ type: 'ticket_status', title: `Status updated: ${t.id}`, body: `${prev} → ${newStatus}`, ticketId: t.id });
+    addNotification({
+      type: 'ticket_status',
+      title: `Status updated: ${t.id}`,
+      body: `${prev} → ${newStatus}`,
+      ticketId: t.id,
+    });
   };
 
   const handleAssigneeChange = () => {
@@ -5225,27 +8686,76 @@ function DeveloperPortalPage({ currentUser }) {
   };
 
   if (selected) {
-    return <TicketDetail ticket={selected} onBack={() => setSelectedId(null)} currentUser={currentUser} role="user" onStatusChange={handleStatusChange} onAssigneeChange={handleAssigneeChange} onAddNotification={addNotification} />;
+    return (
+      <TicketDetail
+        ticket={selected}
+        onBack={() => setSelectedId(null)}
+        currentUser={currentUser}
+        role="user"
+        onStatusChange={handleStatusChange}
+        onAssigneeChange={handleAssigneeChange}
+        onAddNotification={addNotification}
+      />
+    );
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div>
-        <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Developer Portal</div>
-        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Tickets assigned to you, ordered by oldest activity.</div>
+        <div
+          style={{
+            fontSize: '22px',
+            fontWeight: 800,
+            color: 'var(--text-primary)',
+            marginBottom: '4px',
+          }}
+        >
+          Developer Portal
+        </div>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          Tickets assigned to you, ordered by oldest activity.
+        </div>
       </div>
 
       {/* Stats strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '12px',
+        }}
+      >
         {[
           { label: 'Assigned to me', value: stats.assigned, color: 'var(--accent-primary)' },
           { label: 'Currently open', value: stats.openCount, color: '#F59E0B' },
           { label: 'In progress', value: stats.inProgress, color: '#3B82F6' },
           { label: 'Avg age (days)', value: stats.avgAge, color: '#16A34A' },
         ].map(s => (
-          <div key={s.label} style={{ ...S.card, padding: '16px 18px', borderLeft: `4px solid ${s.color}` }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>{s.value}</div>
+          <div
+            key={s.label}
+            style={{ ...S.card, padding: '16px 18px', borderLeft: `4px solid ${s.color}` }}
+          >
+            <div
+              style={{
+                fontSize: '11px',
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              {s.label}
+            </div>
+            <div
+              style={{
+                fontSize: '28px',
+                fontWeight: 800,
+                color: 'var(--text-primary)',
+                marginTop: '4px',
+              }}
+            >
+              {s.value}
+            </div>
           </div>
         ))}
       </div>
@@ -5254,43 +8764,139 @@ function DeveloperPortalPage({ currentUser }) {
       {mine.length === 0 ? (
         <div style={{ ...S.card, padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: '40px', marginBottom: '8px' }}>🎉</div>
-          <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>Nothing assigned to you</div>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>When tickets are routed to {currentUser?.name || 'you'}, they'll appear here.</div>
+          <div
+            style={{
+              fontSize: '16px',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              marginBottom: '4px',
+            }}
+          >
+            Nothing assigned to you
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+            When tickets are routed to {currentUser?.name || 'you'}, they'll appear here.
+          </div>
         </div>
       ) : (
         <div style={{ ...S.card, padding: 0, overflow: 'hidden' }}>
           {/* Header row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 200px 110px 140px 80px', padding: '10px 14px', background: 'var(--bg-page)', borderBottom: '1px solid var(--border-default)', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            <span>Ticket</span><span>Title</span><span>Requester</span><span>Priority</span><span>Status</span><span style={{ textAlign: 'right' }}>Age</span>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '110px 1fr 200px 110px 140px 80px',
+              padding: '10px 14px',
+              background: 'var(--bg-page)',
+              borderBottom: '1px solid var(--border-default)',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            <span>Ticket</span>
+            <span>Title</span>
+            <span>Requester</span>
+            <span>Priority</span>
+            <span>Status</span>
+            <span style={{ textAlign: 'right' }}>Age</span>
           </div>
           {[...mine]
             .sort((a, b) => (a.updated || '').localeCompare(b.updated || ''))
             .map(t => {
-              const ageDays = Math.floor((Date.now() - new Date(t.updated || t.created).getTime()) / 86400000);
+              const ageDays = Math.floor(
+                (Date.now() - new Date(t.updated || t.created).getTime()) / 86400000
+              );
               return (
                 <button
                   key={t.id}
                   onClick={() => setSelectedId(t.id)}
                   style={{
-                    width: '100%', display: 'grid', gridTemplateColumns: '110px 1fr 200px 110px 140px 80px',
-                    alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--border-subtle)',
-                    background: 'var(--bg-surface)', textAlign: 'left', cursor: 'pointer', border: 'none',
+                    width: '100%',
+                    display: 'grid',
+                    gridTemplateColumns: '110px 1fr 200px 110px 140px 80px',
+                    alignItems: 'center',
+                    padding: '12px 14px',
+                    borderBottom: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-surface)',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    border: 'none',
                     fontFamily: "'Inter', sans-serif",
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-surface)'}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-surface)')}
                 >
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>{t.id}</span>
-                  <span style={{ fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px' }}>{t.title}</span>
-                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '12px' }}>{t.requester?.name || '—'}</span>
-                  <span style={{ ...S.badge(PRIORITY_COLORS[t.priority] || '#64748B'), fontSize: '11px' }}>{t.priority}</span>
-                  <span style={{ ...S.badge(statusColorFor(t.status)), background: statusColorFor(t.status) + '18', color: statusColorFor(t.status), fontSize: '11px' }}>{t.status}</span>
-                  <span style={{ fontSize: '11px', color: ageDays > 7 ? '#DC2626' : 'var(--text-muted)', fontWeight: 600, textAlign: 'right' }}>{ageDays}d</span>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {t.id}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '13px',
+                      color: 'var(--text-primary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      paddingRight: '12px',
+                    }}
+                  >
+                    {t.title}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--text-secondary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      paddingRight: '12px',
+                    }}
+                  >
+                    {t.requester?.name || '—'}
+                  </span>
+                  <span
+                    style={{
+                      ...S.badge(PRIORITY_COLORS[t.priority] || '#64748B'),
+                      fontSize: '11px',
+                    }}
+                  >
+                    {t.priority}
+                  </span>
+                  <span
+                    style={{
+                      ...S.badge(statusColorFor(t.status)),
+                      background: statusColorFor(t.status) + '18',
+                      color: statusColorFor(t.status),
+                      fontSize: '11px',
+                    }}
+                  >
+                    {t.status}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      color: ageDays > 7 ? '#DC2626' : 'var(--text-muted)',
+                      fontWeight: 600,
+                      textAlign: 'right',
+                    }}
+                  >
+                    {ageDays}d
+                  </span>
                 </button>
               );
             })}
           {!canChangeOwnStatus && (
-            <div style={{ padding: '10px 14px', background: 'var(--bg-page)', borderTop: '1px solid var(--border-subtle)', fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
+            <div
+              style={{
+                padding: '10px 14px',
+                background: 'var(--bg-page)',
+                borderTop: '1px solid var(--border-subtle)',
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                textAlign: 'center',
+              }}
+            >
               Status changes are managed by the IT team — open a ticket to view its detail.
             </div>
           )}
@@ -5324,20 +8930,24 @@ function AdminPage() {
 
   const visible = tickets.filter(t => {
     const okP = filterPriority === 'All' || t.priority === filterPriority;
-    const okA = filterAssignee === 'All'
-      || (filterAssignee === 'Unassigned' && !t.assignee)
-      || t.assignee === filterAssignee;
+    const okA =
+      filterAssignee === 'All' ||
+      (filterAssignee === 'Unassigned' && !t.assignee) ||
+      t.assignee === filterAssignee;
     return okP && okA;
   });
 
-  const columnTickets = (colId) => visible.filter(t => t.status === colId);
+  const columnTickets = colId => visible.filter(t => t.status === colId);
 
   const moveTicket = (id, newStatus) => {
     const ticket = tickets.find(t => t.id === id);
-    updateTickets(ts => ts.map(t => t.id === id
-      ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) }
-      : t
-    ));
+    updateTickets(ts =>
+      ts.map(t =>
+        t.id === id
+          ? { ...t, status: newStatus, updated: new Date().toISOString().slice(0, 10) }
+          : t
+      )
+    );
     mirror(ticket?.uuid && ticketsApi.updateTicket(ticket.uuid, { status: newStatus }));
     if (ticket?.jiraKey) pushJiraTransition(ticket, newStatus);
   };
@@ -5345,8 +8955,12 @@ function AdminPage() {
   const assignTicket = (id, assignee) => {
     const ticket = tickets.find(t => t.id === id);
     const assigneeEmail = assignee ? emailForAssignee(assignee) : null;
-    updateTickets(ts => ts.map(t => t.id === id ? { ...t, assignee: assignee || null, assigneeEmail } : t));
-    mirror(ticket?.uuid && ticketsApi.assignTicket(ticket.uuid, assigneeEmail, assignee || undefined));
+    updateTickets(ts =>
+      ts.map(t => (t.id === id ? { ...t, assignee: assignee || null, assigneeEmail } : t))
+    );
+    mirror(
+      ticket?.uuid && ticketsApi.assignTicket(ticket.uuid, assigneeEmail, assignee || undefined)
+    );
     setEditingAssignee(null);
   };
 
@@ -5368,7 +8982,10 @@ function AdminPage() {
     setDragOver(null);
   };
 
-  const onDragEnd = () => { setDragId(null); setDragOver(null); };
+  const onDragEnd = () => {
+    setDragId(null);
+    setDragOver(null);
+  };
 
   // Derived from the role registry — anyone whose role grants
   // tickets.view_assigned is pickable here, so adding a new Developer
@@ -5379,75 +8996,181 @@ function AdminPage() {
   const agentOptions = listAssignableUsers().map(u => u.name);
 
   const totalOpen = tickets.filter(t => t.status === 'Open').length;
-  const totalCritical = tickets.filter(t => t.priority === 'Critical' && (t.status === 'Open' || t.status === 'In Progress')).length;
+  const totalCritical = tickets.filter(
+    t => t.priority === 'Critical' && (t.status === 'Open' || t.status === 'In Progress')
+  ).length;
 
   return (
     <div>
       {/* System health + maintenance toggle (admin only — gates own access) */}
-      <div className="pomelo-stack-on-mobile" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '14px', marginBottom: '22px' }}>
+      <div
+        className="pomelo-stack-on-mobile"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+          gap: '14px',
+          marginBottom: '22px',
+        }}
+      >
         <SystemHealthCard />
         <MaintenanceToggleCard />
       </div>
 
       {/* Admin Header Banner */}
-      <div style={{
-        background: 'linear-gradient(135deg, #111111 0%, #000000 100%)',
-        borderRadius: '14px', padding: '18px 24px', marginBottom: '22px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px',
-      }}>
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #111111 0%, #000000 100%)',
+          borderRadius: '14px',
+          padding: '18px 24px',
+          marginBottom: '22px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ background: 'var(--accent-primary)', borderRadius: '8px', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🛠</div>
+          <div
+            style={{
+              background: 'var(--accent-primary)',
+              borderRadius: '8px',
+              width: '36px',
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '18px',
+            }}
+          >
+            🛠
+          </div>
           <div>
-            <div style={{ color: '#fff', fontWeight: 900, fontSize: '16px' }}>IT Admin — Kanban Board</div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', marginTop: '2px' }}>Drag cards between columns to update status · Click a card to view details</div>
+            <div style={{ color: '#fff', fontWeight: 900, fontSize: '16px' }}>
+              IT Admin — Kanban Board
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', marginTop: '2px' }}>
+              Drag cards between columns to update status · Click a card to view details
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '16px' }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ color: 'var(--accent-primary)', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{totalOpen}</div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>Open</div>
+            <div
+              style={{
+                color: 'var(--accent-primary)',
+                fontWeight: 900,
+                fontSize: '22px',
+                lineHeight: 1,
+              }}
+            >
+              {totalOpen}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>
+              Open
+            </div>
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{totalCritical}</div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>Critical Active</div>
+            <div style={{ color: '#DC2626', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>
+              {totalCritical}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>
+              Critical Active
+            </div>
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ color: '#fff', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>{tickets.length}</div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>Total</div>
+            <div style={{ color: '#fff', fontWeight: 900, fontSize: '22px', lineHeight: 1 }}>
+              {tickets.length}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '11px', marginTop: '2px' }}>
+              Total
+            </div>
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '18px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Filter:</div>
+      <div
+        style={{
+          display: 'flex',
+          gap: '10px',
+          marginBottom: '18px',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <div
+          style={{
+            fontSize: '12px',
+            fontWeight: 700,
+            color: 'var(--text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+          }}
+        >
+          Filter:
+        </div>
         <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
           {['All', 'Critical', 'High', 'Medium', 'Low'].map(p => (
-            <button key={p} onClick={() => setFilterPriority(p)} style={{
-              padding: '5px 12px', borderRadius: '100px', border: '1.5px solid',
-              borderColor: filterPriority === p ? (PRIORITY_COLORS[p] || '#111111') : 'var(--border-default)',
-              background: filterPriority === p ? ((PRIORITY_COLORS[p] || '#111111') + '15') : 'var(--bg-surface)',
-              color: filterPriority === p ? (PRIORITY_COLORS[p] || '#111111') : 'var(--text-secondary)',
-              fontFamily: "'Inter', sans-serif", fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-            }}>{p}</button>
+            <button
+              key={p}
+              onClick={() => setFilterPriority(p)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '100px',
+                border: '1.5px solid',
+                borderColor:
+                  filterPriority === p ? PRIORITY_COLORS[p] || '#111111' : 'var(--border-default)',
+                background:
+                  filterPriority === p
+                    ? (PRIORITY_COLORS[p] || '#111111') + '15'
+                    : 'var(--bg-surface)',
+                color:
+                  filterPriority === p ? PRIORITY_COLORS[p] || '#111111' : 'var(--text-secondary)',
+                fontFamily: "'Inter', sans-serif",
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {p}
+            </button>
           ))}
         </div>
         <div style={{ width: '1px', height: '18px', background: 'var(--border-default)' }} />
         <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
           {['All', ...agentOptions, 'Unassigned'].map(a => (
-            <button key={a} onClick={() => setFilterAssignee(a)} style={{
-              padding: '5px 12px', borderRadius: '100px', border: '1.5px solid',
-              borderColor: filterAssignee === a ? 'var(--text-primary)' : 'var(--border-default)',
-              background: filterAssignee === a ? 'var(--accent-soft)' : 'var(--bg-surface)',
-              color: filterAssignee === a ? 'var(--text-primary)' : 'var(--text-secondary)',
-              fontFamily: "'Inter', sans-serif", fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-            }}>{a}</button>
+            <button
+              key={a}
+              onClick={() => setFilterAssignee(a)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '100px',
+                border: '1.5px solid',
+                borderColor: filterAssignee === a ? 'var(--text-primary)' : 'var(--border-default)',
+                background: filterAssignee === a ? 'var(--accent-soft)' : 'var(--bg-surface)',
+                color: filterAssignee === a ? 'var(--text-primary)' : 'var(--text-secondary)',
+                fontFamily: "'Inter', sans-serif",
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {a}
+            </button>
           ))}
         </div>
       </div>
 
       {/* Kanban Board */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', alignItems: 'start' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '14px',
+          alignItems: 'start',
+        }}
+      >
         {kanbanColumns.map(col => {
           const colTickets = columnTickets(col.id);
           const isDragTarget = dragOver === col.id;
@@ -5465,22 +9188,60 @@ function AdminPage() {
               }}
             >
               {/* Column Header */}
-              <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div
+                style={{
+                  padding: '12px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                  <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: col.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{col.label}</span>
+                  <div
+                    style={{
+                      width: '9px',
+                      height: '9px',
+                      borderRadius: '50%',
+                      background: col.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {col.label}
+                  </span>
                 </div>
-                <span style={{
-                  background: col.color + '20', color: col.color,
-                  fontWeight: 700, fontSize: '12px',
-                  padding: '2px 8px', borderRadius: '100px',
-                }}>{colTickets.length}</span>
+                <span
+                  style={{
+                    background: col.color + '20',
+                    color: col.color,
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    padding: '2px 8px',
+                    borderRadius: '100px',
+                  }}
+                >
+                  {colTickets.length}
+                </span>
               </div>
 
               {/* Cards */}
-              <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div
+                style={{
+                  padding: '0 10px 10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
                 {colTickets.length === 0 && (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--border-strong)', fontSize: '12px' }}>
+                  <div
+                    style={{
+                      padding: '20px',
+                      textAlign: 'center',
+                      color: 'var(--border-strong)',
+                      fontSize: '12px',
+                    }}
+                  >
                     {isDragTarget ? 'Drop here' : 'No tickets'}
                   </div>
                 )}
@@ -5501,51 +9262,122 @@ function AdminPage() {
                       transition: 'opacity 0.15s, box-shadow 0.15s',
                       boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'; e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)'; e.currentTarget.style.borderColor = 'var(--border-default)'; }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                      e.currentTarget.style.borderColor = 'var(--border-strong)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                      e.currentTarget.style.borderColor = 'var(--border-default)';
+                    }}
                   >
                     {/* Priority + ID */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '7px' }}>
-                      <span style={{ ...S.badge(PRIORITY_COLORS[t.priority]), fontSize: '10px' }}>{t.priority}</span>
-                      <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700 }}>{t.id}</span>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '7px',
+                      }}
+                    >
+                      <span style={{ ...S.badge(PRIORITY_COLORS[t.priority]), fontSize: '10px' }}>
+                        {t.priority}
+                      </span>
+                      <span
+                        style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700 }}
+                      >
+                        {t.id}
+                      </span>
                     </div>
 
                     {/* Title */}
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: '8px' }}>
+                    <div
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        lineHeight: 1.4,
+                        marginBottom: '8px',
+                      }}
+                    >
                       {t.title}
                     </div>
 
                     {/* Meta */}
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '9px' }}>
+                    <div
+                      style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '9px' }}
+                    >
                       {t.category}
                       {t.shop && t.shop !== 'Not Applicable' && ` · ${t.shop}`}
                     </div>
 
                     {/* Assignee */}
                     <div
-                      onClick={e => { e.stopPropagation(); setEditingAssignee(editingAssignee === t.id ? null : t.id); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                      onClick={e => {
+                        e.stopPropagation();
+                        setEditingAssignee(editingAssignee === t.id ? null : t.id);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                      }}
                     >
                       {t.assignee ? (
                         <>
-                          <div style={{
-                            width: '20px', height: '20px', borderRadius: '50%',
-                            background: '#111111', display: 'flex', alignItems: 'center',
-                            justifyContent: 'center', color: '#fff', fontSize: '9px', fontWeight: 700, flexShrink: 0,
-                          }}>
-                            {t.assignee.split(' ').map(n => n[0]).join('')}
+                          <div
+                            style={{
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              background: '#111111',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#fff',
+                              fontSize: '9px',
+                              fontWeight: 700,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {t.assignee
+                              .split(' ')
+                              .map(n => n[0])
+                              .join('')}
                           </div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 700 }}>{t.assignee}</span>
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              color: 'var(--text-secondary)',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {t.assignee}
+                          </span>
                         </>
                       ) : (
                         <>
-                          <div style={{
-                            width: '20px', height: '20px', borderRadius: '50%',
-                            background: 'var(--bg-hover)', border: '1.5px dashed var(--border-strong)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: 'var(--text-muted)', fontSize: '11px', flexShrink: 0,
-                          }}>+</div>
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Unassigned</span>
+                          <div
+                            style={{
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              background: 'var(--bg-hover)',
+                              border: '1.5px dashed var(--border-strong)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--text-muted)',
+                              fontSize: '11px',
+                              flexShrink: 0,
+                            }}
+                          >
+                            +
+                          </div>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            Unassigned
+                          </span>
                         </>
                       )}
                     </div>
@@ -5555,28 +9387,56 @@ function AdminPage() {
                       <div
                         onClick={e => e.stopPropagation()}
                         style={{
-                          marginTop: '8px', background: 'var(--bg-surface)', border: '1.5px solid var(--border-default)',
-                          borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+                          marginTop: '8px',
+                          background: 'var(--bg-surface)',
+                          border: '1.5px solid var(--border-default)',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
                           overflow: 'hidden',
                         }}
                       >
                         {[...agentOptions, null].map(a => (
-                          <button key={a || 'unassign'} onClick={() => assignTicket(t.id, a)} style={{
-                            width: '100%', textAlign: 'left', padding: '8px 12px',
-                            background: t.assignee === a ? '#F0F4FF' : 'transparent',
-                            border: 'none', cursor: 'pointer', fontFamily: "'Inter', sans-serif",
-                            fontSize: '12px', color: a ? '#111111' : 'var(--text-muted)',
-                            fontWeight: t.assignee === a ? 700 : 400,
-                            display: 'flex', alignItems: 'center', gap: '7px',
-                          }}>
-                            <div style={{
-                              width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
-                              background: a ? '#111111' : 'var(--bg-hover)',
-                              border: a ? 'none' : '1.5px dashed var(--border-strong)',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              color: a ? '#fff' : 'var(--text-muted)', fontSize: '8px', fontWeight: 700,
-                            }}>
-                              {a ? a.split(' ').map(n => n[0]).join('') : '—'}
+                          <button
+                            key={a || 'unassign'}
+                            onClick={() => assignTicket(t.id, a)}
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '8px 12px',
+                              background: t.assignee === a ? '#F0F4FF' : 'transparent',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontFamily: "'Inter', sans-serif",
+                              fontSize: '12px',
+                              color: a ? '#111111' : 'var(--text-muted)',
+                              fontWeight: t.assignee === a ? 700 : 400,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '7px',
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                flexShrink: 0,
+                                background: a ? '#111111' : 'var(--bg-hover)',
+                                border: a ? 'none' : '1.5px dashed var(--border-strong)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: a ? '#fff' : 'var(--text-muted)',
+                                fontSize: '8px',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {a
+                                ? a
+                                    .split(' ')
+                                    .map(n => n[0])
+                                    .join('')
+                                : '—'}
                             </div>
                             {a || 'Unassign'}
                           </button>
@@ -5585,7 +9445,15 @@ function AdminPage() {
                     )}
 
                     {/* Updated date */}
-                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', fontSize: '10px', color: 'var(--border-strong)' }}>
+                    <div
+                      style={{
+                        marginTop: '8px',
+                        paddingTop: '8px',
+                        borderTop: '1px solid var(--border-subtle)',
+                        fontSize: '10px',
+                        color: 'var(--border-strong)',
+                      }}
+                    >
                       Updated {t.updated}
                     </div>
                   </div>
@@ -5599,35 +9467,113 @@ function AdminPage() {
       {/* Quick-move modal on card click */}
       {detailTicket && (
         <>
-          <div onClick={() => setDetailTicket(null)} style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 300, animation: 'fadeIn 0.15s ease' }} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-            background: 'var(--bg-surface)', borderRadius: '16px', zIndex: 301, width: '480px', maxWidth: '95vw',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.2s ease',
-            overflow: 'hidden',
-          }}>
+          <div
+            onClick={() => setDetailTicket(null)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'var(--bg-overlay)',
+              zIndex: 300,
+              animation: 'fadeIn 0.15s ease',
+            }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%,-50%)',
+              background: 'var(--bg-surface)',
+              borderRadius: '16px',
+              zIndex: 301,
+              width: '480px',
+              maxWidth: '95vw',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              animation: 'slideUp 0.2s ease',
+              overflow: 'hidden',
+            }}
+          >
             {/* Modal header */}
-            <div style={{ background: '#111111', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div
+              style={{
+                background: '#111111',
+                padding: '16px 20px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+              }}
+            >
               <div>
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', marginBottom: '3px', fontWeight: 700 }}>{detailTicket.id}</div>
-                <div style={{ fontSize: '15px', fontWeight: 900, color: '#fff', lineHeight: 1.3 }}>{detailTicket.title}</div>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: 'rgba(255,255,255,0.45)',
+                    marginBottom: '3px',
+                    fontWeight: 700,
+                  }}
+                >
+                  {detailTicket.id}
+                </div>
+                <div style={{ fontSize: '15px', fontWeight: 900, color: '#fff', lineHeight: 1.3 }}>
+                  {detailTicket.title}
+                </div>
               </div>
-              <button onClick={() => setDetailTicket(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '20px', cursor: 'pointer', lineHeight: 1, padding: 0, flexShrink: 0, marginLeft: '12px' }}>×</button>
+              <button
+                onClick={() => setDetailTicket(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'rgba(255,255,255,0.5)',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  lineHeight: 1,
+                  padding: 0,
+                  flexShrink: 0,
+                  marginLeft: '12px',
+                }}
+              >
+                ×
+              </button>
             </div>
 
             <div style={{ padding: '18px 20px' }}>
               {/* Badges */}
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
-                <span style={S.badge(PRIORITY_COLORS[detailTicket.priority])}>{detailTicket.priority}</span>
-                <span style={S.badge(STATUS_COLORS[detailTicket.status])}>{detailTicket.status}</span>
-                <span style={{ ...S.badge('var(--text-secondary)'), fontSize: '11px' }}>{detailTicket.category}</span>
+                <span style={S.badge(PRIORITY_COLORS[detailTicket.priority])}>
+                  {detailTicket.priority}
+                </span>
+                <span style={S.badge(STATUS_COLORS[detailTicket.status])}>
+                  {detailTicket.status}
+                </span>
+                <span style={{ ...S.badge('var(--text-secondary)'), fontSize: '11px' }}>
+                  {detailTicket.category}
+                </span>
               </div>
 
               {/* Description */}
-              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '16px' }}>{detailTicket.description}</div>
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.6,
+                  marginBottom: '16px',
+                }}
+              >
+                {detailTicket.description}
+              </div>
 
               {/* Meta grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px', background: 'var(--bg-page)', borderRadius: '8px', padding: '12px' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '8px',
+                  marginBottom: '16px',
+                  background: 'var(--bg-page)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                }}
+              >
                 {[
                   ['Assignee', detailTicket.assignee || 'Unassigned'],
                   ['Department', detailTicket.department || '—'],
@@ -5635,15 +9581,41 @@ function AdminPage() {
                   ['Submitted', detailTicket.created],
                 ].map(([k, v]) => (
                   <div key={k}>
-                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>{k}</div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}>{v}</div>
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        color: 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        marginBottom: '2px',
+                      }}
+                    >
+                      {k}
+                    </div>
+                    <div
+                      style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 700 }}
+                    >
+                      {v}
+                    </div>
                   </div>
                 ))}
               </div>
 
               {/* Move to column */}
               <div style={{ marginBottom: '4px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Move to</div>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    marginBottom: '8px',
+                  }}
+                >
+                  Move to
+                </div>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                   {kanbanColumns.map(col => (
                     <button
@@ -5653,15 +9625,31 @@ function AdminPage() {
                         setDetailTicket(t => ({ ...t, status: col.id }));
                       }}
                       style={{
-                        padding: '7px 14px', borderRadius: '7px', border: '1.5px solid',
-                        borderColor: detailTicket.status === col.id ? col.color : 'var(--border-default)',
+                        padding: '7px 14px',
+                        borderRadius: '7px',
+                        border: '1.5px solid',
+                        borderColor:
+                          detailTicket.status === col.id ? col.color : 'var(--border-default)',
                         background: detailTicket.status === col.id ? col.bg : 'var(--bg-surface)',
                         color: detailTicket.status === col.id ? col.color : 'var(--text-secondary)',
-                        fontFamily: "'Inter', sans-serif", fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: '5px',
+                        fontFamily: "'Inter', sans-serif",
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
                       }}
                     >
-                      <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: col.color, flexShrink: 0 }} />
+                      <div
+                        style={{
+                          width: '7px',
+                          height: '7px',
+                          borderRadius: '50%',
+                          background: col.color,
+                          flexShrink: 0,
+                        }}
+                      />
                       {col.label}
                     </button>
                   ))}
@@ -5670,15 +9658,81 @@ function AdminPage() {
 
               {/* Delete (admin/developer only — gated by tickets.delete) */}
               {canDeleteTicket && (
-                <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                <div
+                  style={{
+                    marginTop: '16px',
+                    paddingTop: '14px',
+                    borderTop: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: '8px',
+                  }}
+                >
                   {confirmDelId === detailTicket.id ? (
                     <>
-                      <span style={{ fontSize: '13px', color: '#DC2626', fontWeight: 700, marginRight: 'auto' }}>Delete permanently?</span>
-                      <button onClick={() => { deleteTicket(detailTicket.id); setConfirmDelId(null); setDetailTicket(null); }} style={{ padding: '7px 14px', borderRadius: '7px', border: 'none', cursor: 'pointer', background: '#DC2626', color: '#fff', fontWeight: 700, fontSize: '13px' }}>Yes, delete</button>
-                      <button onClick={() => setConfirmDelId(null)} style={{ padding: '7px 14px', borderRadius: '7px', border: '1px solid var(--border-default)', cursor: 'pointer', background: 'var(--bg-surface)', color: 'var(--text-secondary)', fontWeight: 700, fontSize: '13px' }}>Cancel</button>
+                      <span
+                        style={{
+                          fontSize: '13px',
+                          color: '#DC2626',
+                          fontWeight: 700,
+                          marginRight: 'auto',
+                        }}
+                      >
+                        Delete permanently?
+                      </span>
+                      <button
+                        onClick={() => {
+                          deleteTicket(detailTicket.id);
+                          setConfirmDelId(null);
+                          setDetailTicket(null);
+                        }}
+                        style={{
+                          padding: '7px 14px',
+                          borderRadius: '7px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: '#DC2626',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                        }}
+                      >
+                        Yes, delete
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelId(null)}
+                        style={{
+                          padding: '7px 14px',
+                          borderRadius: '7px',
+                          border: '1px solid var(--border-default)',
+                          cursor: 'pointer',
+                          background: 'var(--bg-surface)',
+                          color: 'var(--text-secondary)',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                        }}
+                      >
+                        Cancel
+                      </button>
                     </>
                   ) : (
-                    <button onClick={() => setConfirmDelId(detailTicket.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: '1px solid #FCA5A5', cursor: 'pointer', background: 'transparent', color: '#DC2626', fontWeight: 700, fontSize: '13px' }}>
+                    <button
+                      onClick={() => setConfirmDelId(detailTicket.id)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '7px 14px',
+                        borderRadius: '7px',
+                        border: '1px solid #FCA5A5',
+                        cursor: 'pointer',
+                        background: 'transparent',
+                        color: '#DC2626',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                      }}
+                    >
                       <Trash2 size={14} /> Delete ticket
                     </button>
                   )}
@@ -5718,15 +9772,26 @@ function RolesAccessPage({ currentUserEmail }) {
   // doesn't trip the lockout guard mid-toggle.
   const [draft, setDraft] = useState(null);
   useEffect(() => {
-    setDraft(selected ? { label: selected.label, description: selected.description || '', color: selected.color || '#6366F1', capabilities: selected.capabilities.slice() } : null);
+    setDraft(
+      selected
+        ? {
+            label: selected.label,
+            description: selected.description || '',
+            color: selected.color || '#6366F1',
+            capabilities: selected.capabilities.slice(),
+          }
+        : null
+    );
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const dirty = !!(selected && draft && (
-    draft.label !== selected.label ||
-    draft.description !== (selected.description || '') ||
-    draft.color !== (selected.color || '#6366F1') ||
-    draft.capabilities.length !== selected.capabilities.length ||
-    draft.capabilities.some(c => !selected.capabilities.includes(c))
-  ));
+  const dirty = !!(
+    selected &&
+    draft &&
+    (draft.label !== selected.label ||
+      draft.description !== (selected.description || '') ||
+      draft.color !== (selected.color || '#6366F1') ||
+      draft.capabilities.length !== selected.capabilities.length ||
+      draft.capabilities.some(c => !selected.capabilities.includes(c)))
+  );
 
   // Modal state
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
@@ -5750,7 +9815,10 @@ function RolesAccessPage({ currentUserEmail }) {
     settingsDraft.defaultAssigneeEmail !== settings.defaultAssigneeEmail;
   const saveSettings = () => {
     const email = settingsDraft.defaultAssigneeEmail.trim().toLowerCase();
-    if (!email || !email.includes('@')) { showToast('Default assignee email looks invalid.', 'error'); return; }
+    if (!email || !email.includes('@')) {
+      showToast('Default assignee email looks invalid.', 'error');
+      return;
+    }
     updateSettings({
       defaultAssigneeName: settingsDraft.defaultAssigneeName.trim(),
       defaultAssigneeEmail: email,
@@ -5762,15 +9830,21 @@ function RolesAccessPage({ currentUserEmail }) {
   const saveRole = () => {
     if (!selected || !draft) return;
     const res = updateRole(selected.id, draft);
-    if (res?.error) { showToast(res.error, 'error'); return; }
+    if (res?.error) {
+      showToast(res.error, 'error');
+      return;
+    }
     showToast(`Role "${draft.label}" saved.`);
   };
 
   // ─── Capability toggle (in the draft, not committed) ────────────────────────
-  const toggleCap = (capId) => {
+  const toggleCap = capId => {
     if (!draft) return;
     // Superadmin is locked — every capability stays on.
-    if (selected?.id === 'role_superadmin') { showToast('Superadmin must retain every capability.', 'error'); return; }
+    if (selected?.id === 'role_superadmin') {
+      showToast('Superadmin must retain every capability.', 'error');
+      return;
+    }
     setDraft(d => ({
       ...d,
       capabilities: d.capabilities.includes(capId)
@@ -5784,7 +9858,10 @@ function RolesAccessPage({ currentUserEmail }) {
     if (!deleteRoleConfirm) return;
     const res = deleteRole(deleteRoleConfirm.id);
     setDeleteRoleConfirm(null);
-    if (res?.error) { showToast(res.error, 'error'); return; }
+    if (res?.error) {
+      showToast(res.error, 'error');
+      return;
+    }
     showToast(`Role "${deleteRoleConfirm.label}" deleted.`);
   };
 
@@ -5799,7 +9876,7 @@ function RolesAccessPage({ currentUserEmail }) {
   // Capabilities matrix needs roles.edit; users-in-role table needs
   // roles.assign; create user needs users.create. Page itself is already
   // gated by roles.edit at the route level.
-  const canEditRoles  = can('roles.edit');
+  const canEditRoles = can('roles.edit');
   const canCreateRole = can('roles.create');
   const canDeleteRole = can('roles.delete');
   const canAssignRole = can('roles.assign');
@@ -5809,49 +9886,143 @@ function RolesAccessPage({ currentUserEmail }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div>
-        <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '4px' }}>Roles & Access</div>
-        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Define what each role can do, assign users, and create new portal accounts.</div>
+        <div
+          style={{
+            fontSize: '22px',
+            fontWeight: 800,
+            color: 'var(--text-primary)',
+            marginBottom: '4px',
+          }}
+        >
+          Roles & Access
+        </div>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          Define what each role can do, assign users, and create new portal accounts.
+        </div>
       </div>
 
       {/* Settings strip — default assignee */}
-      <div style={{ ...S.card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px', borderLeft: '4px solid var(--accent-primary)' }}>
-        <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: '4px', marginRight: '8px' }}>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Default ticket assignee</div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Every new ticket lands here for triage before admin re-routes.</div>
+      <div
+        style={{
+          ...S.card,
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: '14px',
+          borderLeft: '4px solid var(--accent-primary)',
+        }}
+      >
+        <div
+          style={{
+            flex: '0 0 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            marginRight: '8px',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '12px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            Default ticket assignee
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            Every new ticket lands here for triage before admin re-routes.
+          </div>
         </div>
         <input
-          type="text" value={settingsDraft.defaultAssigneeName}
+          type="text"
+          value={settingsDraft.defaultAssigneeName}
           onChange={e => setSettingsDraft(d => ({ ...d, defaultAssigneeName: e.target.value }))}
-          placeholder="Display name" disabled={!canEditSettings}
+          placeholder="Display name"
+          disabled={!canEditSettings}
           style={{ ...S.input, flex: '1 1 180px', minWidth: '160px', maxWidth: '260px' }}
         />
         <input
-          type="email" value={settingsDraft.defaultAssigneeEmail}
+          type="email"
+          value={settingsDraft.defaultAssigneeEmail}
           onChange={e => setSettingsDraft(d => ({ ...d, defaultAssigneeEmail: e.target.value }))}
-          placeholder="email@pomelofashion.com" disabled={!canEditSettings}
+          placeholder="email@pomelofashion.com"
+          disabled={!canEditSettings}
           style={{ ...S.input, flex: '1 1 260px', minWidth: '220px', maxWidth: '360px' }}
         />
         <button
           onClick={saveSettings}
           disabled={!canEditSettings || !settingsDirty}
-          style={{ ...S.orangeBtn, opacity: (canEditSettings && settingsDirty) ? 1 : 0.45, cursor: (canEditSettings && settingsDirty) ? 'pointer' : 'not-allowed' }}
+          style={{
+            ...S.orangeBtn,
+            opacity: canEditSettings && settingsDirty ? 1 : 0.45,
+            cursor: canEditSettings && settingsDirty ? 'pointer' : 'not-allowed',
+          }}
         >
           Save
         </button>
       </div>
 
       {/* Two-column body: roles list (left) + role detail (right) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 320px) 1fr', gap: '18px', alignItems: 'start' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(260px, 320px) 1fr',
+          gap: '18px',
+          alignItems: 'start',
+        }}
+      >
         {/* Left rail — role list */}
-        <div style={{ ...S.card, padding: '14px 14px 18px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Roles</div>
+        <div
+          style={{
+            ...S.card,
+            padding: '14px 14px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '4px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '13px',
+                fontWeight: 700,
+                color: 'var(--text-secondary)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+              }}
+            >
+              Roles
+            </div>
             <button
               onClick={() => setCreateRoleOpen(true)}
               disabled={!canCreateRole}
-              style={{ padding: '5px 10px', background: 'var(--accent-soft)', color: 'var(--accent-primary)', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: 700, cursor: canCreateRole ? 'pointer' : 'not-allowed', opacity: canCreateRole ? 1 : 0.45 }}
-              title={canCreateRole ? 'Define a new role' : 'You do not have permission to create roles.'}
-            >+ New role</button>
+              style={{
+                padding: '5px 10px',
+                background: 'var(--accent-soft)',
+                color: 'var(--accent-primary)',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: canCreateRole ? 'pointer' : 'not-allowed',
+                opacity: canCreateRole ? 1 : 0.45,
+              }}
+              title={
+                canCreateRole ? 'Define a new role' : 'You do not have permission to create roles.'
+              }
+            >
+              + New role
+            </button>
           </div>
           {roles.map(r => {
             const count = countUsersInRole(r.id);
@@ -5861,21 +10032,53 @@ function RolesAccessPage({ currentUserEmail }) {
                 key={r.id}
                 onClick={() => setSelectedId(r.id)}
                 style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 12px', borderRadius: '8px', cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
                   background: isActive ? 'var(--accent-soft)' : 'transparent',
                   border: `1px solid ${isActive ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
                   textAlign: 'left',
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: r.color || 'var(--accent-primary)', flexShrink: 0 }} />
+                  <span
+                    style={{
+                      width: '10px',
+                      height: '10px',
+                      borderRadius: '50%',
+                      background: r.color || 'var(--accent-primary)',
+                      flexShrink: 0,
+                    }}
+                  />
                   <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{r.capabilities.length} caps · {count} {count === 1 ? 'user' : 'users'}</span>
+                    <span
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        color: 'var(--text-primary)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {r.label}
+                    </span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      {r.capabilities.length} caps · {count} {count === 1 ? 'user' : 'users'}
+                    </span>
                   </span>
                 </span>
-                {r.isSystem && <span title="System role (cannot be deleted)" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>🔒</span>}
+                {r.isSystem && (
+                  <span
+                    title="System role (cannot be deleted)"
+                    style={{ fontSize: '10px', color: 'var(--text-muted)' }}
+                  >
+                    🔒
+                  </span>
+                )}
               </button>
             );
           })}
@@ -5883,29 +10086,65 @@ function RolesAccessPage({ currentUserEmail }) {
 
         {/* Right pane — selected role detail */}
         {!selected ? (
-          <div style={{ ...S.card, padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Select a role to view or edit its capabilities.</div>
+          <div
+            style={{ ...S.card, padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}
+          >
+            Select a role to view or edit its capabilities.
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Role header */}
             <div style={S.card}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <span style={{ width: '24px', height: '24px', borderRadius: '50%', background: draft?.color || selected.color, flexShrink: 0 }} />
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}
+              >
+                <span
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: draft?.color || selected.color,
+                    flexShrink: 0,
+                  }}
+                />
                 <input
-                  type="text" value={draft?.label || ''}
+                  type="text"
+                  value={draft?.label || ''}
                   onChange={e => setDraft(d => ({ ...d, label: e.target.value }))}
                   disabled={!canEditRoles}
                   style={{ ...S.input, fontSize: '16px', fontWeight: 700, flex: 1 }}
                   placeholder="Role label"
                 />
                 <input
-                  type="color" value={draft?.color || '#6366F1'}
+                  type="color"
+                  value={draft?.color || '#6366F1'}
                   onChange={e => setDraft(d => ({ ...d, color: e.target.value }))}
                   disabled={!canEditRoles}
                   title="Role color"
-                  style={{ width: '40px', height: '40px', border: '1px solid var(--border-default)', borderRadius: '6px', cursor: canEditRoles ? 'pointer' : 'not-allowed', background: 'var(--bg-input)' }}
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    border: '1px solid var(--border-default)',
+                    borderRadius: '6px',
+                    cursor: canEditRoles ? 'pointer' : 'not-allowed',
+                    background: 'var(--bg-input)',
+                  }}
                 />
                 {selected.isSystem && (
-                  <span style={{ fontSize: '10px', padding: '4px 8px', borderRadius: '4px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>System</span>
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      background: 'var(--bg-hover)',
+                      color: 'var(--text-secondary)',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    System
+                  </span>
                 )}
               </div>
               <textarea
@@ -5916,58 +10155,144 @@ function RolesAccessPage({ currentUserEmail }) {
                 placeholder="Short description shown to admins managing this role."
                 style={{ ...S.textarea, minHeight: '54px', fontSize: '13px' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '12px',
+                }}
+              >
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  {selected.isSystem ? 'Machine name locked for system roles.' : `Machine name: ${selected.name}`}
+                  {selected.isSystem
+                    ? 'Machine name locked for system roles.'
+                    : `Machine name: ${selected.name}`}
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {!selected.isSystem && (
                     <button
                       onClick={() => setDeleteRoleConfirm(selected)}
                       disabled={!canDeleteRole}
-                      style={{ padding: '8px 14px', background: 'transparent', color: '#DC2626', border: '1px solid #FCA5A5', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: canDeleteRole ? 'pointer' : 'not-allowed', opacity: canDeleteRole ? 1 : 0.45 }}
-                    >Delete role</button>
+                      style={{
+                        padding: '8px 14px',
+                        background: 'transparent',
+                        color: '#DC2626',
+                        border: '1px solid #FCA5A5',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        cursor: canDeleteRole ? 'pointer' : 'not-allowed',
+                        opacity: canDeleteRole ? 1 : 0.45,
+                      }}
+                    >
+                      Delete role
+                    </button>
                   )}
                   <button
                     onClick={saveRole}
                     disabled={!canEditRoles || !dirty}
-                    style={{ ...S.orangeBtn, opacity: (canEditRoles && dirty) ? 1 : 0.45, cursor: (canEditRoles && dirty) ? 'pointer' : 'not-allowed' }}
-                  >Save changes</button>
+                    style={{
+                      ...S.orangeBtn,
+                      opacity: canEditRoles && dirty ? 1 : 0.45,
+                      cursor: canEditRoles && dirty ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    Save changes
+                  </button>
                 </div>
               </div>
             </div>
 
             {/* Capability matrix */}
             <div style={S.card}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Capabilities</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{draft?.capabilities.length || 0} of {CAPABILITIES.length} granted</div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '12px',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: 'var(--text-secondary)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  Capabilities
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {draft?.capabilities.length || 0} of {CAPABILITIES.length} granted
+                </div>
               </div>
               {Object.entries(groupedCaps).map(([group, caps]) => (
                 <div key={group} style={{ marginBottom: '14px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>{group}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '6px' }}>
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    {group}
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                      gap: '6px',
+                    }}
+                  >
                     {caps.map(c => {
                       const checked = draft?.capabilities.includes(c.id) || false;
                       const lockedSuperadmin = selected.id === 'role_superadmin';
                       const disabled = !canEditRoles || lockedSuperadmin;
                       return (
-                        <label key={c.id} title={c.description} style={{
-                          display: 'flex', alignItems: 'flex-start', gap: '8px',
-                          padding: '8px 10px', borderRadius: '6px',
-                          background: checked ? 'var(--accent-soft)' : 'var(--bg-page)',
-                          border: `1px solid ${checked ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
-                          cursor: disabled ? 'not-allowed' : 'pointer',
-                          opacity: disabled && !lockedSuperadmin ? 0.6 : 1,
-                        }}>
+                        <label
+                          key={c.id}
+                          title={c.description}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '8px',
+                            padding: '8px 10px',
+                            borderRadius: '6px',
+                            background: checked ? 'var(--accent-soft)' : 'var(--bg-page)',
+                            border: `1px solid ${checked ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
+                            cursor: disabled ? 'not-allowed' : 'pointer',
+                            opacity: disabled && !lockedSuperadmin ? 0.6 : 1,
+                          }}
+                        >
                           <input
-                            type="checkbox" checked={checked} disabled={disabled}
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
                             onChange={() => toggleCap(c.id)}
-                            style={{ marginTop: '2px', accentColor: 'var(--accent-primary)', flexShrink: 0 }}
+                            style={{
+                              marginTop: '2px',
+                              accentColor: 'var(--accent-primary)',
+                              flexShrink: 0,
+                            }}
                           />
                           <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>{c.label}</span>
-                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{c.id}</span>
+                            <span
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                color: 'var(--text-primary)',
+                              }}
+                            >
+                              {c.label}
+                            </span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              {c.id}
+                            </span>
                           </span>
                         </label>
                       );
@@ -5976,7 +10301,16 @@ function RolesAccessPage({ currentUserEmail }) {
                 </div>
               ))}
               {selected.id === 'role_superadmin' && (
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '4px' }}>Superadmin is locked to every capability to prevent admin lockout.</div>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: 'var(--text-muted)',
+                    fontStyle: 'italic',
+                    marginTop: '4px',
+                  }}
+                >
+                  Superadmin is locked to every capability to prevent admin lockout.
+                </div>
               )}
             </div>
 
@@ -5994,17 +10328,17 @@ function RolesAccessPage({ currentUserEmail }) {
       </div>
 
       {/* Create user card */}
-      <CreateUserOnRolesPage
-        roles={roles}
-        canCreate={canCreateUser}
-        onToast={showToast}
-      />
+      <CreateUserOnRolesPage roles={roles} canCreate={canCreateUser} onToast={showToast} />
 
       {createRoleOpen && (
         <CreateRoleModal
           groupedCaps={groupedCaps}
           onClose={() => setCreateRoleOpen(false)}
-          onCreated={(role) => { setCreateRoleOpen(false); setSelectedId(role.id); showToast(`Role "${role.label}" created.`); }}
+          onCreated={role => {
+            setCreateRoleOpen(false);
+            setSelectedId(role.id);
+            showToast(`Role "${role.label}" created.`);
+          }}
           onToast={showToast}
         />
       )}
@@ -6029,7 +10363,13 @@ function UsersInRoleSection({ role, users, allRoles, canAssign, currentUserEmail
   const [bulkIds, setBulkIds] = useState(new Set());
   const [targetRoleId, setTargetRoleId] = useState('');
   useEffect(() => setBulkIds(new Set()), [role.id]);
-  const toggleBulk = (id) => setBulkIds(s => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const toggleBulk = id =>
+    setBulkIds(s => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const otherRoles = allRoles.filter(r => r.id !== role.id);
 
   const doBulkReassign = () => {
@@ -6038,60 +10378,164 @@ function UsersInRoleSection({ role, users, allRoles, canAssign, currentUserEmail
     let succeeded = 0;
     for (const userId of bulkIds) {
       const res = setUserRoleId(userId, targetRoleId);
-      if (res?.error) { failed++; onToast(res.error, 'error'); }
-      else succeeded++;
+      if (res?.error) {
+        failed++;
+        onToast(res.error, 'error');
+      } else succeeded++;
     }
     if (succeeded) onToast(`Reassigned ${succeeded} ${succeeded === 1 ? 'user' : 'users'}.`);
-    if (!failed) { setBulkIds(new Set()); setTargetRoleId(''); }
+    if (!failed) {
+      setBulkIds(new Set());
+      setTargetRoleId('');
+    }
   };
 
   return (
     <div style={S.card}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '12px',
+        }}
+      >
+        <div
+          style={{
+            fontSize: '13px',
+            fontWeight: 700,
+            color: 'var(--text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+          }}
+        >
           Users in this role ({users.length})
         </div>
         {bulkIds.size > 0 && canAssign && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{bulkIds.size} selected →</span>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {bulkIds.size} selected →
+            </span>
             <select
-              value={targetRoleId} onChange={e => setTargetRoleId(e.target.value)}
+              value={targetRoleId}
+              onChange={e => setTargetRoleId(e.target.value)}
               style={{ ...S.select, width: 'auto', padding: '6px 10px', fontSize: '12px' }}
             >
               <option value="">Reassign to…</option>
-              {otherRoles.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+              {otherRoles.map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
             </select>
             <button
-              onClick={doBulkReassign} disabled={!targetRoleId}
-              style={{ padding: '6px 12px', background: 'var(--accent-primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: targetRoleId ? 'pointer' : 'not-allowed', opacity: targetRoleId ? 1 : 0.45 }}
-            >Apply</button>
+              onClick={doBulkReassign}
+              disabled={!targetRoleId}
+              style={{
+                padding: '6px 12px',
+                background: 'var(--accent-primary)',
+                color: 'var(--text-inverse)',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: targetRoleId ? 'pointer' : 'not-allowed',
+                opacity: targetRoleId ? 1 : 0.45,
+              }}
+            >
+              Apply
+            </button>
           </div>
         )}
       </div>
       {users.length === 0 ? (
-        <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>No users hold this role yet.</div>
+        <div
+          style={{
+            padding: '24px',
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            fontSize: '13px',
+          }}
+        >
+          No users hold this role yet.
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {users.map(u => {
             const isSelf = u.email === currentUserEmail;
             return (
-              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 4px', borderTop: '1px solid var(--border-subtle)' }}>
+              <div
+                key={u.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '8px 4px',
+                  borderTop: '1px solid var(--border-subtle)',
+                }}
+              >
                 {canAssign ? (
                   <input
-                    type="checkbox" checked={bulkIds.has(u.id)} onChange={() => toggleBulk(u.id)}
+                    type="checkbox"
+                    checked={bulkIds.has(u.id)}
+                    onChange={() => toggleBulk(u.id)}
                     style={{ accentColor: 'var(--accent-primary)' }}
                   />
-                ) : <span style={{ width: '14px' }} />}
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: role.color || 'var(--accent-primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px', flexShrink: 0 }}>
-                  {u.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()}
+                ) : (
+                  <span style={{ width: '14px' }} />
+                )}
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: role.color || 'var(--accent-primary)',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {u.name
+                    .split(' ')
+                    .map(p => p[0])
+                    .join('')
+                    .slice(0, 2)
+                    .toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {u.name}{isSelf && <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 6px', borderRadius: '4px', background: 'var(--accent-soft)', color: 'var(--accent-primary)', fontWeight: 700 }}>YOU</span>}
+                    {u.name}
+                    {isSelf && (
+                      <span
+                        style={{
+                          marginLeft: '6px',
+                          fontSize: '10px',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          background: 'var(--accent-soft)',
+                          color: 'var(--accent-primary)',
+                          fontWeight: 700,
+                        }}
+                      >
+                        YOU
+                      </span>
+                    )}
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{u.email} · {u.department}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {u.email} · {u.department}
+                  </div>
                 </div>
-                <span style={{ fontSize: '11px', color: u.active ? 'var(--text-secondary)' : '#DC2626', fontWeight: 700 }}>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: u.active ? 'var(--text-secondary)' : '#DC2626',
+                    fontWeight: 700,
+                  }}
+                >
                   {u.active ? 'Active' : 'Deactivated'}
                 </span>
               </div>
@@ -6108,7 +10552,10 @@ function CreateUserOnRolesPage({ roles, canCreate, onToast }) {
   // plain state only (never written to localStorage).
   const defaultRoleId = () => roles.find(r => r.isDefault)?.id || roles[0]?.id || '';
   const [draft, setDraft, clearDraft] = usePersistentState('user-create', () => ({
-    name: '', email: '', department: 'IT & Technology', roleId: defaultRoleId(),
+    name: '',
+    email: '',
+    department: 'IT & Technology',
+    roleId: defaultRoleId(),
   }));
   const { name, email, department, roleId } = draft;
   const setField = (k, v) => setDraft(d => ({ ...d, [k]: v }));
@@ -6123,49 +10570,120 @@ function CreateUserOnRolesPage({ roles, canCreate, onToast }) {
     }
   }, [roles, roleId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const submit = async (e) => {
+  const submit = async e => {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
     const res = await adminCreateUser({ name, email, roleId, department, tempPassword });
     setBusy(false);
-    if (res.error) { onToast(res.error, 'error'); return; }
+    if (res.error) {
+      onToast(res.error, 'error');
+      return;
+    }
     onToast(`Created user ${res.user.name}.`);
-    clearDraft(); setTempPassword('');
+    clearDraft();
+    setTempPassword('');
   };
 
   return (
-    <form onSubmit={submit} style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <form
+      onSubmit={submit}
+      style={{ ...S.card, display: 'flex', flexDirection: 'column', gap: '12px' }}
+    >
       <div>
-        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Create user</div>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>The user receives the temp password and is asked to change it on first login.</div>
+        <div
+          style={{
+            fontSize: '13px',
+            fontWeight: 700,
+            color: 'var(--text-secondary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+          }}
+        >
+          Create user
+        </div>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+          The user receives the temp password and is asked to change it on first login.
+        </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '10px',
+        }}
+      >
         <div>
           <label style={S.label}>Full name</label>
-          <input value={name} onChange={e => setField('name', e.target.value)} disabled={!canCreate} required style={S.input} placeholder="Jane Doe" />
+          <input
+            value={name}
+            onChange={e => setField('name', e.target.value)}
+            disabled={!canCreate}
+            required
+            style={S.input}
+            placeholder="Jane Doe"
+          />
         </div>
         <div>
           <label style={S.label}>Email</label>
-          <input type="email" value={email} onChange={e => setField('email', e.target.value)} disabled={!canCreate} required style={S.input} placeholder="jane.doe@pomelo.com" />
+          <input
+            type="email"
+            value={email}
+            onChange={e => setField('email', e.target.value)}
+            disabled={!canCreate}
+            required
+            style={S.input}
+            placeholder="jane.doe@pomelo.com"
+          />
         </div>
         <div>
           <label style={S.label}>Department</label>
-          <input value={department} onChange={e => setField('department', e.target.value)} disabled={!canCreate} style={S.input} />
+          <input
+            value={department}
+            onChange={e => setField('department', e.target.value)}
+            disabled={!canCreate}
+            style={S.input}
+          />
         </div>
         <div>
           <label style={S.label}>Role</label>
-          <select value={roleId} onChange={e => setField('roleId', e.target.value)} disabled={!canCreate} style={S.select}>
-            {roles.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+          <select
+            value={roleId}
+            onChange={e => setField('roleId', e.target.value)}
+            disabled={!canCreate}
+            style={S.select}
+          >
+            {roles.map(r => (
+              <option key={r.id} value={r.id}>
+                {r.label}
+              </option>
+            ))}
           </select>
         </div>
         <div>
           <label style={S.label}>Temp password</label>
-          <input type="text" value={tempPassword} onChange={e => setTempPassword(e.target.value)} disabled={!canCreate} required minLength={8} style={S.input} placeholder="At least 8 characters" />
+          <input
+            type="text"
+            value={tempPassword}
+            onChange={e => setTempPassword(e.target.value)}
+            disabled={!canCreate}
+            required
+            minLength={8}
+            style={S.input}
+            placeholder="At least 8 characters"
+          />
         </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button type="submit" disabled={!canCreate || busy} style={{ ...S.orangeBtn, opacity: (canCreate && !busy) ? 1 : 0.45, cursor: (canCreate && !busy) ? 'pointer' : 'not-allowed' }}>
+        <button
+          type="submit"
+          disabled={!canCreate || busy}
+          style={{
+            ...S.orangeBtn,
+            opacity: canCreate && !busy ? 1 : 0.45,
+            cursor: canCreate && !busy ? 'pointer' : 'not-allowed',
+          }}
+        >
           {busy ? 'Creating…' : 'Create user'}
         </button>
       </div>
@@ -6178,46 +10696,178 @@ function CreateRoleModal({ groupedCaps, onClose, onCreated, onToast }) {
   const [description, setDescription] = useState('');
   const [color, setColor] = useState('#6366F1');
   const [capabilities, setCapabilities] = useState([]);
-  const toggleCap = (id) => setCapabilities(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  const toggleCap = id =>
+    setCapabilities(prev => (prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]));
 
-  const submit = (e) => {
+  const submit = e => {
     e.preventDefault();
     const res = createRole({ name: label, label, description, color, capabilities });
-    if (res?.error) { onToast(res.error, 'error'); return; }
+    if (res?.error) {
+      onToast(res.error, 'error');
+      return;
+    }
     onCreated(res);
   };
 
   return (
-    <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
-      <form onSubmit={submit} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Create role" style={{ width: '640px', maxWidth: '95vw', maxHeight: '90vh', background: 'var(--bg-surface)', borderRadius: '14px', boxShadow: 'var(--shadow-modal)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>New role</div>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={18} /></button>
+    <div
+      onClick={onClose}
+      role="presentation"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--bg-overlay)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '24px',
+      }}
+    >
+      <form
+        onSubmit={submit}
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create role"
+        style={{
+          width: '640px',
+          maxWidth: '95vw',
+          maxHeight: '90vh',
+          background: 'var(--bg-surface)',
+          borderRadius: '14px',
+          boxShadow: 'var(--shadow-modal)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            padding: '18px 22px',
+            borderBottom: '1px solid var(--border-default)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>
+            New role
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <X size={18} />
+          </button>
         </div>
-        <div style={{ padding: '18px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div
+          style={{
+            padding: '18px 22px',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+          }}
+        >
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>
               <label style={S.label}>Role label</label>
-              <input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. QA Engineer" required style={S.input} />
+              <input
+                value={label}
+                onChange={e => setLabel(e.target.value)}
+                placeholder="e.g. QA Engineer"
+                required
+                style={S.input}
+              />
             </div>
             <div>
               <label style={S.label}>Color</label>
-              <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ width: '46px', height: '38px', border: '1px solid var(--border-default)', borderRadius: '6px', cursor: 'pointer', background: 'var(--bg-input)' }} />
+              <input
+                type="color"
+                value={color}
+                onChange={e => setColor(e.target.value)}
+                style={{
+                  width: '46px',
+                  height: '38px',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  background: 'var(--bg-input)',
+                }}
+              />
             </div>
           </div>
           <div>
             <label style={S.label}>Description</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Short description shown to admins managing this role." style={{ ...S.textarea, minHeight: '54px', fontSize: '13px' }} />
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={2}
+              placeholder="Short description shown to admins managing this role."
+              style={{ ...S.textarea, minHeight: '54px', fontSize: '13px' }}
+            />
           </div>
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '6px' }}>Capabilities ({capabilities.length} selected)</div>
+            <div
+              style={{
+                fontSize: '13px',
+                fontWeight: 700,
+                color: 'var(--text-secondary)',
+                marginBottom: '6px',
+              }}
+            >
+              Capabilities ({capabilities.length} selected)
+            </div>
             {Object.entries(groupedCaps).map(([group, caps]) => (
               <div key={group} style={{ marginBottom: '10px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>{group}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '4px' }}>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: 'var(--text-muted)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    marginBottom: '4px',
+                  }}
+                >
+                  {group}
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: '4px',
+                  }}
+                >
                   {caps.map(c => (
-                    <label key={c.id} title={c.description} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', padding: '5px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)' }}>
-                      <input type="checkbox" checked={capabilities.includes(c.id)} onChange={() => toggleCap(c.id)} style={{ accentColor: 'var(--accent-primary)' }} />
+                    <label
+                      key={c.id}
+                      title={c.description}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '6px',
+                        padding: '5px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        color: 'var(--text-primary)',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={capabilities.includes(c.id)}
+                        onChange={() => toggleCap(c.id)}
+                        style={{ accentColor: 'var(--accent-primary)' }}
+                      />
                       <span style={{ minWidth: 0 }}>{c.label}</span>
                     </label>
                   ))}
@@ -6226,9 +10876,21 @@ function CreateRoleModal({ groupedCaps, onClose, onCreated, onToast }) {
             ))}
           </div>
         </div>
-        <div style={{ padding: '14px 22px', borderTop: '1px solid var(--border-default)', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-          <button type="button" onClick={onClose} style={S.ghostBtn}>Cancel</button>
-          <button type="submit" style={S.orangeBtn}>Create role</button>
+        <div
+          style={{
+            padding: '14px 22px',
+            borderTop: '1px solid var(--border-default)',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '8px',
+          }}
+        >
+          <button type="button" onClick={onClose} style={S.ghostBtn}>
+            Cancel
+          </button>
+          <button type="submit" style={S.orangeBtn}>
+            Create role
+          </button>
         </div>
       </form>
     </div>
@@ -6238,17 +10900,67 @@ function CreateRoleModal({ groupedCaps, onClose, onCreated, onToast }) {
 function ConfirmRoleDeleteModal({ role, userCount, onCancel, onConfirm }) {
   const blocked = userCount > 0;
   return (
-    <div onClick={onCancel} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }}>
-      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{ width: '440px', maxWidth: '95vw', background: 'var(--bg-surface)', borderRadius: '14px', boxShadow: 'var(--shadow-modal)', padding: '22px' }}>
-        <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>Delete role "{role.label}"?</div>
+    <div
+      onClick={onCancel}
+      role="presentation"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--bg-overlay)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+        padding: '24px',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        style={{
+          width: '440px',
+          maxWidth: '95vw',
+          background: 'var(--bg-surface)',
+          borderRadius: '14px',
+          boxShadow: 'var(--shadow-modal)',
+          padding: '22px',
+        }}
+      >
+        <div
+          style={{
+            fontSize: '16px',
+            fontWeight: 800,
+            color: 'var(--text-primary)',
+            marginBottom: '8px',
+          }}
+        >
+          Delete role "{role.label}"?
+        </div>
         <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '18px' }}>
           {blocked
             ? `This role still has ${userCount} ${userCount === 1 ? 'user' : 'users'}. Reassign them first.`
             : 'This cannot be undone. Capability assignments on this role will be lost.'}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-          <button onClick={onCancel} style={S.ghostBtn}>Cancel</button>
-          <button onClick={onConfirm} disabled={blocked} style={{ padding: '9px 18px', background: '#DC2626', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: blocked ? 'not-allowed' : 'pointer', opacity: blocked ? 0.5 : 1 }}>
+          <button onClick={onCancel} style={S.ghostBtn}>
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={blocked}
+            style={{
+              padding: '9px 18px',
+              background: '#DC2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: 700,
+              fontSize: '13px',
+              cursor: blocked ? 'not-allowed' : 'pointer',
+              opacity: blocked ? 0.5 : 1,
+            }}
+          >
             Delete role
           </button>
         </div>
@@ -6273,7 +10985,8 @@ function UsersPanelPage({ currentUserEmail }) {
   const users = useMemo(() => {
     const q = query.trim().toLowerCase();
     return listUsers().filter(u => {
-      if (q && !u.name.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q)) return false;
+      if (q && !u.name.toLowerCase().includes(q) && !u.email.toLowerCase().includes(q))
+        return false;
       if (roleFilter !== 'all' && u.roleId !== roleFilter) return false;
       if (statusFilter === 'active' && !u.active) return false;
       if (statusFilter === 'deactivated' && u.active) return false;
@@ -6282,10 +10995,12 @@ function UsersPanelPage({ currentUserEmail }) {
     });
   }, [query, roleFilter, statusFilter, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openTicketCount = (name) =>
-    MOCK_TICKETS.filter(t => t.assignee === name && (t.status === 'Open' || t.status === 'In Progress')).length;
+  const openTicketCount = name =>
+    MOCK_TICKETS.filter(
+      t => t.assignee === name && (t.status === 'Open' || t.status === 'In Progress')
+    ).length;
 
-  const fmtLogin = (iso) => {
+  const fmtLogin = iso => {
     if (!iso) return 'Never';
     const d = new Date(iso);
     const diff = Date.now() - d.getTime();
@@ -6300,9 +11015,50 @@ function UsersPanelPage({ currentUserEmail }) {
   };
 
   const StatusChip = ({ user }) => {
-    if (!user.active) return <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: '#FEE2E2', color: '#B91C1C', fontWeight: 700 }}>Deactivated</span>;
-    if (!user.lastLoginAt) return <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', fontWeight: 700 }}>Never logged in</span>;
-    return <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: '#DCFCE7', color: '#15803D', fontWeight: 700 }}>Active</span>;
+    if (!user.active)
+      return (
+        <span
+          style={{
+            fontSize: '11px',
+            padding: '3px 8px',
+            borderRadius: '4px',
+            background: '#FEE2E2',
+            color: '#B91C1C',
+            fontWeight: 700,
+          }}
+        >
+          Deactivated
+        </span>
+      );
+    if (!user.lastLoginAt)
+      return (
+        <span
+          style={{
+            fontSize: '11px',
+            padding: '3px 8px',
+            borderRadius: '4px',
+            background: '#FEF3C7',
+            color: '#92400E',
+            fontWeight: 700,
+          }}
+        >
+          Never logged in
+        </span>
+      );
+    return (
+      <span
+        style={{
+          fontSize: '11px',
+          padding: '3px 8px',
+          borderRadius: '4px',
+          background: '#DCFCE7',
+          color: '#15803D',
+          fontWeight: 700,
+        }}
+      >
+        Active
+      </span>
+    );
   };
 
   const [actionError, setActionError] = useState('');
@@ -6312,9 +11068,11 @@ function UsersPanelPage({ currentUserEmail }) {
     setActionError('');
     if (action === 'changeRole') {
       const res = setUserRoleId(user.id, message.roleId);
-      if (res?.error) { setActionError(res.error); return; }
-    }
-    else if (action === 'promote') setUserRole(user.id, 'superadmin');
+      if (res?.error) {
+        setActionError(res.error);
+        return;
+      }
+    } else if (action === 'promote') setUserRole(user.id, 'superadmin');
     else if (action === 'demote') setUserRole(user.id, 'user');
     else if (action === 'deactivate') setUserActive(user.id, false);
     else if (action === 'reactivate') setUserActive(user.id, true);
@@ -6324,14 +11082,39 @@ function UsersPanelPage({ currentUserEmail }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-end',
+          marginBottom: '24px',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}
+      >
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Users</h1>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>Manage portal accounts, roles, and access.</div>
+          <h1
+            style={{ fontSize: '24px', fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}
+          >
+            Users
+          </h1>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Manage portal accounts, roles, and access.
+          </div>
         </div>
         <button
           onClick={() => setCreating(true)}
-          style={{ background: 'var(--accent-primary)', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 18px', fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+          style={{
+            background: 'var(--accent-primary)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 18px',
+            fontFamily: "'Inter', sans-serif",
+            fontWeight: 700,
+            fontSize: '13px',
+            cursor: 'pointer',
+          }}
         >
           + New user
         </button>
@@ -6345,13 +11128,54 @@ function UsersPanelPage({ currentUserEmail }) {
           aria-label="Search users"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          style={{ flex: '1 1 240px', minWidth: '200px', padding: '10px 14px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", outline: 'none', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+          style={{
+            flex: '1 1 240px',
+            minWidth: '200px',
+            padding: '10px 14px',
+            border: '1.5px solid var(--border-default)',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontFamily: "'Inter', sans-serif",
+            outline: 'none',
+            background: 'var(--bg-input)',
+            color: 'var(--text-primary)',
+          }}
         />
-        <select aria-label="Filter by role" value={roleFilter} onChange={e => setRoleFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+        <select
+          aria-label="Filter by role"
+          value={roleFilter}
+          onChange={e => setRoleFilter(e.target.value)}
+          style={{
+            padding: '10px 14px',
+            border: '1.5px solid var(--border-default)',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontFamily: "'Inter', sans-serif",
+            background: 'var(--bg-input)',
+            color: 'var(--text-primary)',
+          }}
+        >
           <option value="all">All roles</option>
-          {listRoles().map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+          {listRoles().map(r => (
+            <option key={r.id} value={r.id}>
+              {r.label}
+            </option>
+          ))}
         </select>
-        <select aria-label="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+        <select
+          aria-label="Filter by status"
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          style={{
+            padding: '10px 14px',
+            border: '1.5px solid var(--border-default)',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontFamily: "'Inter', sans-serif",
+            background: 'var(--bg-input)',
+            color: 'var(--text-primary)',
+          }}
+        >
           <option value="all">All status</option>
           <option value="active">Active</option>
           <option value="deactivated">Deactivated</option>
@@ -6360,18 +11184,105 @@ function UsersPanelPage({ currentUserEmail }) {
       </div>
 
       {/* Table */}
-      <div style={{ background: 'var(--bg-surface)', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden', border: '1px solid var(--border-default)' }}>
+      <div
+        style={{
+          background: 'var(--bg-surface)',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          overflow: 'hidden',
+          border: '1px solid var(--border-default)',
+        }}
+      >
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ background: 'var(--bg-page)', textAlign: 'left' }}>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>User</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Role</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Department</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Last login</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Open tickets</th>
-                <th style={{ padding: '12px 16px', fontWeight: 700, color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Actions</th>
+                <th
+                  style={{
+                    padding: '12px 16px',
+                    fontWeight: 700,
+                    color: 'var(--text-secondary)',
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  User
+                </th>
+                <th
+                  style={{
+                    padding: '12px 16px',
+                    fontWeight: 700,
+                    color: 'var(--text-secondary)',
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  Role
+                </th>
+                <th
+                  style={{
+                    padding: '12px 16px',
+                    fontWeight: 700,
+                    color: 'var(--text-secondary)',
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  Department
+                </th>
+                <th
+                  style={{
+                    padding: '12px 16px',
+                    fontWeight: 700,
+                    color: 'var(--text-secondary)',
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  Last login
+                </th>
+                <th
+                  style={{
+                    padding: '12px 16px',
+                    fontWeight: 700,
+                    color: 'var(--text-secondary)',
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}
+                >
+                  Status
+                </th>
+                <th
+                  style={{
+                    padding: '12px 16px',
+                    fontWeight: 700,
+                    color: 'var(--text-secondary)',
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    textAlign: 'right',
+                  }}
+                >
+                  Open tickets
+                </th>
+                <th
+                  style={{
+                    padding: '12px 16px',
+                    fontWeight: 700,
+                    color: 'var(--text-secondary)',
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    textAlign: 'right',
+                  }}
+                >
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -6383,24 +11294,86 @@ function UsersPanelPage({ currentUserEmail }) {
                   <tr key={u.id} style={{ borderTop: '1px solid var(--border-subtle)' }}>
                     <td style={{ padding: '14px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: roleColor, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px' }}>
-                          {u.name.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2)}
+                        <div
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            background: roleColor,
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                          }}
+                        >
+                          {u.name
+                            .split(' ')
+                            .map(p => p[0])
+                            .join('')
+                            .toUpperCase()
+                            .slice(0, 2)}
                         </div>
                         <div>
-                          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{u.name} {isSelf && <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500 }}>(you)</span>}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{u.email}</div>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {u.name}{' '}
+                            {isSelf && (
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  color: 'var(--text-muted)',
+                                  fontWeight: 500,
+                                }}
+                              >
+                                (you)
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            {u.email}
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                      <span style={{ fontSize: '12px', padding: '3px 8px', borderRadius: '4px', background: (roleColor || 'var(--text-muted)') + '18', color: roleColor, fontWeight: 700 }}>
+                      <span
+                        style={{
+                          fontSize: '12px',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          background: (roleColor || 'var(--text-muted)') + '18',
+                          color: roleColor,
+                          fontWeight: 700,
+                        }}
+                      >
                         {userRole?.label || u.role || 'Unknown'}
                       </span>
                     </td>
-                    <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>{u.department}</td>
-                    <td style={{ padding: '14px 16px', color: 'var(--text-secondary)', fontSize: '12px' }}>{fmtLogin(u.lastLoginAt)}</td>
-                    <td style={{ padding: '14px 16px' }}><StatusChip user={u} /></td>
-                    <td style={{ padding: '14px 16px', textAlign: 'right', color: 'var(--text-secondary)' }}>{openTicketCount(u.name)}</td>
+                    <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>
+                      {u.department}
+                    </td>
+                    <td
+                      style={{
+                        padding: '14px 16px',
+                        color: 'var(--text-secondary)',
+                        fontSize: '12px',
+                      }}
+                    >
+                      {fmtLogin(u.lastLoginAt)}
+                    </td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <StatusChip user={u} />
+                    </td>
+                    <td
+                      style={{
+                        padding: '14px 16px',
+                        textAlign: 'right',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      {openTicketCount(u.name)}
+                    </td>
                     <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                       <UserRowActions
                         user={u}
@@ -6414,7 +11387,14 @@ function UsersPanelPage({ currentUserEmail }) {
                 );
               })}
               {users.length === 0 && (
-                <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>No users match the current filters.</td></tr>
+                <tr>
+                  <td
+                    colSpan={7}
+                    style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}
+                  >
+                    No users match the current filters.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -6423,7 +11403,13 @@ function UsersPanelPage({ currentUserEmail }) {
 
       {/* Modals */}
       {creating && <UserCreateModal onClose={() => setCreating(false)} />}
-      {editing && <UserEditModal user={editing} onClose={() => setEditing(null)} currentUserEmail={currentUserEmail} />}
+      {editing && (
+        <UserEditModal
+          user={editing}
+          onClose={() => setEditing(null)}
+          currentUserEmail={currentUserEmail}
+        />
+      )}
       {resetting && <UserResetPasswordModal user={resetting} onClose={() => setResetting(null)} />}
       {confirm && (
         <ConfirmDialog
@@ -6432,7 +11418,18 @@ function UsersPanelPage({ currentUserEmail }) {
             <>
               {confirm.message.body}
               {actionError && (
-                <div role="alert" style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '8px', background: '#FEF2F2', color: '#B91C1C', fontSize: '13px', fontWeight: 600 }}>
+                <div
+                  role="alert"
+                  style={{
+                    marginTop: '10px',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    background: '#FEF2F2',
+                    color: '#B91C1C',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                  }}
+                >
                   {actionError}
                 </div>
               )}
@@ -6441,7 +11438,10 @@ function UsersPanelPage({ currentUserEmail }) {
           confirmLabel={confirm.message.confirmLabel}
           confirmStyle={confirm.message.danger ? 'danger' : 'primary'}
           onConfirm={handleConfirmed}
-          onCancel={() => { setConfirm(null); setActionError(''); }}
+          onCancel={() => {
+            setConfirm(null);
+            setActionError('');
+          }}
         />
       )}
     </div>
@@ -6455,7 +11455,12 @@ function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
   const [roleSubOpen, setRoleSubOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
-    const onDown = e => { if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setRoleSubOpen(false); } };
+    const onDown = e => {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+        setRoleSubOpen(false);
+      }
+    };
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
   }, []);
@@ -6467,9 +11472,24 @@ function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
     <button
       key={label}
       role="menuitem"
-      onClick={() => { setOpen(false); setRoleSubOpen(false); onClick(); }}
+      onClick={() => {
+        setOpen(false);
+        setRoleSubOpen(false);
+        onClick();
+      }}
       disabled={opts.disabled}
-      style={{ width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'none', color: opts.danger ? '#B91C1C' : 'var(--text-primary)', cursor: opts.disabled ? 'not-allowed' : 'pointer', fontSize: '13px', borderRadius: '6px', opacity: opts.disabled ? 0.5 : 1 }}
+      style={{
+        width: '100%',
+        textAlign: 'left',
+        padding: '8px 12px',
+        border: 'none',
+        background: 'none',
+        color: opts.danger ? '#B91C1C' : 'var(--text-primary)',
+        cursor: opts.disabled ? 'not-allowed' : 'pointer',
+        fontSize: '13px',
+        borderRadius: '6px',
+        opacity: opts.disabled ? 0.5 : 1,
+      }}
     >
       {label}
     </button>
@@ -6483,12 +11503,35 @@ function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
         onClick={() => setOpen(o => !o)}
         aria-label={`Actions for ${user.name}`}
         aria-expanded={open}
-        style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-default)', background: 'var(--bg-surface)', cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}
+        style={{
+          padding: '6px 10px',
+          borderRadius: '6px',
+          border: '1px solid var(--border-default)',
+          background: 'var(--bg-surface)',
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: 700,
+          color: 'var(--text-secondary)',
+        }}
       >
         Actions ▾
       </button>
       {open && (
-        <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, minWidth: '220px', background: 'var(--bg-surface)', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', padding: '4px', zIndex: 100, textAlign: 'left' }}>
+        <div
+          role="menu"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            right: 0,
+            minWidth: '220px',
+            background: 'var(--bg-surface)',
+            borderRadius: '8px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+            padding: '4px',
+            zIndex: 100,
+            textAlign: 'left',
+          }}
+        >
           {item('Edit details & role', onEdit, { disabled: !canEdit && !canChangeRole })}
 
           {/* Change role submenu — replaces the binary promote/demote item.
@@ -6501,13 +11544,38 @@ function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
               aria-expanded={roleSubOpen}
               onClick={() => setRoleSubOpen(o => !o)}
               disabled={!canChangeRole}
-              style={{ width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: 'none', color: 'var(--text-primary)', cursor: canChangeRole ? 'pointer' : 'not-allowed', fontSize: '13px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: canChangeRole ? 1 : 0.5 }}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                padding: '8px 12px',
+                border: 'none',
+                background: 'none',
+                color: 'var(--text-primary)',
+                cursor: canChangeRole ? 'pointer' : 'not-allowed',
+                fontSize: '13px',
+                borderRadius: '6px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                opacity: canChangeRole ? 1 : 0.5,
+              }}
             >
               <span>Change role…</span>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{roleSubOpen ? '▾' : '▸'}</span>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                {roleSubOpen ? '▾' : '▸'}
+              </span>
             </button>
             {roleSubOpen && canChangeRole && (
-              <div role="menu" style={{ marginLeft: '12px', marginTop: '2px', marginBottom: '4px', borderLeft: '2px solid var(--border-subtle)', paddingLeft: '4px' }}>
+              <div
+                role="menu"
+                style={{
+                  marginLeft: '12px',
+                  marginTop: '2px',
+                  marginBottom: '4px',
+                  borderLeft: '2px solid var(--border-subtle)',
+                  paddingLeft: '4px',
+                }}
+              >
                 {roles.map(r => {
                   const isCurrent = r.id === user.roleId;
                   return (
@@ -6516,7 +11584,8 @@ function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
                       role="menuitem"
                       disabled={isCurrent}
                       onClick={() => {
-                        setOpen(false); setRoleSubOpen(false);
+                        setOpen(false);
+                        setRoleSubOpen(false);
                         onConfirm('changeRole', {
                           title: `Change ${user.name}'s role to ${r.label}?`,
                           body: `${user.name} will take on every capability granted to "${r.label}" and lose anything that's not in that role.${isSelf ? ' This is your own account — the last-admin guard will block a change that locks out role management.' : ''}`,
@@ -6525,16 +11594,43 @@ function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
                           roleId: r.id,
                         });
                       }}
-                      style={{ width: '100%', textAlign: 'left', padding: '7px 10px', border: 'none', background: 'none', color: isCurrent ? 'var(--text-muted)' : 'var(--text-primary)', cursor: isCurrent ? 'default' : 'pointer', fontSize: '12px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '7px 10px',
+                        border: 'none',
+                        background: 'none',
+                        color: isCurrent ? 'var(--text-muted)' : 'var(--text-primary)',
+                        cursor: isCurrent ? 'default' : 'pointer',
+                        fontSize: '12px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}
                     >
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: r.color || 'var(--text-muted)', flexShrink: 0 }} />
+                      <span
+                        style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: r.color || 'var(--text-muted)',
+                          flexShrink: 0,
+                        }}
+                      />
                       <span style={{ flex: 1 }}>{r.label}</span>
-                      {isCurrent && <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>current</span>}
+                      {isCurrent && (
+                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                          current
+                        </span>
+                      )}
                     </button>
                   );
                 })}
                 {currentRole?.isSystem && currentRole.id === 'role_superadmin' && (
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '4px 10px' }}>
+                  <div
+                    style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '4px 10px' }}
+                  >
                     Demoting a superadmin reduces their access immediately.
                   </div>
                 )}
@@ -6550,18 +11646,20 @@ function UserRowActions({ user, isSelf, onEdit, onResetPassword, onConfirm }) {
               confirmLabel: 'Force re-OTP',
             })
           )}
-          {!isSelf && item(
-            user.active ? 'Deactivate account' : 'Reactivate account',
-            () => onConfirm(user.active ? 'deactivate' : 'reactivate', {
-              title: user.active ? 'Deactivate this account?' : 'Reactivate this account?',
-              body: user.active
-                ? `${user.name} will be blocked from logging in until reactivated.`
-                : `${user.name} will be able to log in again.`,
-              confirmLabel: user.active ? 'Deactivate' : 'Reactivate',
-              danger: user.active,
-            }),
-            { danger: user.active }
-          )}
+          {!isSelf &&
+            item(
+              user.active ? 'Deactivate account' : 'Reactivate account',
+              () =>
+                onConfirm(user.active ? 'deactivate' : 'reactivate', {
+                  title: user.active ? 'Deactivate this account?' : 'Reactivate this account?',
+                  body: user.active
+                    ? `${user.name} will be blocked from logging in until reactivated.`
+                    : `${user.name} will be able to log in again.`,
+                  confirmLabel: user.active ? 'Deactivate' : 'Reactivate',
+                  danger: user.active,
+                }),
+              { danger: user.active }
+            )}
         </div>
       )}
     </div>
@@ -6579,7 +11677,9 @@ function UserCreateModal({ onClose }) {
   useModalFocusTrap(panelRef);
 
   useEffect(() => {
-    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    const handleKey = e => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
@@ -6587,33 +11687,145 @@ function UserCreateModal({ onClose }) {
   const submit = async e => {
     e.preventDefault();
     const res = await adminCreateUser({ name, email, role, department, tempPassword });
-    if (res.error) { setError(res.error); return; }
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
     onClose();
   };
 
   return (
     <>
-      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 500 }} />
-      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Create user" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'var(--bg-surface)', borderRadius: '14px', zIndex: 501, width: '480px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden', outline: 'none' }}>
-        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>Create user</h2>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: '20px', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1 }}>×</button>
+      <div
+        onClick={onClose}
+        role="presentation"
+        style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 500 }}
+      />
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Create user"
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)',
+          borderRadius: '14px',
+          zIndex: 501,
+          width: '480px',
+          maxWidth: '95vw',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          overflow: 'hidden',
+          outline: 'none',
+        }}
+      >
+        <div
+          style={{
+            padding: '18px 22px',
+            borderBottom: '1px solid var(--border-default)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <h2
+            style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}
+          >
+            Create user
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '20px',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
         </div>
-        <form onSubmit={submit} style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <FormField label="Full name"><input aria-label="Full name" value={name} onChange={e => setName(e.target.value)} style={inputStyle} /></FormField>
-          <FormField label="Email"><input aria-label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} /></FormField>
-          <FormField label="Department"><input aria-label="Department" value={department} onChange={e => setDepartment(e.target.value)} style={inputStyle} /></FormField>
+        <form
+          onSubmit={submit}
+          style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+        >
+          <FormField label="Full name">
+            <input
+              aria-label="Full name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              style={inputStyle}
+            />
+          </FormField>
+          <FormField label="Email">
+            <input
+              aria-label="Email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              style={inputStyle}
+            />
+          </FormField>
+          <FormField label="Department">
+            <input
+              aria-label="Department"
+              value={department}
+              onChange={e => setDepartment(e.target.value)}
+              style={inputStyle}
+            />
+          </FormField>
           <FormField label="Role">
-            <select aria-label="Role" value={role} onChange={e => setRole(e.target.value)} style={inputStyle}>
+            <select
+              aria-label="Role"
+              value={role}
+              onChange={e => setRole(e.target.value)}
+              style={inputStyle}
+            >
               <option value="user">User</option>
               <option value="superadmin">Superadmin</option>
             </select>
           </FormField>
-          <FormField label="Temporary password" hint="At least 8 characters. User must change it on first login."><input aria-label="Temporary password" type="text" value={tempPassword} onChange={e => setTempPassword(e.target.value)} style={inputStyle} /></FormField>
-          {error && <div style={{ padding: '10px 12px', background: '#FEF2F2', color: '#B91C1C', borderRadius: '8px', fontSize: '13px', fontWeight: 700 }}>{error}</div>}
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
-            <button type="button" onClick={onClose} style={ghostBtn}>Cancel</button>
-            <button type="submit" style={primaryBtn}>Create</button>
+          <FormField
+            label="Temporary password"
+            hint="At least 8 characters. User must change it on first login."
+          >
+            <input
+              aria-label="Temporary password"
+              type="text"
+              value={tempPassword}
+              onChange={e => setTempPassword(e.target.value)}
+              style={inputStyle}
+            />
+          </FormField>
+          {error && (
+            <div
+              style={{
+                padding: '10px 12px',
+                background: '#FEF2F2',
+                color: '#B91C1C',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+              }}
+            >
+              {error}
+            </div>
+          )}
+          <div
+            style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}
+          >
+            <button type="button" onClick={onClose} style={ghostBtn}>
+              Cancel
+            </button>
+            <button type="submit" style={primaryBtn}>
+              Create
+            </button>
           </div>
         </form>
       </div>
@@ -6637,7 +11849,9 @@ function UserEditModal({ user, onClose, currentUserEmail }) {
   const isSelf = user.email === currentUserEmail;
 
   useEffect(() => {
-    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    const handleKey = e => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
@@ -6647,29 +11861,113 @@ function UserEditModal({ user, onClose, currentUserEmail }) {
     setError('');
     // Update profile fields first.
     if (canEditProfile) {
-      updateUser(user.id, { name: name.trim(), email: email.trim().toLowerCase(), department: department.trim() });
+      updateUser(user.id, {
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        department: department.trim(),
+      });
     }
     // Then role, separately — the role mutator runs its own last-admin guard
     // and surfaces a clean error if the change would lock the actor out.
     if (canChangeRole && roleId && roleId !== user.roleId) {
       const res = setUserRoleId(user.id, roleId);
-      if (res?.error) { setError(res.error); return; }
+      if (res?.error) {
+        setError(res.error);
+        return;
+      }
     }
     onClose();
   };
 
   return (
     <>
-      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 500 }} />
-      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Edit ${user.name}`} style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'var(--bg-surface)', borderRadius: '14px', zIndex: 501, width: '460px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden', outline: 'none' }}>
-        <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>Edit user</h2>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: '20px', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: 1 }}>×</button>
+      <div
+        onClick={onClose}
+        role="presentation"
+        style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 500 }}
+      />
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Edit ${user.name}`}
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)',
+          borderRadius: '14px',
+          zIndex: 501,
+          width: '460px',
+          maxWidth: '95vw',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          overflow: 'hidden',
+          outline: 'none',
+        }}
+      >
+        <div
+          style={{
+            padding: '18px 22px',
+            borderBottom: '1px solid var(--border-default)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <h2
+            style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}
+          >
+            Edit user
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '20px',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
         </div>
-        <form onSubmit={submit} style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <FormField label="Full name"><input aria-label="Full name" value={name} onChange={e => setName(e.target.value)} disabled={!canEditProfile} style={inputStyle} /></FormField>
-          <FormField label="Email"><input aria-label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={!canEditProfile} style={inputStyle} /></FormField>
-          <FormField label="Department"><input aria-label="Department" value={department} onChange={e => setDepartment(e.target.value)} disabled={!canEditProfile} style={inputStyle} /></FormField>
+        <form
+          onSubmit={submit}
+          style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+        >
+          <FormField label="Full name">
+            <input
+              aria-label="Full name"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              disabled={!canEditProfile}
+              style={inputStyle}
+            />
+          </FormField>
+          <FormField label="Email">
+            <input
+              aria-label="Email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              disabled={!canEditProfile}
+              style={inputStyle}
+            />
+          </FormField>
+          <FormField label="Department">
+            <input
+              aria-label="Department"
+              value={department}
+              onChange={e => setDepartment(e.target.value)}
+              disabled={!canEditProfile}
+              style={inputStyle}
+            />
+          </FormField>
           <FormField label={isSelf ? 'Role (your own role)' : 'Role'}>
             <select
               aria-label="Role"
@@ -6678,21 +11976,46 @@ function UserEditModal({ user, onClose, currentUserEmail }) {
               disabled={!canChangeRole}
               style={inputStyle}
             >
-              {roles.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+              {roles.map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.label}
+                </option>
+              ))}
             </select>
             {!canChangeRole && (
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Requires the roles.assign capability.</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Requires the roles.assign capability.
+              </div>
             )}
             {isSelf && canChangeRole && (
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Changing your own role takes effect immediately. The last-admin guard will block a change that locks out role management.</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Changing your own role takes effect immediately. The last-admin guard will block a
+                change that locks out role management.
+              </div>
             )}
           </FormField>
           {error && (
-            <div role="alert" style={{ padding: '10px 12px', borderRadius: '8px', background: '#FEF2F2', color: '#B91C1C', fontSize: '13px', fontWeight: 600 }}>{error}</div>
+            <div
+              role="alert"
+              style={{
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: '#FEF2F2',
+                color: '#B91C1C',
+                fontSize: '13px',
+                fontWeight: 600,
+              }}
+            >
+              {error}
+            </div>
           )}
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <button type="button" onClick={onClose} style={ghostBtn}>Cancel</button>
-            <button type="submit" disabled={!canEditProfile && !canChangeRole} style={primaryBtn}>Save</button>
+            <button type="button" onClick={onClose} style={ghostBtn}>
+              Cancel
+            </button>
+            <button type="submit" disabled={!canEditProfile && !canChangeRole} style={primaryBtn}>
+              Save
+            </button>
           </div>
         </form>
       </div>
@@ -6708,44 +12031,131 @@ function UserResetPasswordModal({ user, onClose }) {
   useModalFocusTrap(panelRef);
 
   useEffect(() => {
-    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    const handleKey = e => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onClose]);
 
   const submit = async e => {
     e.preventDefault();
-    if (pw.length < 8) { setError('Temp password must be at least 8 characters.'); return; }
+    if (pw.length < 8) {
+      setError('Temp password must be at least 8 characters.');
+      return;
+    }
     await resetUserPassword(user.id, pw);
     setDone(true);
   };
 
   return (
     <>
-      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 500 }} />
-      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Reset password for ${user.name}`} style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'var(--bg-surface)', borderRadius: '14px', zIndex: 501, width: '440px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', overflow: 'hidden', outline: 'none' }}>
+      <div
+        onClick={onClose}
+        role="presentation"
+        style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 500 }}
+      />
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Reset password for ${user.name}`}
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%,-50%)',
+          background: 'var(--bg-surface)',
+          borderRadius: '14px',
+          zIndex: 501,
+          width: '440px',
+          maxWidth: '95vw',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          overflow: 'hidden',
+          outline: 'none',
+        }}
+      >
         <div style={{ padding: '18px 22px', borderBottom: '1px solid var(--border-default)' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>Reset password — {user.name}</h2>
+          <h2
+            style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}
+          >
+            Reset password — {user.name}
+          </h2>
         </div>
         {done ? (
           <div style={{ padding: '20px 22px' }}>
-            <div style={{ padding: '12px 14px', background: '#ECFDF5', color: '#065F46', borderRadius: '8px', fontSize: '13px', marginBottom: '12px' }}>
-              ✓ Password reset. Share this temp password with {user.name} via a secure channel. They will be prompted to re-verify via OTP on next login.
+            <div
+              style={{
+                padding: '12px 14px',
+                background: '#ECFDF5',
+                color: '#065F46',
+                borderRadius: '8px',
+                fontSize: '13px',
+                marginBottom: '12px',
+              }}
+            >
+              ✓ Password reset. Share this temp password with {user.name} via a secure channel. They
+              will be prompted to re-verify via OTP on next login.
             </div>
-            <div style={{ background: 'var(--bg-page)', padding: '12px 14px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '14px', color: 'var(--text-primary)', wordBreak: 'break-all' }}>{pw}</div>
+            <div
+              style={{
+                background: 'var(--bg-page)',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                fontFamily: 'monospace',
+                fontSize: '14px',
+                color: 'var(--text-primary)',
+                wordBreak: 'break-all',
+              }}
+            >
+              {pw}
+            </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '14px' }}>
-              <button onClick={onClose} style={primaryBtn}>Done</button>
+              <button onClick={onClose} style={primaryBtn}>
+                Done
+              </button>
             </div>
           </div>
         ) : (
-          <form onSubmit={submit} style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <FormField label="New temporary password" hint="At least 8 characters. User must change on next login.">
-              <input aria-label="Temporary password" type="text" value={pw} onChange={e => setPw(e.target.value)} style={inputStyle} autoFocus />
+          <form
+            onSubmit={submit}
+            style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}
+          >
+            <FormField
+              label="New temporary password"
+              hint="At least 8 characters. User must change on next login."
+            >
+              <input
+                aria-label="Temporary password"
+                type="text"
+                value={pw}
+                onChange={e => setPw(e.target.value)}
+                style={inputStyle}
+                autoFocus
+              />
             </FormField>
-            {error && <div style={{ padding: '10px 12px', background: '#FEF2F2', color: '#B91C1C', borderRadius: '8px', fontSize: '13px', fontWeight: 700 }}>{error}</div>}
+            {error && (
+              <div
+                style={{
+                  padding: '10px 12px',
+                  background: '#FEF2F2',
+                  color: '#B91C1C',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                }}
+              >
+                {error}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button type="button" onClick={onClose} style={ghostBtn}>Cancel</button>
-              <button type="submit" style={primaryBtn}>Reset</button>
+              <button type="button" onClick={onClose} style={ghostBtn}>
+                Cancel
+              </button>
+              <button type="submit" style={primaryBtn}>
+                Reset
+              </button>
             </div>
           </form>
         )}
@@ -6759,27 +12169,80 @@ function UserResetPasswordModal({ user, onClose }) {
 function ConfirmDialog({ title, body, confirmLabel, confirmStyle, onConfirm, onCancel }) {
   const confirmBg = confirmStyle === 'danger' ? '#B91C1C' : 'var(--accent-primary)';
   return (
-    <AlertDialog.Root open onOpenChange={(open) => { if (!open) onCancel(); }}>
+    <AlertDialog.Root
+      open
+      onOpenChange={open => {
+        if (!open) onCancel();
+      }}
+    >
       <AlertDialog.Portal>
-        <AlertDialog.Overlay style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 600, animation: 'radixIn 150ms cubic-bezier(0.16,1,0.3,1)' }} />
-        <AlertDialog.Content style={{
-          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
-          background: 'var(--bg-elevated)', borderRadius: 'var(--radius-xl)',
-          zIndex: 601, width: '440px', maxWidth: '95vw',
-          boxShadow: 'var(--shadow-modal)', overflow: 'hidden', outline: 'none',
-          fontFamily: "'Inter', sans-serif",
-          animation: 'radixIn 180ms cubic-bezier(0.16,1,0.3,1)',
-        }}>
+        <AlertDialog.Overlay
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'var(--bg-overlay)',
+            zIndex: 600,
+            animation: 'radixIn 150ms cubic-bezier(0.16,1,0.3,1)',
+          }}
+        />
+        <AlertDialog.Content
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%,-50%)',
+            background: 'var(--bg-elevated)',
+            borderRadius: 'var(--radius-xl)',
+            zIndex: 601,
+            width: '440px',
+            maxWidth: '95vw',
+            boxShadow: 'var(--shadow-modal)',
+            overflow: 'hidden',
+            outline: 'none',
+            fontFamily: "'Inter', sans-serif",
+            animation: 'radixIn 180ms cubic-bezier(0.16,1,0.3,1)',
+          }}
+        >
           <div style={{ padding: '22px 24px 4px' }}>
-            <AlertDialog.Title style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>{title}</AlertDialog.Title>
-            <AlertDialog.Description style={{ marginTop: '8px', color: 'var(--text-secondary)', fontSize: '13.5px', lineHeight: 1.55 }}>{body}</AlertDialog.Description>
+            <AlertDialog.Title
+              style={{
+                margin: 0,
+                fontSize: '17px',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              {title}
+            </AlertDialog.Title>
+            <AlertDialog.Description
+              style={{
+                marginTop: '8px',
+                color: 'var(--text-secondary)',
+                fontSize: '13.5px',
+                lineHeight: 1.55,
+              }}
+            >
+              {body}
+            </AlertDialog.Description>
           </div>
-          <div style={{ padding: '16px 24px 20px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+          <div
+            style={{
+              padding: '16px 24px 20px',
+              display: 'flex',
+              gap: '8px',
+              justifyContent: 'flex-end',
+            }}
+          >
             <AlertDialog.Cancel asChild>
-              <button onClick={onCancel} style={ghostBtn}>Cancel</button>
+              <button onClick={onCancel} style={ghostBtn}>
+                Cancel
+              </button>
             </AlertDialog.Cancel>
             <AlertDialog.Action asChild>
-              <button onClick={onConfirm} style={{ ...primaryBtn, background: confirmBg }}>{confirmLabel}</button>
+              <button onClick={onConfirm} style={{ ...primaryBtn, background: confirmBg }}>
+                {confirmLabel}
+              </button>
             </AlertDialog.Action>
           </div>
         </AlertDialog.Content>
@@ -6790,19 +12253,64 @@ function ConfirmDialog({ title, body, confirmLabel, confirmStyle, onConfirm, onC
 
 const FormField = ({ label, hint, children }) => (
   <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+    <span
+      style={{
+        fontSize: '11px',
+        fontWeight: 700,
+        color: 'var(--text-secondary)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+      }}
+    >
+      {label}
+    </span>
     {children}
     {hint && <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{hint}</span>}
   </label>
 );
 
-const inputStyle = { padding: '10px 14px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', fontSize: '13px', fontFamily: "'Inter', sans-serif", outline: 'none', background: 'var(--bg-input)', color: 'var(--text-primary)' };
-const ghostBtn = { padding: '9px 16px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 600, fontSize: '13px', cursor: 'pointer', fontFamily: "'Inter', sans-serif" };
-const primaryBtn = { padding: '9px 18px', background: 'var(--accent-primary)', color: 'var(--text-inverse)', border: 'none', borderRadius: 'var(--radius-md)', fontWeight: 600, fontSize: '13px', cursor: 'pointer', fontFamily: "'Inter', sans-serif" };
+const inputStyle = {
+  padding: '10px 14px',
+  border: '1px solid var(--border-default)',
+  borderRadius: 'var(--radius-md)',
+  fontSize: '13px',
+  fontFamily: "'Inter', sans-serif",
+  outline: 'none',
+  background: 'var(--bg-input)',
+  color: 'var(--text-primary)',
+};
+const ghostBtn = {
+  padding: '9px 16px',
+  background: 'var(--bg-hover)',
+  color: 'var(--text-secondary)',
+  border: 'none',
+  borderRadius: 'var(--radius-md)',
+  fontWeight: 600,
+  fontSize: '13px',
+  cursor: 'pointer',
+  fontFamily: "'Inter', sans-serif",
+};
+const primaryBtn = {
+  padding: '9px 18px',
+  background: 'var(--accent-primary)',
+  color: 'var(--text-inverse)',
+  border: 'none',
+  borderRadius: 'var(--radius-md)',
+  fontWeight: 600,
+  fontSize: '13px',
+  cursor: 'pointer',
+  fontFamily: "'Inter', sans-serif",
+};
 
 // ─── System health card (admin only) ──────────────────────────────────────────
 function SystemHealthCard() {
-  const [state, setState] = useState({ loading: true, ok: false, jira: false, anthropic: false, ts: null });
+  const [state, setState] = useState({
+    loading: true,
+    ok: false,
+    jira: false,
+    anthropic: false,
+    ts: null,
+  });
   const webhook = useWebhookState();
   const workflow = useJiraWorkflow();
   const assignable = useAssignableUsers();
@@ -6824,32 +12332,115 @@ function SystemHealthCard() {
     return () => clearInterval(id);
   }, []);
 
-  const dot = (active) => ({ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: active ? '#16A34A' : '#DC2626', marginRight: '8px' });
-  const amber = { display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#F59E0B', marginRight: '8px' };
-  const webhookFresh = webhook.lastWebhookAt && (Date.now() - new Date(webhook.lastWebhookAt).getTime()) < 5 * 60_000;
+  const dot = active => ({
+    display: 'inline-block',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: active ? '#16A34A' : '#DC2626',
+    marginRight: '8px',
+  });
+  const amber = {
+    display: 'inline-block',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: '#F59E0B',
+    marginRight: '8px',
+  };
+  const webhookFresh =
+    webhook.lastWebhookAt && Date.now() - new Date(webhook.lastWebhookAt).getTime() < 5 * 60_000;
 
   return (
-    <div style={{ background: 'var(--bg-surface)', borderRadius: '12px', padding: '16px 18px', border: '1px solid var(--border-default)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>System health</div>
-        <button onClick={refresh} aria-label="Refresh system health" style={{ fontSize: '11px', padding: '4px 10px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 700 }}>↻ Refresh</button>
+    <div
+      style={{
+        background: 'var(--bg-surface)',
+        borderRadius: '12px',
+        padding: '16px 18px',
+        border: '1px solid var(--border-default)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '12px',
+        }}
+      >
+        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+          System health
+        </div>
+        <button
+          onClick={refresh}
+          aria-label="Refresh system health"
+          style={{
+            fontSize: '11px',
+            padding: '4px 10px',
+            background: 'var(--bg-hover)',
+            color: 'var(--text-secondary)',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontWeight: 700,
+          }}
+        >
+          ↻ Refresh
+        </button>
       </div>
       {state.loading ? (
         <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Checking…</div>
       ) : (
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}><span style={dot(state.ok)} />BFF proxy {state.ok ? 'reachable' : 'unreachable'}</li>
-          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}><span style={dot(state.ok && state.jira)} />Jira integration {state.ok && state.jira ? 'configured' : 'not configured'}</li>
-          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}><span style={dot(state.ok && state.anthropic)} />Anthropic API {state.ok && state.anthropic ? 'configured' : 'not configured'}</li>
+        <ul
+          style={{
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+          }}
+        >
+          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+            <span style={dot(state.ok)} />
+            BFF proxy {state.ok ? 'reachable' : 'unreachable'}
+          </li>
+          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+            <span style={dot(state.ok && state.jira)} />
+            Jira integration {state.ok && state.jira ? 'configured' : 'not configured'}
+          </li>
+          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+            <span style={dot(state.ok && state.anthropic)} />
+            Anthropic API {state.ok && state.anthropic ? 'configured' : 'not configured'}
+          </li>
           <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
             <span style={webhook.lastWebhookAt ? (webhookFresh ? dot(true) : amber) : dot(false)} />
-            Webhooks {webhook.lastWebhookAt ? `(last ${new Date(webhook.lastWebhookAt).toLocaleTimeString()})` : 'never received'}
+            Webhooks{' '}
+            {webhook.lastWebhookAt
+              ? `(last ${new Date(webhook.lastWebhookAt).toLocaleTimeString()})`
+              : 'never received'}
           </li>
-          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}><span style={dot(workflow.source !== 'fallback')} />Workflow {workflow.source === 'fallback' ? 'using fallback' : `live (${workflow.statuses.length} statuses)`}</li>
-          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}><span style={dot(assignable.source !== 'fallback' && assignable.users.length > 0)} />Assignable users {assignable.users.length > 0 ? `(${assignable.users.length} from Jira)` : 'using seed list'}</li>
+          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+            <span style={dot(workflow.source !== 'fallback')} />
+            Workflow{' '}
+            {workflow.source === 'fallback'
+              ? 'using fallback'
+              : `live (${workflow.statuses.length} statuses)`}
+          </li>
+          <li style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+            <span style={dot(assignable.source !== 'fallback' && assignable.users.length > 0)} />
+            Assignable users{' '}
+            {assignable.users.length > 0
+              ? `(${assignable.users.length} from Jira)`
+              : 'using seed list'}
+          </li>
         </ul>
       )}
-      {state.ts && <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--text-muted)' }}>Last checked {new Date(state.ts).toLocaleTimeString()}</div>}
+      {state.ts && (
+        <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--text-muted)' }}>
+          Last checked {new Date(state.ts).toLocaleTimeString()}
+        </div>
+      )}
     </div>
   );
 }
@@ -6869,10 +12460,35 @@ function MaintenanceToggleCard() {
   };
 
   return (
-    <div style={{ background: 'var(--bg-surface)', borderRadius: '12px', padding: '16px 18px', border: '1px solid var(--border-default)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>Maintenance mode</div>
-        <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', background: m.active ? '#FEE2E2' : '#DCFCE7', color: m.active ? '#B91C1C' : '#15803D', fontWeight: 700 }}>
+    <div
+      style={{
+        background: 'var(--bg-surface)',
+        borderRadius: '12px',
+        padding: '16px 18px',
+        border: '1px solid var(--border-default)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '10px',
+        }}
+      >
+        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+          Maintenance mode
+        </div>
+        <span
+          style={{
+            fontSize: '11px',
+            padding: '3px 8px',
+            borderRadius: '4px',
+            background: m.active ? '#FEE2E2' : '#DCFCE7',
+            color: m.active ? '#B91C1C' : '#15803D',
+            fontWeight: 700,
+          }}
+        >
           {m.active ? 'ON' : 'OFF'}
         </span>
       </div>
@@ -6883,21 +12499,47 @@ function MaintenanceToggleCard() {
         aria-label="Maintenance message"
         rows={2}
         placeholder="Banner message users will see…"
-        style={{ width: '100%', padding: '8px 10px', border: '1.5px solid var(--border-default)', borderRadius: '7px', fontSize: '12px', fontFamily: "'Inter', sans-serif", resize: 'vertical', outline: 'none', background: m.active ? 'var(--bg-hover)' : 'var(--bg-input)', color: m.active ? 'var(--text-muted)' : 'var(--text-primary)' }}
+        style={{
+          width: '100%',
+          padding: '8px 10px',
+          border: '1.5px solid var(--border-default)',
+          borderRadius: '7px',
+          fontSize: '12px',
+          fontFamily: "'Inter', sans-serif",
+          resize: 'vertical',
+          outline: 'none',
+          background: m.active ? 'var(--bg-hover)' : 'var(--bg-input)',
+          color: m.active ? 'var(--text-muted)' : 'var(--text-primary)',
+        }}
       />
       <button
         onClick={toggle}
-        style={{ marginTop: '10px', width: '100%', padding: '9px', background: m.active ? '#DC2626' : '#111111', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+        style={{
+          marginTop: '10px',
+          width: '100%',
+          padding: '9px',
+          background: m.active ? '#DC2626' : '#111111',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '7px',
+          fontSize: '13px',
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
       >
         {m.active ? 'Disable maintenance mode' : 'Enable maintenance mode'}
       </button>
-      {m.active && m.enabledBy && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>Enabled by {m.enabledBy} at {new Date(m.enabledAt).toLocaleTimeString()}</div>}
+      {m.active && m.enabledBy && (
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
+          Enabled by {m.enabledBy} at {new Date(m.enabledAt).toLocaleTimeString()}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Global search palette (Cmd/Ctrl+K) ───────────────────────────────────────
-function GlobalSearchPalette({ open, onClose, onNavigate, role }) { // eslint-disable-line no-unused-vars
+function GlobalSearchPalette({ open, onClose, onNavigate, role }) {
   const can = useCan();
   const [q, setQ] = useState('');
   const [, _setVer] = useState(0);
@@ -6906,7 +12548,9 @@ function GlobalSearchPalette({ open, onClose, onNavigate, role }) { // eslint-di
 
   useEffect(() => {
     if (open) setQ('');
-    const handleKey = e => { if (e.key === 'Escape') onClose(); };
+    const handleKey = e => {
+      if (e.key === 'Escape') onClose();
+    };
     if (open) window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [open, onClose]);
@@ -6917,16 +12561,26 @@ function GlobalSearchPalette({ open, onClose, onNavigate, role }) { // eslint-di
     const isAdmin = can('users.edit');
 
     const docs = listDocSummaries()
-      .filter(d => d.title.toLowerCase().includes(query) || d.description.toLowerCase().includes(query) || d.category.toLowerCase().includes(query))
+      .filter(
+        d =>
+          d.title.toLowerCase().includes(query) ||
+          d.description.toLowerCase().includes(query) ||
+          d.category.toLowerCase().includes(query)
+      )
       .slice(0, 5);
 
-    const tickets = MOCK_TICKETS
-      .filter(t => t.id.toLowerCase().includes(query) || t.title.toLowerCase().includes(query) || (t.description || '').toLowerCase().includes(query))
-      .slice(0, 5);
+    const tickets = MOCK_TICKETS.filter(
+      t =>
+        t.id.toLowerCase().includes(query) ||
+        t.title.toLowerCase().includes(query) ||
+        (t.description || '').toLowerCase().includes(query)
+    ).slice(0, 5);
 
     const users = isAdmin
       ? listUsers()
-          .filter(u => u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query))
+          .filter(
+            u => u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query)
+          )
           .slice(0, 5)
       : [];
 
@@ -6938,15 +12592,42 @@ function GlobalSearchPalette({ open, onClose, onNavigate, role }) { // eslint-di
 
   return (
     <>
-      <div onClick={onClose} role="presentation" style={{ position: 'fixed', inset: 0, background: 'rgba(15,31,54,0.55)', zIndex: 700 }} />
-      <div role="dialog" aria-modal="true" aria-label="Search portal" style={{
-        position: 'fixed', top: '12vh', left: '50%', transform: 'translateX(-50%)',
-        width: '600px', maxWidth: '94vw', background: 'var(--bg-surface)', borderRadius: '14px',
-        boxShadow: '0 24px 72px rgba(0,0,0,0.28)', zIndex: 701,
-        display: 'flex', flexDirection: 'column', maxHeight: '70vh', overflow: 'hidden',
-        fontFamily: "'Inter', sans-serif",
-      }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-default)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div
+        onClick={onClose}
+        role="presentation"
+        style={{ position: 'fixed', inset: 0, background: 'rgba(15,31,54,0.55)', zIndex: 700 }}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search portal"
+        style={{
+          position: 'fixed',
+          top: '12vh',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '600px',
+          maxWidth: '94vw',
+          background: 'var(--bg-surface)',
+          borderRadius: '14px',
+          boxShadow: '0 24px 72px rgba(0,0,0,0.28)',
+          zIndex: 701,
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: '70vh',
+          overflow: 'hidden',
+          fontFamily: "'Inter', sans-serif",
+        }}
+      >
+        <div
+          style={{
+            padding: '14px 18px',
+            borderBottom: '1px solid var(--border-default)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+          }}
+        >
           <span style={{ fontSize: '18px' }}>🔍</span>
           <input
             autoFocus
@@ -6955,41 +12636,98 @@ function GlobalSearchPalette({ open, onClose, onNavigate, role }) { // eslint-di
             onChange={e => setQ(e.target.value)}
             placeholder="Search docs, tickets, users…"
             aria-label="Global search"
-            style={{ flex: 1, border: 'none', outline: 'none', fontSize: '15px', fontFamily: "'Inter', sans-serif", color: 'var(--text-primary)', background: 'transparent' }}
+            style={{
+              flex: 1,
+              border: 'none',
+              outline: 'none',
+              fontSize: '15px',
+              fontFamily: "'Inter', sans-serif",
+              color: 'var(--text-primary)',
+              background: 'transparent',
+            }}
           />
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '2px 6px', background: 'var(--bg-hover)', borderRadius: '4px', fontWeight: 700 }}>ESC</span>
+          <span
+            style={{
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              padding: '2px 6px',
+              background: 'var(--bg-hover)',
+              borderRadius: '4px',
+              fontWeight: 700,
+            }}
+          >
+            ESC
+          </span>
         </div>
         <div style={{ overflowY: 'auto', flex: 1 }}>
           {q.trim() === '' ? (
-            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-              Start typing to search across the portal. <br />Tip: use <strong>⌘K</strong> / <strong>Ctrl+K</strong> from anywhere.
+            <div
+              style={{
+                padding: '32px',
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                fontSize: '13px',
+              }}
+            >
+              Start typing to search across the portal. <br />
+              Tip: use <strong>⌘K</strong> / <strong>Ctrl+K</strong> from anywhere.
             </div>
           ) : totalCount === 0 ? (
-            <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>No matches for "{q}".</div>
+            <div
+              style={{
+                padding: '32px',
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                fontSize: '13px',
+              }}
+            >
+              No matches for "{q}".
+            </div>
           ) : (
             <>
               {results.docs.length > 0 && (
                 <ResultsGroup
                   label="Documents"
                   icon="📚"
-                  items={results.docs.map(d => ({ key: d.title, title: d.title, sub: `${d.category} · ${d.description.slice(0, 80)}` }))}
-                  onPick={() => { onNavigate('docs'); onClose(); }}
+                  items={results.docs.map(d => ({
+                    key: d.title,
+                    title: d.title,
+                    sub: `${d.category} · ${d.description.slice(0, 80)}`,
+                  }))}
+                  onPick={() => {
+                    onNavigate('docs');
+                    onClose();
+                  }}
                 />
               )}
               {results.tickets.length > 0 && (
                 <ResultsGroup
                   label="Tickets"
                   icon="🎟️"
-                  items={results.tickets.map(t => ({ key: t.id, title: t.title, sub: `${t.id} · ${t.priority} · ${t.status}` }))}
-                  onPick={() => { onNavigate('mytickets'); onClose(); }}
+                  items={results.tickets.map(t => ({
+                    key: t.id,
+                    title: t.title,
+                    sub: `${t.id} · ${t.priority} · ${t.status}`,
+                  }))}
+                  onPick={() => {
+                    onNavigate('mytickets');
+                    onClose();
+                  }}
                 />
               )}
               {results.users.length > 0 && (
                 <ResultsGroup
                   label="Users"
                   icon="👥"
-                  items={results.users.map(u => ({ key: u.id, title: u.name, sub: `${u.email} · ${u.role}` }))}
-                  onPick={() => { onNavigate('users'); onClose(); }}
+                  items={results.users.map(u => ({
+                    key: u.id,
+                    title: u.name,
+                    sub: `${u.email} · ${u.role}`,
+                  }))}
+                  onPick={() => {
+                    onNavigate('users');
+                    onClose();
+                  }}
                 />
               )}
             </>
@@ -7003,18 +12741,41 @@ function GlobalSearchPalette({ open, onClose, onNavigate, role }) { // eslint-di
 function ResultsGroup({ label, icon, items, onPick }) {
   return (
     <div style={{ padding: '6px 8px' }}>
-      <div style={{ padding: '8px 10px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      <div
+        style={{
+          padding: '8px 10px',
+          fontSize: '11px',
+          fontWeight: 700,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+        }}
+      >
         {icon} {label}
       </div>
       {items.map(it => (
         <button
           key={it.key}
           onClick={onPick}
-          style={{ width: '100%', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: '8px 12px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '2px', fontFamily: "'Inter', sans-serif" }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-page)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          style={{
+            width: '100%',
+            textAlign: 'left',
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+            fontFamily: "'Inter', sans-serif",
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-page)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
-          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{it.title}</span>
+          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+            {it.title}
+          </span>
           <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{it.sub}</span>
         </button>
       ))}
@@ -7040,13 +12801,15 @@ function ChatAssistantWidget({ effectiveUser, effectiveRole }) {
   }, [effectiveUser?.email, effectiveRole]);
 
   useEffect(() => {
-    if (open) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    if (open)
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, open]);
 
   const buildUserContext = () => {
     if (!effectiveUser) return undefined;
-    const openTickets = MOCK_TICKETS
-      .filter(t => t.assignee === effectiveUser.name && (t.status === 'Open' || t.status === 'In Progress'))
+    const openTickets = MOCK_TICKETS.filter(
+      t => t.assignee === effectiveUser.name && (t.status === 'Open' || t.status === 'In Progress')
+    )
       .slice(0, 10)
       .map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority }));
     return {
@@ -7120,12 +12883,22 @@ function ChatAssistantWidget({ effectiveUser, effectiveRole }) {
           onClick={() => setOpen(true)}
           aria-label="Open chat assistant"
           style={{
-            position: 'fixed', bottom: '24px', right: '24px', zIndex: 950,
-            width: '56px', height: '56px', borderRadius: '50%',
-            background: 'var(--accent-primary)', color: '#fff', border: 'none',
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 950,
+            width: '56px',
+            height: '56px',
+            borderRadius: '50%',
+            background: 'var(--accent-primary)',
+            color: '#fff',
+            border: 'none',
             boxShadow: '0 8px 24px rgba(124,58,237,0.4)',
-            cursor: 'pointer', fontSize: '24px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
           💬
@@ -7137,62 +12910,165 @@ function ChatAssistantWidget({ effectiveUser, effectiveRole }) {
           aria-modal="false"
           aria-label="TechOps assistant"
           style={{
-            position: 'fixed', bottom: '24px', right: '24px', zIndex: 950,
-            width: '380px', maxWidth: 'calc(100vw - 32px)',
-            height: '540px', maxHeight: 'calc(100vh - 80px)',
-            background: 'var(--bg-surface)', borderRadius: '14px',
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 950,
+            width: '380px',
+            maxWidth: 'calc(100vw - 32px)',
+            height: '540px',
+            maxHeight: 'calc(100vh - 80px)',
+            background: 'var(--bg-surface)',
+            borderRadius: '14px',
             boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
             fontFamily: "'Inter', sans-serif",
           }}
         >
-          <div style={{ background: '#111111', color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div
+            style={{
+              background: '#111111',
+              color: '#fff',
+              padding: '14px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px' }}>💬</div>
+              <div
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: 'var(--accent-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '15px',
+                }}
+              >
+                💬
+              </div>
               <div>
                 <div style={{ fontWeight: 800, fontSize: '14px' }}>TechOps Assistant</div>
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>Ask anything about the portal or IT</div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>
+                  Ask anything about the portal or IT
+                </div>
               </div>
             </div>
-            <button onClick={() => setOpen(false)} aria-label="Close chat" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', fontSize: '22px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Close chat"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'rgba(255,255,255,0.7)',
+                fontSize: '22px',
+                cursor: 'pointer',
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
           </div>
 
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px', background: 'var(--bg-page)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div
+            ref={scrollRef}
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '16px',
+              background: 'var(--bg-page)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+            }}
+          >
             {messages.length === 0 && (
-              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px', padding: '24px 16px' }}>
-                Hi{effectiveUser?.name ? ` ${effectiveUser.name.split(' ')[0]}` : ''} 👋<br />
+              <div
+                style={{
+                  textAlign: 'center',
+                  color: 'var(--text-secondary)',
+                  fontSize: '13px',
+                  padding: '24px 16px',
+                }}
+              >
+                Hi{effectiveUser?.name ? ` ${effectiveUser.name.split(' ')[0]}` : ''} 👋
+                <br />
                 Ask me how the portal works, where to find a doc, or anything IT-related.
               </div>
             )}
             {messages.map((m, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                <div style={{
-                  maxWidth: '85%', padding: '9px 13px', borderRadius: '12px',
-                  background: m.role === 'user' ? 'var(--accent-primary)' : 'var(--bg-surface)',
-                  color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
-                  fontSize: '13px', lineHeight: 1.5, whiteSpace: 'pre-wrap',
-                  border: m.role === 'assistant' ? '1px solid var(--border-default)' : 'none',
-                  boxShadow: m.role === 'assistant' ? '0 1px 2px rgba(0,0,0,0.04)' : 'none',
-                }}>
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: '85%',
+                    padding: '9px 13px',
+                    borderRadius: '12px',
+                    background: m.role === 'user' ? 'var(--accent-primary)' : 'var(--bg-surface)',
+                    color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
+                    fontSize: '13px',
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap',
+                    border: m.role === 'assistant' ? '1px solid var(--border-default)' : 'none',
+                    boxShadow: m.role === 'assistant' ? '0 1px 2px rgba(0,0,0,0.04)' : 'none',
+                  }}
+                >
                   {m.content}
                 </div>
               </div>
             ))}
             {busy && (
               <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                <div style={{ padding: '9px 13px', borderRadius: '12px', background: 'var(--bg-surface)', border: '1px solid var(--border-default)', color: 'var(--text-muted)', fontSize: '13px' }}>
+                <div
+                  style={{
+                    padding: '9px 13px',
+                    borderRadius: '12px',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-default)',
+                    color: 'var(--text-muted)',
+                    fontSize: '13px',
+                  }}
+                >
                   Thinking…
                 </div>
               </div>
             )}
             {error && (
-              <div role="alert" style={{ background: '#FEF2F2', color: '#B91C1C', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700 }}>
+              <div
+                role="alert"
+                style={{
+                  background: '#FEF2F2',
+                  color: '#B91C1C',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                }}
+              >
                 ⚠ {error}
               </div>
             )}
           </div>
 
-          <div style={{ padding: '10px 12px', background: 'var(--bg-surface)', borderTop: '1px solid var(--border-default)', display: 'flex', gap: '8px' }}>
+          <div
+            style={{
+              padding: '10px 12px',
+              background: 'var(--bg-surface)',
+              borderTop: '1px solid var(--border-default)',
+              display: 'flex',
+              gap: '8px',
+            }}
+          >
             <textarea
               value={draft}
               onChange={e => setDraft(e.target.value)}
@@ -7200,13 +13076,35 @@ function ChatAssistantWidget({ effectiveUser, effectiveRole }) {
               placeholder="Type a question…"
               aria-label="Type a question"
               rows={1}
-              style={{ flex: 1, padding: '9px 12px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", outline: 'none', resize: 'none', maxHeight: '120px', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+              style={{
+                flex: 1,
+                padding: '9px 12px',
+                border: '1.5px solid var(--border-default)',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontFamily: "'Inter', sans-serif",
+                outline: 'none',
+                resize: 'none',
+                maxHeight: '120px',
+                background: 'var(--bg-input)',
+                color: 'var(--text-primary)',
+              }}
             />
             <button
               onClick={send}
               disabled={!draft.trim() || busy}
               aria-label="Send message"
-              style={{ padding: '9px 14px', background: !draft.trim() || busy ? 'var(--border-strong)' : 'var(--accent-primary)', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '13px', cursor: !draft.trim() || busy ? 'not-allowed' : 'pointer' }}
+              style={{
+                padding: '9px 14px',
+                background:
+                  !draft.trim() || busy ? 'var(--border-strong)' : 'var(--accent-primary)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: 700,
+                fontSize: '13px',
+                cursor: !draft.trim() || busy ? 'not-allowed' : 'pointer',
+              }}
             >
               Send
             </button>
@@ -7223,11 +13121,24 @@ function MaintenanceBanner() {
   useEffect(() => subscribeMaintenance(setM), []);
   if (!m.active) return null;
   return (
-    <div role="status" style={{ background: '#FEF3C7', borderBottom: '2px solid #FDE68A', padding: '10px 28px', display: 'flex', alignItems: 'center', gap: '10px', fontFamily: "'Inter', sans-serif" }}>
+    <div
+      role="status"
+      style={{
+        background: '#FEF3C7',
+        borderBottom: '2px solid #FDE68A',
+        padding: '10px 28px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        fontFamily: "'Inter', sans-serif",
+      }}
+    >
       <span style={{ fontSize: '16px' }}>🛠</span>
       <div style={{ flex: 1, fontSize: '13px', color: '#92400E', fontWeight: 700 }}>
         {m.message}
-        {m.enabledBy && <span style={{ marginLeft: '8px', fontWeight: 400 }}>— posted by {m.enabledBy}</span>}
+        {m.enabledBy && (
+          <span style={{ marginLeft: '8px', fontWeight: 400 }}>— posted by {m.enabledBy}</span>
+        )}
       </div>
     </div>
   );
@@ -7241,22 +13152,54 @@ function ChatLogsPage() {
 
   const sessions = useMemo(() => listChatSessions(), [version]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fmtTs = iso => new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+  const fmtTs = iso =>
+    new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Chat logs</h1>
-        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>Every user conversation with the TechOps assistant. Used to tune the bot and decide future caps.</div>
+        <h1 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
+          Chat logs
+        </h1>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          Every user conversation with the TechOps assistant. Used to tune the bot and decide future
+          caps.
+        </div>
       </div>
 
       {sessions.length === 0 ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-surface)', borderRadius: '12px', border: '1px solid var(--border-default)' }}>
+        <div
+          style={{
+            padding: '40px',
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            background: 'var(--bg-surface)',
+            borderRadius: '12px',
+            border: '1px solid var(--border-default)',
+          }}
+        >
           📭 No chat sessions yet. They'll appear here as users start chatting.
         </div>
       ) : (
-        <div className="pomelo-audit-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 320px) 1fr', gap: '16px', alignItems: 'flex-start' }}>
-          <div style={{ background: 'var(--bg-surface)', borderRadius: '12px', border: '1px solid var(--border-default)', overflow: 'hidden', maxHeight: '70vh', overflowY: 'auto' }}>
+        <div
+          className="pomelo-audit-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 320px) 1fr',
+            gap: '16px',
+            alignItems: 'flex-start',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--bg-surface)',
+              borderRadius: '12px',
+              border: '1px solid var(--border-default)',
+              overflow: 'hidden',
+              maxHeight: '70vh',
+              overflowY: 'auto',
+            }}
+          >
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {sessions.map(s => {
                 const isActive = active?.id === s.id;
@@ -7264,14 +13207,47 @@ function ChatLogsPage() {
                   <li key={s.id}>
                     <button
                       onClick={() => setActive(s)}
-                      style={{ width: '100%', textAlign: 'left', border: 'none', borderTop: '1px solid var(--border-subtle)', background: isActive ? 'var(--accent-soft)' : 'var(--bg-surface)', padding: '12px 16px', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        border: 'none',
+                        borderTop: '1px solid var(--border-subtle)',
+                        background: isActive ? 'var(--accent-soft)' : 'var(--bg-surface)',
+                        padding: '12px 16px',
+                        cursor: 'pointer',
+                        fontFamily: "'Inter', sans-serif",
+                      }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
-                        <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>{s.userName}</span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{fmtTs(s.startedAt)}</span>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'baseline',
+                          gap: '8px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            fontSize: '13px',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          {s.userName}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          {fmtTs(s.startedAt)}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        {s.messages.length} message{s.messages.length === 1 ? '' : 's'}{s.userRole === 'superadmin' ? ' · admin' : ''}
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          color: 'var(--text-secondary)',
+                          marginTop: '2px',
+                        }}
+                      >
+                        {s.messages.length} message{s.messages.length === 1 ? '' : 's'}
+                        {s.userRole === 'superadmin' ? ' · admin' : ''}
                       </div>
                     </button>
                   </li>
@@ -7280,31 +13256,78 @@ function ChatLogsPage() {
             </ul>
           </div>
 
-          <div style={{ background: 'var(--bg-surface)', borderRadius: '12px', border: '1px solid var(--border-default)', padding: '18px', minHeight: '320px' }}>
+          <div
+            style={{
+              background: 'var(--bg-surface)',
+              borderRadius: '12px',
+              border: '1px solid var(--border-default)',
+              padding: '18px',
+              minHeight: '320px',
+            }}
+          >
             {active ? (
               <>
-                <div style={{ marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{active.userName} <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 400 }}>· {active.userEmail || 'no email'}</span></div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>Started {fmtTs(active.startedAt)} · {active.messages.length} messages</div>
+                <div
+                  style={{
+                    marginBottom: '14px',
+                    paddingBottom: '12px',
+                    borderBottom: '1px solid var(--border-subtle)',
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>
+                    {active.userName}{' '}
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 400 }}>
+                      · {active.userEmail || 'no email'}
+                    </span>
+                  </div>
+                  <div
+                    style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}
+                  >
+                    Started {fmtTs(active.startedAt)} · {active.messages.length} messages
+                  </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {active.messages.map((m, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                      <div style={{
-                        maxWidth: '85%', padding: '9px 13px', borderRadius: '12px',
-                        background: m.role === 'user' ? 'var(--accent-primary)' : 'var(--bg-hover)',
-                        color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
-                        fontSize: '13px', whiteSpace: 'pre-wrap', lineHeight: 1.5,
-                      }}>
+                    <div
+                      key={i}
+                      style={{
+                        display: 'flex',
+                        justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
+                      }}
+                    >
+                      <div
+                        style={{
+                          maxWidth: '85%',
+                          padding: '9px 13px',
+                          borderRadius: '12px',
+                          background:
+                            m.role === 'user' ? 'var(--accent-primary)' : 'var(--bg-hover)',
+                          color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
+                          fontSize: '13px',
+                          whiteSpace: 'pre-wrap',
+                          lineHeight: 1.5,
+                        }}
+                      >
                         {m.content}
-                        <div style={{ fontSize: '10px', color: m.role === 'user' ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)', marginTop: '4px' }}>{fmtTs(m.ts)}</div>
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            color:
+                              m.role === 'user' ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)',
+                            marginTop: '4px',
+                          }}
+                        >
+                          {fmtTs(m.ts)}
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
-              <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0' }}>Select a session on the left to read the conversation.</div>
+              <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0' }}>
+                Select a session on the left to read the conversation.
+              </div>
             )}
           </div>
         </div>
@@ -7347,38 +13370,62 @@ function AuditLogPage() {
 
   const actionLabel = a => AUDIT_ACTION_LABELS[a] || a;
 
-  const labelForRoleId = (roleId) => findRole(roleId)?.label || roleId || '—';
+  const labelForRoleId = roleId => findRole(roleId)?.label || roleId || '—';
 
   const renderDetails = e => {
     if (!e.details) return null;
     if (e.action === 'admin.view_as') {
-      return e.details.mode === 'user'
-        ? <span>switched to <strong>regular-user view</strong></span>
-        : <span>impersonating <strong>{e.details.targetName}</strong></span>;
+      return e.details.mode === 'user' ? (
+        <span>
+          switched to <strong>regular-user view</strong>
+        </span>
+      ) : (
+        <span>
+          impersonating <strong>{e.details.targetName}</strong>
+        </span>
+      );
     }
     if (e.action === 'user.promote' || e.action === 'user.demote') {
-      return <span>{e.details.from} → <strong>{e.details.to}</strong></span>;
+      return (
+        <span>
+          {e.details.from} → <strong>{e.details.to}</strong>
+        </span>
+      );
     }
     if (e.action === 'user.role_change') {
-      return <span>{labelForRoleId(e.details.from)} → <strong>{labelForRoleId(e.details.to)}</strong></span>;
+      return (
+        <span>
+          {labelForRoleId(e.details.from)} → <strong>{labelForRoleId(e.details.to)}</strong>
+        </span>
+      );
     }
     if (e.action === 'user.update' && Array.isArray(e.details.changedKeys)) {
       return <span>changed {e.details.changedKeys.join(', ')}</span>;
     }
     if (e.action === 'user.create' && (e.details.roleId || e.details.role)) {
       const roleLabel = e.details.roleId ? labelForRoleId(e.details.roleId) : e.details.role;
-      return <span>as <strong>{roleLabel}</strong> in {e.details.department}</span>;
+      return (
+        <span>
+          as <strong>{roleLabel}</strong> in {e.details.department}
+        </span>
+      );
     }
     if (e.action === 'role.create' || e.action === 'role.delete') {
       const caps = e.details.capabilities;
-      return Array.isArray(caps) && caps.length
-        ? <span>{caps.length} capabilit{caps.length === 1 ? 'y' : 'ies'}</span>
-        : null;
+      return Array.isArray(caps) && caps.length ? (
+        <span>
+          {caps.length} capabilit{caps.length === 1 ? 'y' : 'ies'}
+        </span>
+      ) : null;
     }
     if (e.action === 'capability.toggle') {
       const added = e.details.added?.length || 0;
       const removed = e.details.removed?.length || 0;
-      return <span>+{added} / -{removed}</span>;
+      return (
+        <span>
+          +{added} / -{removed}
+        </span>
+      );
     }
     if (e.action === 'role.update' && Array.isArray(e.details.changedKeys)) {
       return <span>changed {e.details.changedKeys.join(', ')}</span>;
@@ -7388,7 +13435,11 @@ function AuditLogPage() {
       return <span>updated {keys.join(', ')}</span>;
     }
     if (e.action === 'ticket.status_change') {
-      return <span>{e.details.from} → <strong>{e.details.to}</strong></span>;
+      return (
+        <span>
+          {e.details.from} → <strong>{e.details.to}</strong>
+        </span>
+      );
     }
     return null;
   };
@@ -7396,8 +13447,12 @@ function AuditLogPage() {
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Audit log</h1>
-        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>Append-only record of admin actions. Entries are immutable (charter R-10).</div>
+        <h1 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>
+          Audit log
+        </h1>
+        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          Append-only record of admin actions. Entries are immutable (charter R-10).
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
@@ -7407,21 +13462,70 @@ function AuditLogPage() {
           aria-label="Search audit log"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          style={{ flex: '1 1 240px', minWidth: '200px', padding: '10px 14px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", outline: 'none', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+          style={{
+            flex: '1 1 240px',
+            minWidth: '200px',
+            padding: '10px 14px',
+            border: '1.5px solid var(--border-default)',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontFamily: "'Inter', sans-serif",
+            outline: 'none',
+            background: 'var(--bg-input)',
+            color: 'var(--text-primary)',
+          }}
         />
-        <select aria-label="Filter by category" value={actionFilter} onChange={e => setActionFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+        <select
+          aria-label="Filter by category"
+          value={actionFilter}
+          onChange={e => setActionFilter(e.target.value)}
+          style={{
+            padding: '10px 14px',
+            border: '1.5px solid var(--border-default)',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontFamily: "'Inter', sans-serif",
+            background: 'var(--bg-input)',
+            color: 'var(--text-primary)',
+          }}
+        >
           <option value="all">All categories</option>
           <option value="user">User actions</option>
           <option value="admin">Admin/view-as</option>
           <option value="session">Sessions</option>
         </select>
-        <select aria-label="Filter by actor" value={actorFilter} onChange={e => setActorFilter(e.target.value)} style={{ padding: '10px 14px', border: '1.5px solid var(--border-default)', borderRadius: '8px', fontSize: '13px', fontFamily: "'Inter', sans-serif", background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+        <select
+          aria-label="Filter by actor"
+          value={actorFilter}
+          onChange={e => setActorFilter(e.target.value)}
+          style={{
+            padding: '10px 14px',
+            border: '1.5px solid var(--border-default)',
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontFamily: "'Inter', sans-serif",
+            background: 'var(--bg-input)',
+            color: 'var(--text-primary)',
+          }}
+        >
           <option value="all">All actors</option>
-          {uniqueActors.map(([email, name]) => <option key={email} value={email}>{name}</option>)}
+          {uniqueActors.map(([email, name]) => (
+            <option key={email} value={email}>
+              {name}
+            </option>
+          ))}
         </select>
       </div>
 
-      <div style={{ background: 'var(--bg-surface)', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', overflow: 'hidden', border: '1px solid var(--border-default)' }}>
+      <div
+        style={{
+          background: 'var(--bg-surface)',
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          overflow: 'hidden',
+          border: '1px solid var(--border-default)',
+        }}
+      >
         {entries.length === 0 ? (
           <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
             No audit entries yet. Mutations from the Users panel will appear here.
@@ -7429,13 +13533,40 @@ function AuditLogPage() {
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {entries.map(e => (
-              <li key={e.id} style={{ padding: '12px 18px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)', minWidth: '150px', fontFamily: 'monospace' }}>{fmtTs(e.timestamp)}</div>
+              <li
+                key={e.id}
+                style={{
+                  padding: '12px 18px',
+                  borderTop: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '14px',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: '12px',
+                    color: 'var(--text-muted)',
+                    minWidth: '150px',
+                    fontFamily: 'monospace',
+                  }}
+                >
+                  {fmtTs(e.timestamp)}
+                </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '13px' }}>{actionLabel(e.action)}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '13px' }}>
+                    {actionLabel(e.action)}
+                  </div>
+                  <div
+                    style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}
+                  >
                     <strong>{e.actorName}</strong>
-                    {e.targetLabel && <> · target: <strong>{e.targetLabel}</strong></>}
+                    {e.targetLabel && (
+                      <>
+                        {' '}
+                        · target: <strong>{e.targetLabel}</strong>
+                      </>
+                    )}
                     {renderDetails(e) && <> · {renderDetails(e)}</>}
                   </div>
                 </div>
@@ -7450,10 +13581,20 @@ function AuditLogPage() {
 
 // ─── Resources dropdown (groups reference pages) ─────────────────────────────
 const RESOURCE_ITEMS = [
-  { id: 'docs',        Icon: BookOpen,      label: 'Documentation',   hint: 'IT guides and how-tos' },
-  { id: 'suggestions', Icon: Sparkles,      label: 'Suggestions',     hint: 'Request features, docs & changes' },
-  { id: 'priority',    Icon: Target,        label: 'Priority Guide',  hint: 'P0–P3 definitions' },
-  { id: 'sla',         Icon: ClipboardList, label: 'SLA & Standards', hint: 'Response and resolution targets' },
+  { id: 'docs', Icon: BookOpen, label: 'Documentation', hint: 'IT guides and how-tos' },
+  {
+    id: 'suggestions',
+    Icon: Sparkles,
+    label: 'Suggestions',
+    hint: 'Request features, docs & changes',
+  },
+  { id: 'priority', Icon: Target, label: 'Priority Guide', hint: 'P0–P3 definitions' },
+  {
+    id: 'sla',
+    Icon: ClipboardList,
+    label: 'SLA & Standards',
+    hint: 'Response and resolution targets',
+  },
 ];
 
 // ─── Shared style for Radix DropdownMenu surfaces ────────────────────────────
@@ -7467,14 +13608,17 @@ const radixMenuContentStyle = {
   zIndex: 1000,
   fontFamily: "'Inter', sans-serif",
 };
-const radixMenuItemStyle = (isActive) => ({
-  width: '100%', textAlign: 'left',
+const radixMenuItemStyle = isActive => ({
+  width: '100%',
+  textAlign: 'left',
   background: isActive ? 'var(--accent-soft)' : 'transparent',
   color: 'var(--text-primary)',
   padding: '8px 10px',
   borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
-  display: 'flex', alignItems: 'center', gap: '10px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
   fontSize: '13px',
   outline: 'none',
   userSelect: 'none',
@@ -7490,7 +13634,9 @@ function ResourcesDropdown({ section, onPick }) {
           title={active ? `Resources · ${active.label}` : 'Resources'}
           style={{
             ...S.navTab(Boolean(active)),
-            display: 'flex', alignItems: 'center', gap: '5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
           }}
         >
           <BookOpen size={15} strokeWidth={2} />
@@ -7503,13 +13649,33 @@ function ResourcesDropdown({ section, onPick }) {
           {RESOURCE_ITEMS.map(r => {
             const isActive = section === r.id;
             return (
-              <DropdownMenu.Item key={r.id} onSelect={() => onPick(r.id)} style={radixMenuItemStyle(isActive)}>
-                <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)' }}><r.Icon size={16} strokeWidth={2} /></span>
-                <span style={{ flex: 1 }}>
-                  <span style={{ fontWeight: isActive ? 600 : 500, color: 'var(--text-primary)' }}>{r.label}</span>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{r.hint}</div>
+              <DropdownMenu.Item
+                key={r.id}
+                onSelect={() => onPick(r.id)}
+                style={radixMenuItemStyle(isActive)}
+              >
+                <span
+                  style={{
+                    width: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  <r.Icon size={16} strokeWidth={2} />
                 </span>
-                {isActive && <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />}
+                <span style={{ flex: 1 }}>
+                  <span style={{ fontWeight: isActive ? 600 : 500, color: 'var(--text-primary)' }}>
+                    {r.label}
+                  </span>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {r.hint}
+                  </div>
+                </span>
+                {isActive && (
+                  <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />
+                )}
               </DropdownMenu.Item>
             );
           })}
@@ -7553,7 +13719,9 @@ function ThemeToggleButton() {
         </button>
       </Tooltip.Trigger>
       <Tooltip.Portal>
-        <Tooltip.Content sideOffset={6} style={tooltipContentStyle}>{label}</Tooltip.Content>
+        <Tooltip.Content sideOffset={6} style={tooltipContentStyle}>
+          {label}
+        </Tooltip.Content>
       </Tooltip.Portal>
     </Tooltip.Root>
   );
@@ -7579,12 +13747,48 @@ const tooltipContentStyle = {
 const WIDE_SECTIONS = new Set(['admin', 'users', 'audit', 'chatlogs', 'roles', 'devportal']);
 
 const ADMIN_TOOLS = [
-  { id: 'studio',   Icon: BookOpen,      label: 'Doc Studio',       hint: 'Author & edit documentation',       cap: 'docs.manage' },
-  { id: 'admin',    Icon: Wrench,        label: 'Admin Console',   hint: 'Kanban + system controls',           cap: 'admin.kanban_view' },
-  { id: 'roles',    Icon: Shield,        label: 'Roles & Access',  hint: 'Roles, capabilities, user creation', cap: 'roles.edit' },
-  { id: 'users',    Icon: UsersIcon,     label: 'Users',            hint: 'Manage portal accounts',            cap: 'users.edit' },
-  { id: 'audit',    Icon: ScrollText,    label: 'Audit log',        hint: 'Immutable action history',          cap: 'audit.view' },
-  { id: 'chatlogs', Icon: MessageCircle, label: 'Chat logs',        hint: 'AI assistant conversations',        cap: 'chatlogs.view' },
+  {
+    id: 'studio',
+    Icon: BookOpen,
+    label: 'Doc Studio',
+    hint: 'Author & edit documentation',
+    cap: 'docs.manage',
+  },
+  {
+    id: 'admin',
+    Icon: Wrench,
+    label: 'Admin Console',
+    hint: 'Kanban + system controls',
+    cap: 'admin.kanban_view',
+  },
+  {
+    id: 'roles',
+    Icon: Shield,
+    label: 'Roles & Access',
+    hint: 'Roles, capabilities, user creation',
+    cap: 'roles.edit',
+  },
+  {
+    id: 'users',
+    Icon: UsersIcon,
+    label: 'Users',
+    hint: 'Manage portal accounts',
+    cap: 'users.edit',
+  },
+  {
+    id: 'audit',
+    Icon: ScrollText,
+    label: 'Audit log',
+    hint: 'Immutable action history',
+    cap: 'audit.view',
+  },
+  {
+    id: 'chatlogs',
+    Icon: MessageCircle,
+    label: 'Chat logs',
+    hint: 'AI assistant conversations',
+    cap: 'chatlogs.view',
+  },
 ];
 
 function AdminToolsDropdown({ section, onPick }) {
@@ -7599,11 +13803,18 @@ function AdminToolsDropdown({ section, onPick }) {
           title={active ? `Admin · ${active.label}` : 'Admin tools'}
           className="pomelo-icon-btn"
           style={{
-            padding: '6px 13px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer',
+            padding: '6px 13px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            cursor: 'pointer',
             background: active ? 'var(--accent-primary)' : 'var(--accent-soft)',
             color: active ? 'var(--text-inverse)' : 'var(--accent-primary)',
-            fontFamily: "'Inter', sans-serif", fontSize: '12px', fontWeight: 600,
-            display: 'flex', alignItems: 'center', gap: '5px',
+            fontFamily: "'Inter', sans-serif",
+            fontSize: '12px',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
           }}
         >
           <Wrench size={15} strokeWidth={2} />
@@ -7616,13 +13827,33 @@ function AdminToolsDropdown({ section, onPick }) {
           {items.map(t => {
             const isActive = section === t.id;
             return (
-              <DropdownMenu.Item key={t.id} onSelect={() => onPick(isActive ? 'home' : t.id)} style={radixMenuItemStyle(isActive)}>
-                <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)' }}><t.Icon size={16} strokeWidth={2} /></span>
-                <span style={{ flex: 1 }}>
-                  <span style={{ fontWeight: isActive ? 600 : 500, color: 'var(--text-primary)' }}>{t.label}</span>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{t.hint}</div>
+              <DropdownMenu.Item
+                key={t.id}
+                onSelect={() => onPick(isActive ? 'home' : t.id)}
+                style={radixMenuItemStyle(isActive)}
+              >
+                <span
+                  style={{
+                    width: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  <t.Icon size={16} strokeWidth={2} />
                 </span>
-                {isActive && <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />}
+                <span style={{ flex: 1 }}>
+                  <span style={{ fontWeight: isActive ? 600 : 500, color: 'var(--text-primary)' }}>
+                    {t.label}
+                  </span>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {t.hint}
+                  </div>
+                </span>
+                {isActive && (
+                  <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />
+                )}
               </DropdownMenu.Item>
             );
           })}
@@ -7638,9 +13869,11 @@ function AdminToolsDropdown({ section, onPick }) {
 function AdminViewModePill({ viewAs, onSet, allUsers, currentUserName }) {
   const LabelIcon = viewAs === null ? Star : viewAs === 'user' ? User : Eye;
   const labelTextOnly =
-    viewAs === null ? 'Admin Mode'
-    : viewAs === 'user' ? 'User View'
-    : `Viewing as ${viewAs.name.split(' ')[0]}`;
+    viewAs === null
+      ? 'Admin Mode'
+      : viewAs === 'user'
+        ? 'User View'
+        : `Viewing as ${viewAs.name.split(' ')[0]}`;
   const labelColor = viewAs === null ? 'var(--accent-primary)' : '#D97706';
   const borderColor = viewAs === null ? 'var(--accent-primary)' : '#F59E0B';
 
@@ -7652,10 +13885,19 @@ function AdminViewModePill({ viewAs, onSet, allUsers, currentUserName }) {
           title={labelTextOnly}
           className="pomelo-icon-btn"
           style={{
-            padding: '6px 12px', borderRadius: 'var(--radius-md)', border: `1.5px solid ${borderColor}`,
-            background: 'var(--bg-elevated)', color: labelColor,
-            cursor: 'pointer', fontFamily: "'Inter', sans-serif", fontSize: '12px', fontWeight: 600,
-            display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0,
+            padding: '6px 12px',
+            borderRadius: 'var(--radius-md)',
+            border: `1.5px solid ${borderColor}`,
+            background: 'var(--bg-elevated)',
+            color: labelColor,
+            cursor: 'pointer',
+            fontFamily: "'Inter', sans-serif",
+            fontSize: '12px',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            flexShrink: 0,
           }}
         >
           <LabelIcon size={14} strokeWidth={2} />
@@ -7665,32 +13907,87 @@ function AdminViewModePill({ viewAs, onSet, allUsers, currentUserName }) {
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content sideOffset={6} align="end" style={radixMenuContentStyle}>
-          <DropdownMenu.Label style={{ padding: '6px 10px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>View Mode</DropdownMenu.Label>
-          <DropdownMenu.Item onSelect={() => onSet(null)} style={radixMenuItemStyle(viewAs === null)}>
-            <Star size={14} strokeWidth={2} style={{ color: viewAs === null ? 'var(--accent-primary)' : 'var(--text-secondary)' }} />
-            <span style={{ flex: 1, fontWeight: viewAs === null ? 600 : 500 }}>Admin (default)</span>
-            {viewAs === null && <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />}
+          <DropdownMenu.Label
+            style={{
+              padding: '6px 10px',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            View Mode
+          </DropdownMenu.Label>
+          <DropdownMenu.Item
+            onSelect={() => onSet(null)}
+            style={radixMenuItemStyle(viewAs === null)}
+          >
+            <Star
+              size={14}
+              strokeWidth={2}
+              style={{ color: viewAs === null ? 'var(--accent-primary)' : 'var(--text-secondary)' }}
+            />
+            <span style={{ flex: 1, fontWeight: viewAs === null ? 600 : 500 }}>
+              Admin (default)
+            </span>
+            {viewAs === null && (
+              <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />
+            )}
           </DropdownMenu.Item>
-          <DropdownMenu.Item onSelect={() => onSet('user')} style={radixMenuItemStyle(viewAs === 'user')}>
-            <User size={14} strokeWidth={2} style={{ color: viewAs === 'user' ? 'var(--accent-primary)' : 'var(--text-secondary)' }} />
-            <span style={{ flex: 1, fontWeight: viewAs === 'user' ? 600 : 500 }}>View as regular user</span>
-            {viewAs === 'user' && <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />}
+          <DropdownMenu.Item
+            onSelect={() => onSet('user')}
+            style={radixMenuItemStyle(viewAs === 'user')}
+          >
+            <User
+              size={14}
+              strokeWidth={2}
+              style={{
+                color: viewAs === 'user' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+              }}
+            />
+            <span style={{ flex: 1, fontWeight: viewAs === 'user' ? 600 : 500 }}>
+              View as regular user
+            </span>
+            {viewAs === 'user' && (
+              <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />
+            )}
           </DropdownMenu.Item>
-          <DropdownMenu.Separator style={{ height: '1px', background: 'var(--border-subtle)', margin: '4px 0' }} />
-          <DropdownMenu.Label style={{ padding: '6px 10px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Impersonate user</DropdownMenu.Label>
-          {allUsers.filter(u => u.name !== currentUserName).map(u => {
-            const active = viewAs && typeof viewAs === 'object' && viewAs.email === u.email;
-            return (
-              <DropdownMenu.Item
-                key={u.email}
-                onSelect={() => onSet({ name: u.name, email: u.email, department: u.department, role: u.role })}
-                style={{ ...radixMenuItemStyle(active), justifyContent: 'space-between' }}
-              >
-                <span style={{ fontWeight: active ? 600 : 500 }}>{u.name}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{u.role === 'superadmin' ? 'admin' : u.role}{active ? ' ✓' : ''}</span>
-              </DropdownMenu.Item>
-            );
-          })}
+          <DropdownMenu.Separator
+            style={{ height: '1px', background: 'var(--border-subtle)', margin: '4px 0' }}
+          />
+          <DropdownMenu.Label
+            style={{
+              padding: '6px 10px',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            Impersonate user
+          </DropdownMenu.Label>
+          {allUsers
+            .filter(u => u.name !== currentUserName)
+            .map(u => {
+              const active = viewAs && typeof viewAs === 'object' && viewAs.email === u.email;
+              return (
+                <DropdownMenu.Item
+                  key={u.email}
+                  onSelect={() =>
+                    onSet({ name: u.name, email: u.email, department: u.department, role: u.role })
+                  }
+                  style={{ ...radixMenuItemStyle(active), justifyContent: 'space-between' }}
+                >
+                  <span style={{ fontWeight: active ? 600 : 500 }}>{u.name}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+                    {u.role === 'superadmin' ? 'admin' : u.role}
+                    {active ? ' ✓' : ''}
+                  </span>
+                </DropdownMenu.Item>
+              );
+            })}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -7706,11 +14003,20 @@ const RbacContext = createContext({
   can: () => false,
   roles: [],
   currentRole: null,
-  settings: { defaultAssigneeName: DEFAULT_ASSIGNEE.name, defaultAssigneeEmail: DEFAULT_ASSIGNEE.email },
+  settings: {
+    defaultAssigneeName: DEFAULT_ASSIGNEE.name,
+    defaultAssigneeEmail: DEFAULT_ASSIGNEE.email,
+  },
 });
-function useCan()      { return useContext(RbacContext).can; }
-function useRoles()    { return useContext(RbacContext).roles; }
-function useRbacCtx()  { return useContext(RbacContext); }
+function useCan() {
+  return useContext(RbacContext).can;
+}
+function useRoles() {
+  return useContext(RbacContext).roles;
+}
+function useRbacCtx() {
+  return useContext(RbacContext);
+}
 
 // ─── Main App (inner) ─────────────────────────────────────────────────────────
 // Theme design tokens (light + dark). Shared so BOTH the pre-auth login page
@@ -7780,7 +14086,6 @@ function AppContent() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [docs, setDocs] = useState(DOCS);
   const [suggestions, setSuggestions] = useState([]);
   // Bumped whenever the roles registry or settings change so consumers
   // (and the `can` memo below) re-evaluate without prop drilling.
@@ -7805,13 +14110,15 @@ function AppContent() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const effectiveRole = viewAs === 'user' ? 'user' : (viewAs && typeof viewAs === 'object' ? viewAs.role : role);
+  const effectiveRole =
+    viewAs === 'user' ? 'user' : viewAs && typeof viewAs === 'object' ? viewAs.role : role;
   // effectiveUser carries roleId so RBAC gating (useCan) flips correctly when
   // impersonating. The 'view as regular user' shortcut downgrades to the
   // default role rather than referencing a specific user.
   const effectiveUser = useMemo(() => {
     if (viewAs && typeof viewAs === 'object') return viewAs;
-    if (viewAs === 'user') return currentUser ? { ...currentUser, roleId: getDefaultRoleId() } : null;
+    if (viewAs === 'user')
+      return currentUser ? { ...currentUser, roleId: getDefaultRoleId() } : null;
     return currentUser;
   }, [viewAs, currentUser]);
   const isImpersonating = viewAs !== null;
@@ -7821,13 +14128,13 @@ function AppContent() {
   // the settings change — the last is referenced via settingsVersion only so
   // strip consumers re-render too.
   const can = useCallback(
-    (capId) => hasPermission(effectiveUser, capId, listRoles()),
-    [effectiveUser, rolesVersion], // eslint-disable-line react-hooks/exhaustive-deps
+    capId => hasPermission(effectiveUser, capId, listRoles()),
+    [effectiveUser, rolesVersion] // eslint-disable-line react-hooks/exhaustive-deps
   );
   const currentRoleObj = effectiveUser?.roleId ? findRole(effectiveUser.roleId) : null;
   const rbacValue = useMemo(
     () => ({ can, roles: listRoles(), currentRole: currentRoleObj, settings: getSettings() }),
-    [can, rolesVersion, settingsVersion, currentRoleObj], // eslint-disable-line react-hooks/exhaustive-deps
+    [can, rolesVersion, settingsVersion, currentRoleObj] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   useEffect(() => {
@@ -7842,7 +14149,10 @@ function AppContent() {
     if (API_ENABLED) {
       // The session is an httpOnly cookie — ask the server who we are.
       authApi.me().then(({ data: u }) => {
-        if (u) { restore(u, u.role?.name || 'user'); hydrateFromBackend(); }
+        if (u) {
+          restore(u, u.role?.name || 'user');
+          hydrateFromBackend();
+        }
       });
     } else {
       const session = getSession();
@@ -7875,7 +14185,7 @@ function AppContent() {
     return () => clearInterval(id);
   }, [isAuthenticated]);
 
-  const handleLogin = (user) => {
+  const handleLogin = user => {
     const roleId = user.roleId || LEGACY_ROLE_TO_ROLE_ID[user.role] || getDefaultRoleId();
     setCurrentUser({ name: user.name, email: user.email, department: user.department, roleId });
     setRole(user.role);
@@ -7883,7 +14193,8 @@ function AppContent() {
     setViewAs(null);
     hydrateFromBackend();
     setAuditActor({ name: user.name, email: user.email });
-    if (hasPermission({ roleId }, 'audit.view', listRoles())) recordAudit('session.login', { name: user.name, email: user.email });
+    if (hasPermission({ roleId }, 'audit.view', listRoles()))
+      recordAudit('session.login', { name: user.name, email: user.email });
     seedNotifications(buildSeedNotifications(user.name));
   };
 
@@ -7907,12 +14218,23 @@ function AppContent() {
     if (!hasPermission(currentUser, 'system.impersonate', listRoles())) return;
     if (viewAs === null) return; // skip the initial null on login
     const detail =
-      viewAs === 'user' ? { mode: 'user' }
-      : { mode: 'impersonate', targetEmail: viewAs.email, targetName: viewAs.name };
-    recordAudit('admin.view_as', { name: currentUser.name, email: currentUser.email }, null, detail);
+      viewAs === 'user'
+        ? { mode: 'user' }
+        : { mode: 'impersonate', targetEmail: viewAs.email, targetName: viewAs.name };
+    recordAudit(
+      'admin.view_as',
+      { name: currentUser.name, email: currentUser.email },
+      null,
+      detail
+    );
   }, [viewAs, isAuthenticated, currentUser]);
 
-  const initials = effectiveUser?.name?.split(' ').map(n => n[0]).join('').toUpperCase() ?? '?';
+  const initials =
+    effectiveUser?.name
+      ?.split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase() ?? '?';
 
   // Most-used destinations stay as direct buttons; the three reference pages
   // are grouped under a Resources dropdown below.
@@ -7935,14 +14257,17 @@ function AppContent() {
   // public. When the effective view's `can` flips below the required
   // capability (impersonation, role demotion, capability toggle), bounce
   // back home — the viewed user wouldn't see it.
-  const SECTION_CAPS = useMemo(() => ({
-    admin:    'admin.kanban_view',
-    users:    'users.edit',
-    roles:    'roles.edit',
-    audit:    'audit.view',
-    chatlogs: 'chatlogs.view',
-    devportal:'tickets.view_assigned',
-  }), []);
+  const SECTION_CAPS = useMemo(
+    () => ({
+      admin: 'admin.kanban_view',
+      users: 'users.edit',
+      roles: 'roles.edit',
+      audit: 'audit.view',
+      chatlogs: 'chatlogs.view',
+      devportal: 'tickets.view_assigned',
+    }),
+    []
+  );
   useEffect(() => {
     const required = SECTION_CAPS[section];
     if (required && !can(required)) setSection('home');
@@ -7959,21 +14284,114 @@ function AppContent() {
   const renderPage = () => {
     let page;
     switch (section) {
-      case 'home':      page = <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'submit':    page = <SubmitPage setSection={setSection} showToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} currentUser={effectiveUser} />; break;
-      case 'docs':      page = <DocImportExportPage role={effectiveRole} suggestions={suggestions} setSuggestions={setSuggestions} currentUser={effectiveUser} onDocEdit={(doc) => addNotification({ type: 'doc_edit', title: `Document updated: ${doc.title}`, body: `${effectiveUser?.name || 'You'} made changes to ${doc.title}.`, actorName: effectiveUser?.name || 'You', docId: doc.id })} />; break;
-      case 'suggestions': page = <SuggestionsPage currentUser={effectiveUser} can={can} onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} />; break;
-      case 'priority':  page = <PriorityGuidePage />; break;
-      case 'sla':       page = <SLAPage />; break;
-      case 'mytickets': page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'devportal': page = can('tickets.view_assigned') ? <DeveloperPortalPage currentUser={effectiveUser} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'studio':    page = can('docs.manage') ? <DocStudioPage role={effectiveRole} currentUser={effectiveUser} onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'admin':     page = can('admin.kanban_view') ? <AdminPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'roles':     page = can('roles.edit') ? <RolesAccessPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'users':     page = can('users.edit') ? <UsersPanelPage currentUserEmail={currentUser?.email} /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'audit':     page = can('audit.view') ? <AuditLogPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      case 'chatlogs':  page = can('chatlogs.view') ? <ChatLogsPage /> : <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />; break;
-      default:          page = <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />;
+      case 'home':
+        page = (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'submit':
+        page = (
+          <SubmitPage
+            setSection={setSection}
+            showToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+            currentUser={effectiveUser}
+          />
+        );
+        break;
+      case 'docs':
+        page = (
+          <DocImportExportPage
+            role={effectiveRole}
+            suggestions={suggestions}
+            setSuggestions={setSuggestions}
+            currentUser={effectiveUser}
+            onDocEdit={doc =>
+              addNotification({
+                type: 'doc_edit',
+                title: `Document updated: ${doc.title}`,
+                body: `${effectiveUser?.name || 'You'} made changes to ${doc.title}.`,
+                actorName: effectiveUser?.name || 'You',
+                docId: doc.id,
+              })
+            }
+          />
+        );
+        break;
+      case 'suggestions':
+        page = (
+          <SuggestionsPage
+            currentUser={effectiveUser}
+            can={can}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        );
+        break;
+      case 'priority':
+        page = <PriorityGuidePage />;
+        break;
+      case 'sla':
+        page = <SLAPage />;
+        break;
+      case 'mytickets':
+        page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />;
+        break;
+      case 'devportal':
+        page = can('tickets.view_assigned') ? (
+          <DeveloperPortalPage currentUser={effectiveUser} />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'studio':
+        page = can('docs.manage') ? (
+          <DocStudioPage
+            role={effectiveRole}
+            currentUser={effectiveUser}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'admin':
+        page = can('admin.kanban_view') ? (
+          <AdminPage />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'roles':
+        page = can('roles.edit') ? (
+          <RolesAccessPage currentUserEmail={currentUser?.email} />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'users':
+        page = can('users.edit') ? (
+          <UsersPanelPage currentUserEmail={currentUser?.email} />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'audit':
+        page = can('audit.view') ? (
+          <AuditLogPage />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'chatlogs':
+        page = can('chatlogs.view') ? (
+          <ChatLogsPage />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      default:
+        page = (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
     }
     return <ErrorBoundary key={section}>{page}</ErrorBoundary>;
   };
@@ -7982,7 +14400,10 @@ function AppContent() {
     return (
       <>
         <style>{THEME_TOKENS_CSS}</style>
-        <LoginPage onLogin={handleLogin} onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })} />
+        <LoginPage
+          onLogin={handleLogin}
+          onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+        />
         {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
       </>
     );
@@ -7990,8 +14411,8 @@ function AppContent() {
 
   return (
     <RbacContext.Provider value={rbacValue}>
-    <div style={S.app}>
-      <style>{`
+      <div style={S.app}>
+        <style>{`
         @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
@@ -8076,113 +14497,194 @@ function AppContent() {
         }
       `}</style>
 
-      <MaintenanceBanner />
-      <Tooltip.Provider delayDuration={250} skipDelayDuration={100}>
-      <nav className="pomelo-nav" style={S.nav}>
-        <div style={S.navLogo}>
-          <div>
-            <div style={S.navLogoText}>Pomelo</div>
-            <div style={S.navLogoSub}>TechOps Portal</div>
-          </div>
-        </div>
+        <MaintenanceBanner />
+        <Tooltip.Provider delayDuration={250} skipDelayDuration={100}>
+          <nav className="pomelo-nav" style={S.nav}>
+            <div style={S.navLogo}>
+              <div>
+                <div style={S.navLogoText}>Pomelo</div>
+                <div style={S.navLogoSub}>TechOps Portal</div>
+              </div>
+            </div>
 
-        <div className="pomelo-nav-tabs" style={S.navTabs}>
-          {NAV_ITEMS.map(item => {
-            const Icon = item.icon;
-            return (
-              <button key={item.id} onClick={() => setSection(item.id)} style={{ ...S.navTab(section === item.id), display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Icon size={15} strokeWidth={2} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-          <ResourcesDropdown section={RESOURCE_IDS.has(section) ? section : null} onPick={setSection} />
-        </div>
+            <div className="pomelo-nav-tabs" style={S.navTabs}>
+              {NAV_ITEMS.map(item => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setSection(item.id)}
+                    style={{
+                      ...S.navTab(section === item.id),
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Icon size={15} strokeWidth={2} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+              <ResourcesDropdown
+                section={RESOURCE_IDS.has(section) ? section : null}
+                onPick={setSection}
+              />
+            </div>
 
-        <div className="pomelo-nav-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Global search trigger */}
-          <Tooltip.Root>
-            <Tooltip.Trigger asChild>
+            <div
+              className="pomelo-nav-right"
+              style={{ display: 'flex', alignItems: 'center', gap: '10px' }}
+            >
+              {/* Global search trigger */}
+              <Tooltip.Root>
+                <Tooltip.Trigger asChild>
+                  <button
+                    onClick={() => setSearchOpen(true)}
+                    aria-label="Search (Cmd+K)"
+                    className="pomelo-icon-btn"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '7px',
+                      padding: '6px 12px',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'var(--bg-hover)',
+                      color: 'var(--text-secondary)',
+                      border: '1px solid var(--border-default)',
+                      cursor: 'pointer',
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Search size={14} strokeWidth={2.2} />
+                    <span className="pomelo-search-label">Search</span>
+                    <span
+                      className="pomelo-btn-shortcut"
+                      style={{
+                        marginLeft: '4px',
+                        padding: '1px 5px',
+                        background: 'var(--border-default)',
+                        color: 'var(--text-secondary)',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '10px',
+                      }}
+                    >
+                      ⌘K
+                    </span>
+                  </button>
+                </Tooltip.Trigger>
+                <Tooltip.Portal>
+                  <Tooltip.Content sideOffset={6} style={tooltipContentStyle}>
+                    Search (⌘K / Ctrl+K)
+                  </Tooltip.Content>
+                </Tooltip.Portal>
+              </Tooltip.Root>
+
+              {/* View-mode pill — visible to anyone who can impersonate. Stays
+              visible even while impersonating so it's the escape hatch back. */}
+              {hasPermission(currentUser, 'system.impersonate', listRoles()) && (
+                <AdminViewModePill
+                  viewAs={viewAs}
+                  onSet={setViewAs}
+                  allUsers={MOCK_USERS}
+                  currentUserName={currentUser?.name}
+                />
+              )}
+
+              {/* Admin tools — single dropdown grouping Users / Roles / Audit / Chat Logs / Admin Console */}
+              {(can('admin.kanban_view') ||
+                can('users.edit') ||
+                can('roles.edit') ||
+                can('audit.view') ||
+                can('chatlogs.view')) && (
+                <AdminToolsDropdown section={section} onPick={setSection} />
+              )}
+
+              {/* Notification bell */}
+              <NotificationBell onNavigate={target => setSection(target)} />
+
+              {/* Theme toggle — light/dark switch, visible to all users */}
+              <ThemeToggleButton />
+
+              {/* Avatar — clickable to open profile */}
               <button
-                onClick={() => setSearchOpen(true)}
-                aria-label="Search (Cmd+K)"
-                className="pomelo-icon-btn"
+                onClick={() => setProfileOpen(true)}
+                aria-label={`Open profile for ${effectiveUser?.name || 'user'}`}
+                title={effectiveUser?.name}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '7px',
-                  padding: '6px 12px', borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-hover)', color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-default)', cursor: 'pointer',
-                  fontFamily: "'Inter', sans-serif", fontSize: '12px', fontWeight: 600,
+                  ...S.navUser,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
                   flexShrink: 0,
                 }}
               >
-                <Search size={14} strokeWidth={2.2} />
-                <span className="pomelo-search-label">Search</span>
-                <span className="pomelo-btn-shortcut" style={{ marginLeft: '4px', padding: '1px 5px', background: 'var(--border-default)', color: 'var(--text-secondary)', borderRadius: 'var(--radius-sm)', fontSize: '10px' }}>⌘K</span>
+                <div style={S.avatar}>{initials}</div>
+                <span
+                  className="pomelo-avatar-name"
+                  style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}
+                >
+                  {effectiveUser?.name}
+                </span>
+                {isImpersonating && (
+                  <span
+                    style={{
+                      marginLeft: '6px',
+                      fontSize: '10px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      background: '#FEF3C7',
+                      color: '#92400E',
+                      fontWeight: 700,
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    VIEWING
+                  </span>
+                )}
               </button>
-            </Tooltip.Trigger>
-            <Tooltip.Portal>
-              <Tooltip.Content sideOffset={6} style={tooltipContentStyle}>Search (⌘K / Ctrl+K)</Tooltip.Content>
-            </Tooltip.Portal>
-          </Tooltip.Root>
+            </div>
+          </nav>
+        </Tooltip.Provider>
 
-          {/* View-mode pill — visible to anyone who can impersonate. Stays
-              visible even while impersonating so it's the escape hatch back. */}
-          {hasPermission(currentUser, 'system.impersonate', listRoles()) && (
-            <AdminViewModePill
-              viewAs={viewAs}
-              onSet={setViewAs}
-              allUsers={MOCK_USERS}
-              currentUserName={currentUser?.name}
-            />
-          )}
+        <main
+          className="pomelo-main"
+          style={{
+            ...S.main,
+            maxWidth: WIDE_SECTIONS.has(section) ? '1400px' : '1100px',
+            padding: WIDE_SECTIONS.has(section) ? '32px 28px' : undefined,
+          }}
+        >
+          {renderPage()}
+        </main>
 
-          {/* Admin tools — single dropdown grouping Users / Roles / Audit / Chat Logs / Admin Console */}
-          {(can('admin.kanban_view') || can('users.edit') || can('roles.edit') || can('audit.view') || can('chatlogs.view')) && (
-            <AdminToolsDropdown section={section} onPick={setSection} />
-          )}
+        <footer style={S.footer}>
+          Pomelo TechOps &nbsp;|&nbsp; Support Hours: Mon–Fri, 9:30 AM – 6:30 PM &nbsp;|&nbsp;
+          Emergency: Slack #techops-urgent
+        </footer>
 
-          {/* Notification bell */}
-          <NotificationBell onNavigate={(target) => setSection(target)} />
-
-          {/* Theme toggle — light/dark switch, visible to all users */}
-          <ThemeToggleButton />
-
-          {/* Avatar — clickable to open profile */}
-          <button
-            onClick={() => setProfileOpen(true)}
-            aria-label={`Open profile for ${effectiveUser?.name || 'user'}`}
-            title={effectiveUser?.name}
-            style={{ ...S.navUser, background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
-          >
-            <div style={S.avatar}>{initials}</div>
-            <span className="pomelo-avatar-name" style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 600 }}>{effectiveUser?.name}</span>
-            {isImpersonating && (
-              <span style={{ marginLeft: '6px', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E', fontWeight: 700, letterSpacing: '0.04em' }}>VIEWING</span>
-            )}
-          </button>
-        </div>
-      </nav>
-      </Tooltip.Provider>
-
-      <main className="pomelo-main" style={{ ...S.main, maxWidth: WIDE_SECTIONS.has(section) ? '1400px' : '1100px', padding: WIDE_SECTIONS.has(section) ? '32px 28px' : undefined }}>
-        {renderPage()}
-      </main>
-
-      <footer style={S.footer}>
-        Pomelo TechOps &nbsp;|&nbsp; Support Hours: Mon–Fri, 9:30 AM – 6:30 PM &nbsp;|&nbsp; Emergency: Slack #techops-urgent
-      </footer>
-
-      {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
-      {profileOpen && <ProfileModal currentUser={effectiveUser} setCurrentUser={setCurrentUser} role={effectiveRole} onClose={() => setProfileOpen(false)} onLogout={handleLogout} />}
-      <ChatAssistantWidget effectiveUser={effectiveUser} effectiveRole={effectiveRole} />
-      <GlobalSearchPalette
-        open={searchOpen}
-        onClose={() => setSearchOpen(false)}
-        onNavigate={target => setSection(target)}
-        role={effectiveRole}
-      />
-    </div>
+        {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
+        {profileOpen && (
+          <ProfileModal
+            currentUser={effectiveUser}
+            setCurrentUser={setCurrentUser}
+            role={effectiveRole}
+            onClose={() => setProfileOpen(false)}
+            onLogout={handleLogout}
+          />
+        )}
+        <ChatAssistantWidget effectiveUser={effectiveUser} effectiveRole={effectiveRole} />
+        <GlobalSearchPalette
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          onNavigate={target => setSection(target)}
+          role={effectiveRole}
+        />
+      </div>
     </RbacContext.Provider>
   );
 }

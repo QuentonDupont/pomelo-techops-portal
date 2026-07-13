@@ -14,10 +14,10 @@
     "start": "node server/index.js",
     "db:migrate": "node server/migrate.js",
     "db:seed": "node server/seed.js",
-    "lint": "eslint src server --ext .js,.jsx",
-    "lint:fix": "eslint src server --ext .js,.jsx --fix",
-    "format": "prettier --write \"src/**/*.{js,jsx}\" \"server/**/*.js\"",
-    "format:check": "prettier --check \"src/**/*.{js,jsx}\" \"server/**/*.js\"",
+    "lint": "eslint src server PomeloTechOpsPortal.jsx --ext .js,.jsx",
+    "lint:fix": "eslint src server PomeloTechOpsPortal.jsx --ext .js,.jsx --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx}\" \"server/**/*.js\" PomeloTechOpsPortal.jsx",
+    "format:check": "prettier --check \"src/**/*.{js,jsx}\" \"server/**/*.js\" PomeloTechOpsPortal.jsx",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "prepare": "husky"
@@ -28,6 +28,10 @@
       "prettier --write"
     ],
     "server/**/*.js": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "PomeloTechOpsPortal.jsx": [
       "eslint --fix",
       "prettier --write"
     ]
