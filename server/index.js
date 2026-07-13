@@ -25,8 +25,10 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { existsSync } from 'fs';
 import cookieParser from 'cookie-parser';
+import { timingSafeEqual } from 'crypto';
 import * as Sentry from '@sentry/node';
 import { dbHealth, dbEnabled } from './db.js';
+import { requireAuth, requireCapability } from './auth.js';
 import authRouter from './routes/auth.js';
 import ticketsRouter from './routes/tickets.js';
 import usersRouter from './routes/users.js';
@@ -77,13 +79,25 @@ if (isProduction && !process.env.ALLOWED_ORIGIN) {
 const app = express();
 const PORT = process.env.BFF_PORT || 3001;
 
+// Behind Render / a load balancer the client IP arrives via X-Forwarded-For;
+// without this, express-rate-limit buckets every client under the proxy IP
+// (or hard-errors on the header) and req.secure never reflects TLS.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 
-const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
+// ALLOWED_ORIGIN accepts a comma-separated list (e.g. staging + production).
+// credentials:true is required for the httpOnly session cookie to cross
+// origins; cookies also require an exact origin match, never a wildcard.
+const allowedOrigins = (process.env.ALLOWED_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
 app.use(
   cors({
-    origin: allowedOrigin,
-    methods: ['POST', 'GET', 'OPTIONS'],
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type'],
   })
 );
@@ -212,10 +226,12 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ─── Admin status (returns credential-presence booleans for the admin UI) ─────
-// Returns the same shape the old /api/health used to leak. Intended for
-// authenticated admin UIs. This mock BFF does not implement real auth, so a
-// production deployment must gate this route behind admin session validation.
-app.get('/api/v1/admin-status', (_req, res) => {
+// DB mode: requires an authenticated session with admin settings capability.
+// No DB: there is no session to validate, so the route only exists in dev.
+const adminStatusGuards = dbEnabled
+  ? [requireAuth, requireCapability('system.settings_edit')]
+  : [(_req, res, next) => (isProduction ? res.status(404).json({ error: 'Not found.' }) : next())];
+app.get('/api/v1/admin-status', ...adminStatusGuards, (_req, res) => {
   res.json({
     status: 'ok',
     jira: Boolean(process.env.JIRA_API_TOKEN),
@@ -600,9 +616,24 @@ const pushWebhookEvent = evt => {
   LAST_WEBHOOK_AT = new Date().toISOString();
 };
 
+// Webhooks carry no session cookie, so they authenticate with a shared secret:
+// configure the Jira webhook URL as …/api/v1/jira/webhook?token=<secret> (or
+// send an X-Webhook-Token header). Production refuses all webhook traffic
+// until JIRA_WEBHOOK_SECRET is set; dev without the secret stays open.
+const webhookAuthorized = req => {
+  const secret = process.env.JIRA_WEBHOOK_SECRET || '';
+  if (!secret) return !isProduction;
+  const provided = String(req.query.token || req.get('x-webhook-token') || '');
+  const a = Buffer.from(provided);
+  const b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
 app.post('/api/v1/jira/webhook', (req, res) => {
-  // Jira webhook payloads can be large; trust the helmet/cors gate and Jira's
-  // network-level controls (allowlist by IP if you tighten this).
+  if (!webhookAuthorized(req)) {
+    log('error', 'Jira webhook rejected: bad or missing token');
+    return res.status(401).json({ error: 'Invalid webhook token.' });
+  }
   const body = req.body || {};
   const event = {
     id: 'wh_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
@@ -1456,7 +1487,7 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`[BFF] Pomelo TechOps API proxy → http://localhost:${PORT}`);
   console.log(`[BFF] NODE_ENV:             ${process.env.NODE_ENV || 'development'}`);
-  console.log(`[BFF] Allowed origin:       ${allowedOrigin}`);
+  console.log(`[BFF] Allowed origins:      ${allowedOrigins.join(', ')}`);
   console.log(
     `[BFF] Database:             ${dbEnabled ? 'configured' : 'not configured (DATABASE_URL unset)'}`
   );

@@ -13,6 +13,12 @@ import { hasPermission } from '../src/rbac.js';
 
 export const COOKIE_NAME = 'techops_session';
 const isProduction = process.env.NODE_ENV === 'production';
+// Secure cookies need explicit control: NODE_ENV alone is wrong when TLS is
+// terminated at a proxy (or absent in an internal deploy). COOKIE_SECURE
+// overrides; otherwise production defaults to secure.
+const cookieSecure = process.env.COOKIE_SECURE
+  ? process.env.COOKIE_SECURE === 'true'
+  : isProduction;
 const SECRET = process.env.JWT_SECRET || '';
 const TOKEN_TTL = '7d';
 
@@ -29,7 +35,7 @@ export function signSession(userId) {
 export function setAuthCookie(res, token) {
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: isProduction,
+    secure: cookieSecure,
     sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',

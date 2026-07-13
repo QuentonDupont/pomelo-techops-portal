@@ -118,13 +118,17 @@ router.post('/upload', requireCapability('docs.manage'), (_req, res) => {
   res.status(501).json({ error: 'Upload is handled via the S3 presign flow (coming in Day 5).' });
 });
 
+// Restricted docs are readable only by staff; used by every route that
+// returns doc content (including version snapshots).
+const canReadDoc = (user, doc) => doc.visibility !== 'IT Team Only' || can(user, 'docs.manage');
+
 // ─── Read one ─────────────────────────────────────────────────────────────────
 router.get('/:id', async (req, res, next) => {
   try {
     const { rows } = await query('SELECT * FROM docs WHERE id=$1', [req.params.id]);
     const d = rows[0];
     if (!d) return res.status(404).json({ error: 'Document not found.' });
-    if (d.visibility === 'IT Team Only' && !can(req.user, 'docs.manage'))
+    if (!canReadDoc(req.user, d))
       return res.status(403).json({ error: 'Insufficient permissions.' });
     res.json(serialize(d));
   } catch (err) {
@@ -250,15 +254,13 @@ router.post('/:id/versions', requireCapability('docs.manage'), async (req, res, 
         [d.id, MAX_VERSIONS]
       );
     });
-    res
-      .status(201)
-      .json({
-        versionId,
-        savedAt: new Date().toISOString(),
-        author,
-        title: d.title,
-        content: d.content,
-      });
+    res.status(201).json({
+      versionId,
+      savedAt: new Date().toISOString(),
+      author,
+      title: d.title,
+      content: d.content,
+    });
   } catch (err) {
     next(err);
   }
@@ -266,6 +268,12 @@ router.post('/:id/versions', requireCapability('docs.manage'), async (req, res, 
 
 router.get('/:id/versions', async (req, res, next) => {
   try {
+    const docRes = await query('SELECT * FROM docs WHERE id=$1', [req.params.id]);
+    const d = docRes.rows[0];
+    if (!d) return res.status(404).json({ error: 'Document not found.' });
+    // Version snapshots contain full doc content — same gate as reading the doc.
+    if (!canReadDoc(req.user, d))
+      return res.status(403).json({ error: 'Insufficient permissions.' });
     const { rows } = await query(
       'SELECT * FROM doc_versions WHERE doc_id=$1 ORDER BY saved_at DESC',
       [req.params.id]

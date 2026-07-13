@@ -185,6 +185,10 @@ router.post('/', async (req, res, next) => {
     if (!parsed.success)
       return res.status(400).json({ error: 'Invalid input.', details: parsed.error.flatten() });
     const d = parsed.data;
+    // Setting an assignee at creation is the same privilege as assigning later
+    // (the /:id/assign route already enforces it).
+    if ((d.assigneeEmail || d.assigneeName) && !can(req.user, 'tickets.assign'))
+      return res.status(403).json({ error: 'Insufficient permissions to assign tickets.' });
     const key = await generateKey();
     const ticket = await withTransaction(async client => {
       const { rows } = await client.query(

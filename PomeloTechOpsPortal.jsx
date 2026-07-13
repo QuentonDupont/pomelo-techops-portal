@@ -1141,12 +1141,13 @@ const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS   = 30_000;
 const AUTH_DELAY   = 600;
 
-let MOCK_USERS = [
-  { id: 'u1', name: 'Alex Lee',       email: 'alex.lee@pomelo.com',          passwordHash: btoa('salt_u1_Admin123!'),   role: 'superadmin', roleId: 'role_superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-09-01' },
-  { id: 'u2', name: 'Kai Nguyen',     email: 'kai.nguyen@pomelo.com',        passwordHash: btoa('salt_u2_User123!'),    role: 'user',       roleId: 'role_user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-11-12' },
-  { id: 'u3', name: 'Prim Srisawat',  email: 'prim.srisawat@pomelo.com',     passwordHash: btoa('salt_u3_User123!'),    role: 'user',       roleId: 'role_user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2025-01-22' },
-  { id: 'u4', name: 'Quenton Dupont', email: 'quentond.d@pomelofashion.com', passwordHash: 'c2FsdF91NF9Ub3lvdGFzdXByYTdA', role: 'superadmin', roleId: 'role_superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-08-15' },
-];
+// Demo accounts exist only in dev builds — production bundles ship zero seeded
+// users (accounts come from the backend, or self-signup in mock mode).
+// Both dev accounts use the password: Demo123!
+let MOCK_USERS = import.meta.env.DEV ? [
+  { id: 'u1', name: 'Demo Admin', email: 'demo.admin@example.com', passwordSalt: 'demo-seed-admin', passwordHash: '7dd344ffa2c9acd92b007af8be210b264382b19411f3dd1e3aca96450376c702', role: 'superadmin', roleId: 'role_superadmin', department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-09-01' },
+  { id: 'u2', name: 'Demo User',  email: 'demo.user@example.com',  passwordSalt: 'demo-seed-user',  passwordHash: 'a30ea2c34ea6382c72d061626bc21bee50e1f657823b9f88de76484c365dde10', role: 'user',       roleId: 'role_user',       department: 'IT & Technology', active: true, lastLoginAt: null, forceReOtp: false, createdAt: '2024-11-12' },
+] : [];
 
 // ─── Chat log store (in-memory) ───────────────────────────────────────────────
 // Sessions captured for future training / cap tuning. Each session is one

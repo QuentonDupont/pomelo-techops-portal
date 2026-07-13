@@ -261,8 +261,8 @@ export const SEED_ROLES = Object.freeze([
 // Every new ticket lands assigned to this address until admin re-routes. The
 // runtime can override via SETTINGS in localStorage (Roles & Access page).
 export const DEFAULT_ASSIGNEE = Object.freeze({
-  name: 'Quenton Dupont',
-  email: 'quentond.d@pomelofashion.com',
+  name: 'TechOps Queue',
+  email: 'techops@pomelo.local',
 });
 
 // ─── Pure predicate ───────────────────────────────────────────────────────────
@@ -295,10 +295,10 @@ export const LEGACY_ROLE_TO_ROLE_ID = Object.freeze({
 // The default role id new users land in when no role is specified.
 export const DEFAULT_ROLE_ID = 'role_user';
 
-// Seed-user email rewrite — Quenton's personal address → work address.
-export const SEED_EMAIL_REWRITE = Object.freeze({
-  'quentondupont@gmail.com': 'quentond.d@pomelofashion.com',
-});
+// Seed-user email rewrites applied by the one-time migration. Empty since the
+// hardcoded personal seed accounts were removed; kept so the migration loop
+// stays a no-op rather than a special case.
+export const SEED_EMAIL_REWRITE = Object.freeze({});
 
 // Bump this when the migration changes shape so future boots re-run it.
 export const RBAC_SCHEMA_VERSION = 2;
