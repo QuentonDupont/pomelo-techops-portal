@@ -93,7 +93,7 @@ export default function BoardCard({ ticket, dragging, draggable, onDragStart, on
       <div
         style={{
           fontSize: '13px',
-          fontWeight: 600,
+          fontWeight: 400,
           color: 'var(--text-primary)',
           lineHeight: 1.35,
           display: '-webkit-box',

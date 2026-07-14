@@ -47,7 +47,7 @@ export default function BoardColumn({
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: '7px',
           padding: '10px 12px 8px',
           position: 'sticky',
@@ -61,19 +61,17 @@ export default function BoardColumn({
             borderRadius: '50%',
             background: column.color,
             flexShrink: 0,
+            marginTop: '3px',
           }}
         />
         <span
-          title={column.name}
           style={{
             fontSize: '11px',
             fontWeight: 800,
             letterSpacing: '0.06em',
             textTransform: 'uppercase',
             color: 'var(--text-secondary)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            lineHeight: 1.3,
             minWidth: 0,
             flex: '0 1 auto',
           }}
