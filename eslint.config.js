@@ -40,6 +40,7 @@ export default [
         Uint8Array: 'readonly',
         requestAnimationFrame: 'readonly',
         cancelAnimationFrame: 'readonly',
+        ResizeObserver: 'readonly',
         navigator: 'readonly',
         performance: 'readonly',
         process: 'readonly',

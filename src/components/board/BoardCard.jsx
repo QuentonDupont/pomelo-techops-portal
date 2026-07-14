@@ -34,6 +34,7 @@ export function DueChip({ dueDate, status }) {
         borderRadius: '5px',
         fontSize: '11px',
         fontWeight: 700,
+        whiteSpace: 'nowrap',
         background: overdue ? '#FEF2F2' : 'var(--bg-hover)',
         color: overdue ? '#B91C1C' : 'var(--text-secondary)',
         border: overdue ? '1px solid #FECACA' : '1px solid transparent',
@@ -58,7 +59,7 @@ export function LabelChip({ label }) {
         background: bg,
         color: fg,
         whiteSpace: 'nowrap',
-        maxWidth: '160px',
+        maxWidth: '100%',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
       }}
@@ -68,9 +69,20 @@ export function LabelChip({ label }) {
   );
 }
 
-export default function BoardCard({ ticket, dragging, draggable, onDragStart, onDragEnd, onOpen }) {
+export default function BoardCard({
+  ticket,
+  compact,
+  dragging,
+  draggable,
+  onDragStart,
+  onDragEnd,
+  onOpen,
+}) {
   const PriorityIcon = PRIORITY_ICONS[ticket.priority] || Equal;
   const TypeIcon = ISSUE_TYPE_ICONS[ticket.issueType] || ISSUE_TYPE_ICONS.Task;
+  // Narrow columns show the key without the constant TKT- prefix — the digits
+  // are the identity; the full key stays one hover away.
+  const displayKey = compact ? ticket.id.replace(/^TKT-/, '') : ticket.id;
   return (
     <div
       className="pomelo-board-card"
@@ -85,7 +97,7 @@ export default function BoardCard({ ticket, dragging, draggable, onDragStart, on
         background: 'var(--bg-surface)',
         border: '1px solid var(--border-default)',
         borderRadius: '8px',
-        padding: '10px 12px',
+        padding: compact ? '8px 9px' : '10px 12px',
         cursor: draggable ? 'grab' : 'pointer',
         opacity: dragging ? 0.45 : 1,
         boxShadow: 'var(--shadow-card)',
@@ -95,15 +107,17 @@ export default function BoardCard({ ticket, dragging, draggable, onDragStart, on
       }}
     >
       <div
+        title={ticket.title}
         style={{
-          fontSize: '13px',
+          fontSize: compact ? '12px' : '13px',
           fontWeight: 400,
           color: 'var(--text-primary)',
           lineHeight: 1.35,
           display: '-webkit-box',
-          WebkitLineClamp: 3,
+          WebkitLineClamp: compact ? 2 : 3,
           WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
+          overflowWrap: 'anywhere',
         }}
       >
         {ticket.title}
@@ -129,16 +143,20 @@ export default function BoardCard({ ticket, dragging, draggable, onDragStart, on
         }}
       >
         <span
+          title={ticket.id}
           style={{
-            fontSize: '11px',
+            fontSize: compact ? '10px' : '11px',
             fontWeight: 700,
             color: 'var(--text-secondary)',
             letterSpacing: '0.02em',
             whiteSpace: 'nowrap',
             flexShrink: 0,
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
-          {ticket.id}
+          {displayKey}
         </span>
         <PriorityIcon
           size={13}
@@ -160,8 +178,8 @@ export default function BoardCard({ ticket, dragging, draggable, onDragStart, on
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: '22px',
-                height: '22px',
+                width: compact ? '18px' : '22px',
+                height: compact ? '18px' : '22px',
                 borderRadius: '50%',
                 background: 'var(--accent-primary)',
                 color: '#fff',
@@ -178,8 +196,8 @@ export default function BoardCard({ ticket, dragging, draggable, onDragStart, on
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: '22px',
-                height: '22px',
+                width: compact ? '18px' : '22px',
+                height: compact ? '18px' : '22px',
                 borderRadius: '50%',
                 background: 'var(--bg-hover)',
                 border: '1px dashed var(--border-default)',

@@ -17,6 +17,7 @@ export default function BoardColumn({
   onDrop,
   dnd,
   canDrag,
+  compact,
   onOpenTicket,
   headerAction,
 }) {
@@ -52,46 +53,40 @@ export default function BoardColumn({
         transition: 'opacity 0.15s ease',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '7px',
-          padding: '10px 12px 8px',
-          position: 'sticky',
-          top: 0,
-        }}
-      >
-        <span
-          style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            color: 'var(--text-secondary)',
-            lineHeight: 1.3,
-            minWidth: 0,
-            flex: '0 1 auto',
-          }}
-        >
-          {column.name}
-        </span>
-        {tickets.length > 0 && (
+      <div style={{ padding: compact ? '8px 9px 6px' : '10px 12px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '7px' }}>
           <span
             style={{
-              fontSize: '10px',
+              fontSize: compact ? '10px' : '11px',
               fontWeight: 800,
-              color: 'var(--text-muted)',
-              background: 'var(--bg-hover)',
-              borderRadius: '100px',
-              padding: '1px 7px',
-              flexShrink: 0,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.3,
+              minWidth: 0,
+              flex: 1,
             }}
           >
-            {tickets.length}
+            {column.name}
           </span>
-        )}
-        {headerAction && <span style={{ marginLeft: 'auto' }}>{headerAction}</span>}
+          {tickets.length > 0 && (
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 800,
+                color: 'var(--text-muted)',
+                background: 'var(--bg-hover)',
+                borderRadius: '100px',
+                padding: '1px 7px',
+                flexShrink: 0,
+              }}
+            >
+              {tickets.length}
+            </span>
+          )}
+        </div>
+        {/* Own row — a wrapped title can never collide with the action. */}
+        {headerAction && <div style={{ marginTop: '4px' }}>{headerAction}</div>}
       </div>
 
       <div
@@ -99,7 +94,7 @@ export default function BoardColumn({
           display: 'flex',
           flexDirection: 'column',
           gap: '8px',
-          padding: '2px 8px 12px',
+          padding: compact ? '2px 6px 10px' : '2px 8px 12px',
           overflowY: 'auto',
           flex: 1,
         }}
@@ -108,6 +103,7 @@ export default function BoardColumn({
           <BoardCard
             key={t.id}
             ticket={t}
+            compact={compact}
             draggable={canDrag(t)}
             dragging={dnd.dragId === t.id}
             onDragStart={dnd.onDragStart}
@@ -144,7 +140,8 @@ export default function BoardColumn({
               gap: '5px',
             }}
           >
-            <History size={13} /> See older work items ({olderCount})
+            <History size={13} style={{ flexShrink: 0 }} />
+            {compact ? `Older (${olderCount})` : `See older work items (${olderCount})`}
           </button>
         )}
       </div>

@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react';
 import { BOARD_COLUMNS, PRIORITY_COLORS } from '../../lib/constants.js';
 import { loadStore, saveStore } from '../../lib/store.js';
 import { useBoardDnD } from '../board/useBoardDnD.js';
+import { useContainerWidth } from '../board/useContainerWidth.js';
 import BoardColumn from '../board/BoardColumn.jsx';
 import BoardFilterBar from '../board/BoardFilterBar.jsx';
 import QuickCreateModal from '../board/QuickCreateModal.jsx';
@@ -52,6 +53,18 @@ export default function BoardPage({
   };
 
   const dnd = useBoardDnD((cardId, columnName) => onMoveTicket(cardId, columnName));
+
+  // Container-aware density: measure the real width the grid gets (the
+  // sidebar makes window breakpoints unreliable) and adapt card rendering.
+  //   regular  — full cards
+  //   compact  — condensed type, short keys, tighter chips
+  //   scroll   — below readable width the fit-all-columns rule yields to a
+  //              horizontally scrolling grid with a readable minimum
+  const [sizeRef, boardWidth] = useContainerWidth();
+  const columnWidth = boardWidth
+    ? (boardWidth - (BOARD_COLUMNS.length - 1) * 10) / BOARD_COLUMNS.length
+    : 999;
+  const density = columnWidth >= 170 ? 'regular' : columnWidth >= 95 ? 'compact' : 'scroll';
 
   const assigneeOptions = useMemo(() => {
     const set = new Set(tickets.map(t => t.assignee).filter(Boolean));
@@ -194,12 +207,20 @@ export default function BoardPage({
         </div>
       )}
 
-      {/* All columns share the viewport width — no horizontal scrolling. */}
+      {/* Columns share the viewport width; only below a readable minimum
+          does the grid fall back to horizontal scrolling. */}
       <div
-        ref={dnd.scrollRef}
+        ref={el => {
+          dnd.scrollRef.current = el;
+          sizeRef.current = el;
+        }}
         style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${BOARD_COLUMNS.length}, minmax(0, 1fr))`,
+          gridTemplateColumns:
+            density === 'scroll'
+              ? `repeat(${BOARD_COLUMNS.length}, minmax(150px, 1fr))`
+              : `repeat(${BOARD_COLUMNS.length}, minmax(0, 1fr))`,
+          overflowX: density === 'scroll' ? 'auto' : 'visible',
           gap: '10px',
           flex: 1,
           minHeight: 0,
@@ -216,6 +237,7 @@ export default function BoardPage({
             onDrop={dnd.onDrop}
             dnd={dnd}
             canDrag={canDrag}
+            compact={density !== 'regular'}
             onOpenTicket={onOpenTicket}
             headerAction={
               i === 0 && canCreate ? (
