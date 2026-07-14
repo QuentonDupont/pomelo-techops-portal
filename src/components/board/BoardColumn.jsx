@@ -34,8 +34,8 @@ export default function BoardColumn({
       onDragOver={e => onDragOver(e, column.name)}
       onDrop={e => onDrop(e, column.name)}
       style={{
-        width: '272px',
-        minWidth: '272px',
+        width: '100%',
+        minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
         background: isDragTarget ? 'var(--accent-soft)' : 'var(--bg-page)',
@@ -64,6 +64,7 @@ export default function BoardColumn({
           }}
         />
         <span
+          title={column.name}
           style={{
             fontSize: '11px',
             fontWeight: 800,
@@ -73,6 +74,8 @@ export default function BoardColumn({
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
+            minWidth: 0,
+            flex: '0 1 auto',
           }}
         >
           {column.name}

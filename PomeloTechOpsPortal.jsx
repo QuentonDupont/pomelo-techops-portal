@@ -13169,6 +13169,139 @@ function BoardSectionHost({ currentUser, setSection }) {
   );
 }
 
+function ResourcesDropdown({ section, onPick }) {
+  const active = RESOURCE_ITEMS.find(r => r.id === section);
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          aria-label="Resources"
+          title={active ? `Resources · ${active.label}` : 'Resources'}
+          style={{
+            ...S.navTab(Boolean(active)),
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+          }}
+        >
+          <BookOpen size={15} strokeWidth={2} />
+          <span className="pomelo-btn-label">{active ? active.label : 'Resources'}</span>
+          <ChevronDown size={13} strokeWidth={2.4} />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content sideOffset={6} align="start" style={radixMenuContentStyle}>
+          {RESOURCE_ITEMS.map(r => {
+            const isActive = section === r.id;
+            return (
+              <DropdownMenu.Item
+                key={r.id}
+                onSelect={() => onPick(r.id)}
+                style={radixMenuItemStyle(isActive)}
+              >
+                <span
+                  style={{
+                    width: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  <r.Icon size={16} strokeWidth={2} />
+                </span>
+                <span style={{ flex: 1 }}>
+                  <span style={{ fontWeight: isActive ? 600 : 500, color: 'var(--text-primary)' }}>
+                    {r.label}
+                  </span>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {r.hint}
+                  </div>
+                </span>
+                {isActive && (
+                  <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />
+                )}
+              </DropdownMenu.Item>
+            );
+          })}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function AdminToolsDropdown({ section, onPick }) {
+  const can = useCan();
+  const items = ADMIN_TOOLS.filter(t => can(t.cap));
+  const active = items.find(t => t.id === section);
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          aria-label="Admin tools"
+          title={active ? `Admin · ${active.label}` : 'Admin tools'}
+          className="pomelo-icon-btn"
+          style={{
+            padding: '6px 13px',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            cursor: 'pointer',
+            background: active ? 'var(--accent-primary)' : 'var(--accent-soft)',
+            color: active ? 'var(--text-inverse)' : 'var(--accent-primary)',
+            fontFamily: "'Inter', sans-serif",
+            fontSize: '12px',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+          }}
+        >
+          <Wrench size={15} strokeWidth={2} />
+          <span className="pomelo-btn-label">{active ? active.label : 'Admin'}</span>
+          <ChevronDown size={13} strokeWidth={2.4} />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content sideOffset={6} align="end" style={radixMenuContentStyle}>
+          {items.map(t => {
+            const isActive = section === t.id;
+            return (
+              <DropdownMenu.Item
+                key={t.id}
+                onSelect={() => onPick(isActive ? 'home' : t.id)}
+                style={radixMenuItemStyle(isActive)}
+              >
+                <span
+                  style={{
+                    width: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  <t.Icon size={16} strokeWidth={2} />
+                </span>
+                <span style={{ flex: 1 }}>
+                  <span style={{ fontWeight: isActive ? 600 : 500, color: 'var(--text-primary)' }}>
+                    {t.label}
+                  </span>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {t.hint}
+                  </div>
+                </span>
+                {isActive && (
+                  <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />
+                )}
+              </DropdownMenu.Item>
+            );
+          })}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
 // ─── Admin tools dropdown ────────────────────────────────────────────────────
 // Groups the four admin-only destinations behind a single nav button to
 // reclaim space and keep related actions together.
@@ -13461,15 +13594,6 @@ function AppContent() {
   // {user object} = impersonate that specific user. Session-only — resets on refresh.
   const [viewAs, setViewAs] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
-  // Left nav rail collapse state, persisted so the choice survives reloads.
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
-    Boolean(loadStore('sidebarCollapsed', false))
-  );
-  const toggleSidebar = () =>
-    setSidebarCollapsed(c => {
-      saveStore('sidebarCollapsed', !c);
-      return !c;
-    });
 
   // Global ⌘K / Ctrl+K → open palette
   useEffect(() => {
@@ -13627,8 +13751,10 @@ function AppContent() {
     }
     return items;
   }, [can]);
-  // Left rail groups — main destinations, then Resources, then the admin
-  // surfaces the effective user can actually open.
+  const RESOURCE_IDS = new Set(['docs', 'suggestions', 'priority', 'sla']);
+
+  // Left rail groups (Board section only) — main destinations, Resources,
+  // then the admin surfaces the effective user can actually open.
   const sidebarGroups = useMemo(() => {
     const groups = [
       { label: null, items: NAV_ITEMS.map(i => ({ id: i.id, label: i.label, Icon: i.icon })) },
@@ -13886,10 +14012,8 @@ function AppContent() {
           /* Allow nav right to wrap on phones */
           .pomelo-nav-right { flex-wrap: wrap !important; justify-content: flex-end; gap: 6px !important; }
           /* Hide the central nav tabs on phones — users navigate via search */
-          /* Sidebar drops to an icon rail on phones */
-          .pomelo-sidebar { width: 58px !important; }
-          .pomelo-sidebar .pomelo-sidebar-label,
-          .pomelo-sidebar .pomelo-sidebar-group { display: none !important; }
+          /* Sidebar is hidden on phones — the top bar handles navigation */
+          .pomelo-sidebar { display: none !important; }
           /* Tighter main padding */
           .pomelo-main { padding: 16px 12px !important; }
           /* Audit log split-view stacks */
@@ -13909,7 +14033,31 @@ function AppContent() {
               </div>
             </div>
 
-            {/* Center tabs moved into the left Sidebar rail. */}
+            <div className="pomelo-nav-tabs" style={S.navTabs}>
+              {NAV_ITEMS.map(item => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setSection(item.id)}
+                    style={{
+                      ...S.navTab(section === item.id),
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <Icon size={15} strokeWidth={2} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+              <ResourcesDropdown
+                section={RESOURCE_IDS.has(section) ? section : null}
+                onPick={setSection}
+              />
+            </div>
+
             <div
               className="pomelo-nav-right"
               style={{ display: 'flex', alignItems: 'center', gap: '10px' }}
@@ -13972,6 +14120,15 @@ function AppContent() {
                 />
               )}
 
+              {/* Admin tools — single dropdown grouping admin destinations */}
+              {(can('admin.kanban_view') ||
+                can('users.edit') ||
+                can('roles.edit') ||
+                can('audit.view') ||
+                can('chatlogs.view')) && (
+                <AdminToolsDropdown section={section} onPick={setSection} />
+              )}
+
               {/* Notification bell */}
               <NotificationBell onNavigate={target => setSection(target)} />
 
@@ -14021,20 +14178,21 @@ function AppContent() {
         </Tooltip.Provider>
 
         <div style={{ display: 'flex', alignItems: 'stretch', flex: 1, minHeight: 0 }}>
-          <Sidebar
-            groups={sidebarGroups}
-            active={section}
-            onNavigate={setSection}
-            collapsed={sidebarCollapsed}
-            onToggle={toggleSidebar}
-          />
+          {/* The nav rail is a Board-workspace affordance (like Jira's project
+              sidebar) — every other section navigates via the top bar. */}
+          {section === 'board' && (
+            <Sidebar groups={sidebarGroups} active={section} onNavigate={setSection} />
+          )}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <main
               className="pomelo-main"
               style={{
                 ...S.main,
-                maxWidth: WIDE_SECTIONS.has(section) ? '1400px' : '1100px',
-                padding: WIDE_SECTIONS.has(section) ? '32px 28px' : undefined,
+                // The board uses the full remaining width so all 11 columns
+                // fit without horizontal scrolling.
+                maxWidth:
+                  section === 'board' ? 'none' : WIDE_SECTIONS.has(section) ? '1400px' : '1100px',
+                padding: WIDE_SECTIONS.has(section) ? '24px 20px' : undefined,
               }}
             >
               {renderPage()}

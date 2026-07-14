@@ -131,11 +131,17 @@ export default function BoardCard({ ticket, dragging, draggable, onDragStart, on
           {ISSUE_TYPE_ICONS[ticket.issueType] || ISSUE_TYPE_ICONS.Task}
         </span>
         <span
+          title={ticket.id}
           style={{
             fontSize: '11px',
             fontWeight: 700,
             color: 'var(--text-secondary)',
             letterSpacing: '0.02em',
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         >
           {ticket.id}

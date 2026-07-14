@@ -161,15 +161,16 @@ export default function BoardPage({
         />
       </div>
 
+      {/* All columns share the viewport width — no horizontal scrolling. */}
       <div
         ref={dnd.scrollRef}
         style={{
-          display: 'flex',
-          gap: '10px',
-          overflowX: 'auto',
+          display: 'grid',
+          gridTemplateColumns: `repeat(${BOARD_COLUMNS.length}, minmax(0, 1fr))`,
+          gap: '8px',
           flex: 1,
+          minHeight: 0,
           paddingBottom: '8px',
-          alignItems: 'stretch',
         }}
       >
         {BOARD_COLUMNS.map((col, i) => (
