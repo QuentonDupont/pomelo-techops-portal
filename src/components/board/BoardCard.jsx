@@ -3,6 +3,7 @@
 // due-date chip (red when overdue), priority glyph, issue-type icon, human
 // key, assignee avatar. Presentational — all behavior arrives via props.
 
+import { ChevronsUp, ChevronUp, Equal, ChevronDown, Clock, AlertTriangle } from 'lucide-react';
 import {
   PRIORITY_COLORS,
   ISSUE_TYPE_ICONS,
@@ -10,7 +11,7 @@ import {
   DONE_STATUSES,
 } from '../../lib/constants.js';
 
-const PRIORITY_GLYPHS = { Critical: '⇈', High: '↑', Medium: '=', Low: '↓' };
+const PRIORITY_ICONS = { Critical: ChevronsUp, High: ChevronUp, Medium: Equal, Low: ChevronDown };
 
 const initialsOf = name =>
   String(name)
@@ -38,7 +39,7 @@ export function DueChip({ dueDate, status }) {
         border: overdue ? '1px solid #FECACA' : '1px solid transparent',
       }}
     >
-      {overdue ? '⚠' : '🕒'} {dueDate.slice(5)}
+      {overdue ? <AlertTriangle size={11} /> : <Clock size={11} />} {dueDate.slice(5)}
     </span>
   );
 }
@@ -68,8 +69,11 @@ export function LabelChip({ label }) {
 }
 
 export default function BoardCard({ ticket, dragging, draggable, onDragStart, onDragEnd, onOpen }) {
+  const PriorityIcon = PRIORITY_ICONS[ticket.priority] || Equal;
+  const TypeIcon = ISSUE_TYPE_ICONS[ticket.issueType] || ISSUE_TYPE_ICONS.Task;
   return (
     <div
+      className="pomelo-board-card"
       role="button"
       tabIndex={0}
       draggable={draggable}
@@ -114,38 +118,40 @@ export default function BoardCard({ ticket, dragging, draggable, onDragStart, on
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      {/* Key never truncates — on narrow cards the icons/avatar wrap below it. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '5px',
+          flexWrap: 'wrap',
+          rowGap: '4px',
+        }}
+      >
         <span
-          title={`Priority: ${ticket.priority}`}
-          style={{
-            color: PRIORITY_COLORS[ticket.priority] || 'var(--text-muted)',
-            fontWeight: 900,
-            fontSize: '13px',
-            width: '14px',
-            textAlign: 'center',
-          }}
-        >
-          {PRIORITY_GLYPHS[ticket.priority] || '='}
-        </span>
-        <span title={ticket.issueType || 'Task'} style={{ fontSize: '12px' }}>
-          {ISSUE_TYPE_ICONS[ticket.issueType] || ISSUE_TYPE_ICONS.Task}
-        </span>
-        <span
-          title={ticket.id}
           style={{
             fontSize: '11px',
             fontWeight: 700,
             color: 'var(--text-secondary)',
             letterSpacing: '0.02em',
-            flex: 1,
-            minWidth: 0,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}
         >
           {ticket.id}
         </span>
+        <PriorityIcon
+          size={13}
+          strokeWidth={2.5}
+          title={`Priority: ${ticket.priority}`}
+          style={{ color: PRIORITY_COLORS[ticket.priority] || 'var(--text-muted)', flexShrink: 0 }}
+        />
+        <TypeIcon
+          size={12}
+          strokeWidth={2}
+          title={ticket.issueType || 'Task'}
+          style={{ color: 'var(--text-muted)', flexShrink: 0 }}
+        />
         <span style={{ marginLeft: 'auto' }}>
           {ticket.assignee ? (
             <span

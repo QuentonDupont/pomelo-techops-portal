@@ -4,6 +4,7 @@
 // like the real PESD1 board.
 
 import { useState } from 'react';
+import { History } from 'lucide-react';
 import BoardCard from './BoardCard.jsx';
 
 const RECENT_DAYS = 14;
@@ -38,10 +39,17 @@ export default function BoardColumn({
         minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
-        background: isDragTarget ? 'var(--accent-soft)' : 'var(--bg-page)',
-        border: isDragTarget ? '1.5px dashed var(--accent-primary)' : '1.5px solid transparent',
+        background: isDragTarget ? 'var(--accent-soft)' : 'var(--bg-surface)',
+        border: isDragTarget
+          ? '1.5px dashed var(--accent-primary)'
+          : '1px solid var(--border-subtle)',
+        // The status color does structural work: each lane carries its
+        // workflow color as a top rail.
+        borderTop: isDragTarget ? '3px solid var(--accent-primary)' : `3px solid ${column.color}`,
         borderRadius: '10px',
         maxHeight: '100%',
+        opacity: tickets.length === 0 && !isDragTarget ? 0.55 : 1,
+        transition: 'opacity 0.15s ease',
       }}
     >
       <div
@@ -56,16 +64,6 @@ export default function BoardColumn({
       >
         <span
           style={{
-            width: '9px',
-            height: '9px',
-            borderRadius: '50%',
-            background: column.color,
-            flexShrink: 0,
-            marginTop: '3px',
-          }}
-        />
-        <span
-          style={{
             fontSize: '11px',
             fontWeight: 800,
             letterSpacing: '0.06em',
@@ -78,9 +76,21 @@ export default function BoardColumn({
         >
           {column.name}
         </span>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>
-          {tickets.length}
-        </span>
+        {tickets.length > 0 && (
+          <span
+            style={{
+              fontSize: '10px',
+              fontWeight: 800,
+              color: 'var(--text-muted)',
+              background: 'var(--bg-hover)',
+              borderRadius: '100px',
+              padding: '1px 7px',
+              flexShrink: 0,
+            }}
+          >
+            {tickets.length}
+          </span>
+        )}
         {headerAction && <span style={{ marginLeft: 'auto' }}>{headerAction}</span>}
       </div>
 
@@ -105,6 +115,18 @@ export default function BoardColumn({
             onOpen={onOpenTicket}
           />
         ))}
+        {tickets.length === 0 && !isDragTarget && (
+          <div
+            style={{
+              fontSize: '11px',
+              color: 'var(--text-muted)',
+              textAlign: 'center',
+              padding: '18px 6px',
+            }}
+          >
+            No tickets
+          </div>
+        )}
         {olderCount > 0 && (
           <button
             onClick={() => setShowOlder(true)}
@@ -114,12 +136,15 @@ export default function BoardColumn({
               cursor: 'pointer',
               fontSize: '12px',
               fontWeight: 700,
-              color: 'var(--text-secondary)',
+              color: 'var(--accent-primary)',
               padding: '6px',
               textAlign: 'left',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
             }}
           >
-            🔎 See older work items ({olderCount})
+            <History size={13} /> See older work items ({olderCount})
           </button>
         )}
       </div>

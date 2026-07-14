@@ -161,13 +161,46 @@ export default function BoardPage({
         />
       </div>
 
+      {visible.length === 0 && tickets.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px',
+            padding: '10px',
+            borderRadius: '8px',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            fontSize: '13px',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          No tickets match these filters.
+          <button
+            onClick={() => setFilters(DEFAULT_FILTERS)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--accent-primary)',
+              padding: 0,
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
+
       {/* All columns share the viewport width — no horizontal scrolling. */}
       <div
         ref={dnd.scrollRef}
         style={{
           display: 'grid',
           gridTemplateColumns: `repeat(${BOARD_COLUMNS.length}, minmax(0, 1fr))`,
-          gap: '8px',
+          gap: '10px',
           flex: 1,
           minHeight: 0,
           paddingBottom: '8px',

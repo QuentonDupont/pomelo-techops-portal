@@ -15,7 +15,8 @@ const initialsOf = name =>
     .toUpperCase();
 
 const chipBtn = active => ({
-  padding: '5px 11px',
+  height: '32px',
+  padding: '0 12px',
   borderRadius: '100px',
   border: active ? '1.5px solid var(--accent-primary)' : '1.5px solid var(--border-default)',
   background: active ? 'var(--accent-soft)' : 'var(--bg-surface)',
@@ -49,7 +50,14 @@ export default function BoardFilterBar({
         onChange={e => setSearch(e.target.value)}
         placeholder="Search board…"
         aria-label="Search board"
-        style={{ ...S.input, width: '190px', padding: '7px 12px', fontSize: '13px' }}
+        style={{
+          ...S.input,
+          width: '190px',
+          height: '32px',
+          padding: '0 12px',
+          fontSize: '13px',
+          boxSizing: 'border-box',
+        }}
       />
 
       {/* Assignee avatar row (click to toggle, like Jira's avatar strip) */}
@@ -86,7 +94,14 @@ export default function BoardFilterBar({
         value={typeFilter}
         onChange={e => setTypeFilter(e.target.value)}
         aria-label="Filter by type"
-        style={{ ...S.select, width: 'auto', padding: '7px 28px 7px 10px', fontSize: '13px' }}
+        style={{
+          ...S.select,
+          width: 'auto',
+          height: '32px',
+          padding: '0 28px 0 10px',
+          fontSize: '13px',
+          boxSizing: 'border-box',
+        }}
       >
         <option value="All">Type: All</option>
         {ISSUE_TYPES.map(t => (
@@ -100,7 +115,14 @@ export default function BoardFilterBar({
         value={labelFilter}
         onChange={e => setLabelFilter(e.target.value)}
         aria-label="Filter by label"
-        style={{ ...S.select, width: 'auto', padding: '7px 28px 7px 10px', fontSize: '13px' }}
+        style={{
+          ...S.select,
+          width: 'auto',
+          height: '32px',
+          padding: '0 28px 0 10px',
+          fontSize: '13px',
+          boxSizing: 'border-box',
+        }}
       >
         <option value="All">Label: All</option>
         {labels.map(l => (

@@ -4716,7 +4716,7 @@ function TicketDetail({
                   cursor: onOpenTicket ? 'pointer' : 'default',
                 }}
               >
-                <span style={{ fontSize: '12px' }}>🧩</span>
+                <Network size={13} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                 <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
                   {st.id}
                 </span>
@@ -5229,7 +5229,7 @@ function TicketDetail({
                     cursor: onOpenTicket ? 'pointer' : 'default',
                   }}
                 >
-                  🧩 {parentTicket.id}
+                  <Network size={12} style={{ verticalAlign: '-2px' }} /> {parentTicket.id}
                 </span>
               </div>
             )}
@@ -14103,7 +14103,6 @@ function AppContent() {
           .pomelo-stack-on-mobile { display: flex !important; flex-direction: column !important; }
           /* Allow nav right to wrap on phones */
           .pomelo-nav-right { flex-wrap: wrap !important; justify-content: flex-end; gap: 6px !important; }
-          /* Hide the central nav tabs on phones — users navigate via search */
           /* Sidebar is hidden on phones — the top bar handles navigation */
           .pomelo-sidebar { display: none !important; }
           /* Tighter main padding */
@@ -14112,6 +14111,14 @@ function AppContent() {
           .pomelo-audit-grid { grid-template-columns: 1fr !important; }
           /* Even tighter nav padding on phones */
           .pomelo-nav { padding: 0 14px !important; }
+        }
+        /* Board card interaction states (pseudo-states can't be inline) */
+        .pomelo-board-card { transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease; }
+        .pomelo-board-card:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.12); border-color: var(--accent-primary); }
+        .pomelo-board-card:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) {
+          .pomelo-board-card { transition: none; }
+          .pomelo-board-card:hover { transform: none; }
         }
       `}</style>
 
