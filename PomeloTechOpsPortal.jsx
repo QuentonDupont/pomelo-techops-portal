@@ -13316,6 +13316,30 @@ const WIDE_SECTIONS = new Set([
   'board',
 ]);
 
+// Every navigable section id — used to validate URL hashes so a stale or
+// mistyped hash can never render a broken page.
+const VALID_SECTIONS = new Set([
+  'home',
+  'submit',
+  'docs',
+  'suggestions',
+  'priority',
+  'sla',
+  'mytickets',
+  'devportal',
+  'studio',
+  'admin',
+  'roles',
+  'users',
+  'audit',
+  'chatlogs',
+  'board',
+]);
+const sectionFromHash = () => {
+  const h = window.location.hash.replace('#', '');
+  return VALID_SECTIONS.has(h) ? h : 'home';
+};
+
 const ADMIN_TOOLS = [
   {
     id: 'studio',
@@ -13577,7 +13601,33 @@ const THEME_TOKENS_CSS = `
 
 function AppContent() {
   const { seedNotifications, addNotification } = useNotifications();
-  const [section, setSection] = useState('home');
+  // The active section lives in the URL hash so the browser's Back/Forward
+  // buttons walk in-app navigation instead of leaving the app.
+  const [section, setSection] = useState(sectionFromHash);
+  const historySyncedRef = useRef(false);
+
+  // Section → history: every in-app navigation becomes a history entry. The
+  // first sync uses replaceState so a fresh load doesn't add a dead entry.
+  useEffect(() => {
+    const target = '#' + section;
+    if (window.location.hash === target) return;
+    if (historySyncedRef.current) {
+      window.history.pushState({ section }, '', target);
+    } else {
+      window.history.replaceState({ section }, '', target);
+    }
+  }, [section]);
+  useEffect(() => {
+    historySyncedRef.current = true;
+  }, []);
+
+  // History → section: Back/Forward restore whatever the hash says. The sync
+  // effect above sees hash === target afterwards, so no push-loop.
+  useEffect(() => {
+    const onPop = () => setSection(sectionFromHash());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   const [toast, setToast] = useState(null);
   const [role, setRole] = useState('user');
   const [profileOpen, setProfileOpen] = useState(false);
