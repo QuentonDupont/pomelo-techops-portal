@@ -6311,7 +6311,7 @@ function RecentActivityFeed({ onTicket, setSection }) {
 }
 
 // ─── Ticket Popup Modal (Home Recent Activity) ────────────────────────────────
-function TicketPopupModal({ ticket, onClose }) {
+function TicketPopupModal({ ticket, onClose, onOpenFull }) {
   const can = useCan();
   const [confirmDel, setConfirmDel] = useState(false);
   useEffect(() => {
@@ -6369,17 +6369,42 @@ function TicketPopupModal({ ticket, onClose }) {
           }}
         >
           <div>
-            <div
-              style={{
-                fontSize: '11px',
-                color: 'rgba(255,255,255,0.4)',
-                fontWeight: 700,
-                marginBottom: '4px',
-                letterSpacing: '0.06em',
-              }}
-            >
-              {ticket.id}
-            </div>
+            {onOpenFull ? (
+              <button
+                onClick={() => onOpenFull(ticket.id)}
+                title="Open full ticket view"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  marginBottom: '4px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '11px',
+                  color: '#A5B4FC',
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '3px',
+                }}
+              >
+                {ticket.id} ↗
+              </button>
+            ) : (
+              <div
+                style={{
+                  fontSize: '11px',
+                  color: 'rgba(255,255,255,0.4)',
+                  fontWeight: 700,
+                  marginBottom: '4px',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                {ticket.id}
+              </div>
+            )}
             <div style={{ fontSize: '16px', fontWeight: 900, color: '#fff', lineHeight: 1.3 }}>
               {ticket.title}
             </div>
@@ -13025,6 +13050,9 @@ function BoardSectionHost({ currentUser, setSection }) {
   useEffect(() => subscribeTickets(_setTicketsVersion), []);
   const { addNotification } = useNotifications();
   const [openId, setOpenId] = useState(null);
+  // Card click shows the quick-preview popup first (like Jira); clicking the
+  // ticket ID inside it promotes to the full TicketDetail view.
+  const [previewId, setPreviewId] = useState(null);
 
   const moveTicket = (id, newStatus) => {
     const ticket = MOCK_TICKETS.find(t => t.id === id);
@@ -13154,18 +13182,32 @@ function BoardSectionHost({ currentUser, setSection }) {
     );
   }
 
+  const preview = previewId ? MOCK_TICKETS.find(t => t.id === previewId) : null;
+
   return (
-    <BoardPage
-      tickets={MOCK_TICKETS.slice()}
-      currentUser={currentUser}
-      canDrag={canDrag}
-      canCreate={can('tickets.view_all')}
-      assignableUsers={listAssignableUsers().map(u => u.name)}
-      onMoveTicket={moveTicket}
-      onOpenTicket={t => setOpenId(t.id)}
-      onQuickCreate={quickCreate}
-      onOpenFullForm={() => setSection('submit')}
-    />
+    <>
+      <BoardPage
+        tickets={MOCK_TICKETS.slice()}
+        currentUser={currentUser}
+        canDrag={canDrag}
+        canCreate={can('tickets.view_all')}
+        assignableUsers={listAssignableUsers().map(u => u.name)}
+        onMoveTicket={moveTicket}
+        onOpenTicket={t => setPreviewId(t.id)}
+        onQuickCreate={quickCreate}
+        onOpenFullForm={() => setSection('submit')}
+      />
+      {preview && (
+        <TicketPopupModal
+          ticket={preview}
+          onClose={() => setPreviewId(null)}
+          onOpenFull={id => {
+            setPreviewId(null);
+            setOpenId(id);
+          }}
+        />
+      )}
+    </>
   );
 }
 
