@@ -1,0 +1,19 @@
+Frontend
+- React 18 with Vite 5 as the dev server/bundler (plain JavaScript/JSX — no TypeScript)
+- Radix UI primitives (alert dialog, dropdown menu, tooltip) with lucide-react icons
+- react-dropzone for file uploads
+- Document handling in the browser: pdfjs-dist (PDF parsing), mammoth (.docx → HTML), docx (generating Word files), jszip + file-saver for bundling/downloading
+
+Backend (BFF)
+- Express 5 running on Node 20+, acting as a backend-for-frontend that also proxies the Pomelo TechOps API (port 3001)
+- PostgreSQL via pg, with its own migrate/seed scripts (db:migrate, db:seed) — currently not connected locally since DATABASE_URL is unset
+- Auth: JWT (jsonwebtoken) + bcryptjs password hashing, cookies via cookie-parser
+- Hardening: helmet, cors, express-rate-limit; input validation with zod
+- Sentry for error tracking on both the React app and the Node server
+
+Tooling & quality
+- Playwright for E2E tests
+- ESLint 9 + Prettier, enforced pre-commit through husky + lint-staged
+- concurrently powers npm run dev:all to run the BFF and Vite together
+
+In short: a React/Vite SPA with an Express BFF in one repo, Postgres underneath, JWT auth, and a document-processing focus (PDF/Word) — matching its purpose as an internal IT support portal (tickets, docs, admin tools).
