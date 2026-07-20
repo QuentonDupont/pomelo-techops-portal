@@ -25,9 +25,11 @@ import {
 const router = Router();
 
 // Stricter limiter for credential endpoints than the global /api limiter.
+// Dev keeps a high ceiling — every Playwright E2E test performs a fresh
+// login, so a 20/15min limit fails the whole suite on the second run.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  limit: process.env.NODE_ENV === 'production' ? 20 : 1000,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: 'Too many attempts. Try again later.' },

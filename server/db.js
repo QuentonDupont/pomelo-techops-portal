@@ -10,6 +10,14 @@
 //   const { rows } = await query('SELECT 1');
 
 import pg from 'pg';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { config as dotenvConfig } from 'dotenv';
+
+// Load .env.local before reading process.env. Entry points (index/migrate/seed)
+// also call dotenvConfig, but ESM hoisting runs this module before their calls;
+// loading here guarantees DATABASE_URL is visible regardless of import order.
+dotenvConfig({ path: resolve(dirname(fileURLToPath(import.meta.url)), '..', '.env.local') });
 
 export const dbEnabled = Boolean(process.env.DATABASE_URL);
 
