@@ -10,6 +10,13 @@ const TYPE_META = {
   doc_edit: { icon: '✏️', color: 'var(--text-primary)', bg: '#EFF6FF' },
   doc_upload: { icon: '📤', color: '#0EA5E9', bg: '#F0F9FF' },
   status_change: { icon: '🔄', color: '#16A34A', bg: '#F0FDF4' },
+  // Server-originated (ITSM expansion)
+  sla_approaching: { icon: '⏳', color: '#D97706', bg: '#FFFBEB' },
+  sla_breached: { icon: '🚨', color: '#DC2626', bg: '#FEF2F2' },
+  approval_request: { icon: '🖊️', color: '#6366F1', bg: '#EEF2FF' },
+  approval_decided: { icon: '✅', color: '#16A34A', bg: '#F0FDF4' },
+  major_incident: { icon: '📢', color: '#DC2626', bg: '#FEF2F2' },
+  csat_prompt: { icon: '⭐', color: '#D97706', bg: '#FFFBEB' },
 };
 
 export default function NotificationBell({ onNavigate }) {

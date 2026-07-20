@@ -220,6 +220,10 @@ export default function BoardPage({
             density === 'scroll'
               ? `repeat(${BOARD_COLUMNS.length}, minmax(150px, 1fr))`
               : `repeat(${BOARD_COLUMNS.length}, minmax(0, 1fr))`,
+          // Bound the single grid row to the container height — the implicit
+          // row is auto-sized otherwise, so a tall column would stretch it and
+          // spill cards past the page (columns must scroll internally instead).
+          gridTemplateRows: 'minmax(0, 1fr)',
           overflowX: density === 'scroll' ? 'auto' : 'visible',
           gap: '10px',
           flex: 1,

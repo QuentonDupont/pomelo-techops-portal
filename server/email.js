@@ -69,6 +69,73 @@ export function sendInviteEmail(to, token, roleLabel) {
   });
 }
 
+// SLA warning/breach notice for assignees and watchers. kind is
+// 'approaching' | 'breached'; metric is 'response' | 'resolution'.
+export function sendSlaEmail(to, ticketKey, ticketTitle, kind, metric) {
+  const href = `${APP_URL}/#board`;
+  const subject =
+    kind === 'breached'
+      ? `SLA breached: ${ticketKey} ${metric} target missed`
+      : `SLA at risk: ${ticketKey} ${metric} target almost consumed`;
+  return deliver({
+    to,
+    subject,
+    text: `${subject} — ${ticketTitle}. ${href}`,
+    html: wrap(
+      kind === 'breached' ? 'SLA breached' : 'SLA at risk',
+      `<b>${ticketKey}</b> — ${ticketTitle}<br/>The ${metric} SLA target ${
+        kind === 'breached' ? 'has been missed' : 'is nearly consumed'
+      }.`,
+      { href, label: 'Open the board' }
+    ),
+  });
+}
+
+// Approval request → the designated approver.
+export function sendApprovalEmail(to, ticketKey, ticketTitle, requestedBy) {
+  const href = `${APP_URL}/#approvals`;
+  return deliver({
+    to,
+    subject: `Approval needed: ${ticketKey}`,
+    text: `${requestedBy} requested your approval on ${ticketKey} — ${ticketTitle}. ${href}`,
+    html: wrap(
+      'Approval needed',
+      `<b>${ticketKey}</b> — ${ticketTitle}<br/>Requested by ${requestedBy}.`,
+      { href, label: 'Review request' }
+    ),
+  });
+}
+
+// Decision → the requester.
+export function sendApprovalDecidedEmail(to, ticketKey, ticketTitle, decision, comment) {
+  const href = `${APP_URL}/#mytickets`;
+  return deliver({
+    to,
+    subject: `${ticketKey} ${decision}`,
+    text: `Your request ${ticketKey} — ${ticketTitle} was ${decision}.${comment ? ` Comment: ${comment}` : ''} ${href}`,
+    html: wrap(
+      `Request ${decision}`,
+      `<b>${ticketKey}</b> — ${ticketTitle}<br/>${comment ? `Approver comment: “${comment}”` : ''}`,
+      { href, label: 'View your tickets' }
+    ),
+  });
+}
+
+// CSAT survey → the requester after resolution.
+export function sendCsatEmail(to, ticketKey, ticketTitle, token) {
+  const href = `${APP_URL}/#csat?token=${token}`;
+  return deliver({
+    to,
+    subject: `How did we do on ${ticketKey}?`,
+    text: `Your request ${ticketKey} — ${ticketTitle} was resolved. Rate the support you received: ${href}`,
+    html: wrap(
+      'How did we do?',
+      `<b>${ticketKey}</b> — ${ticketTitle} has been resolved. We'd love a quick rating.`,
+      { href, label: 'Rate your experience' }
+    ),
+  });
+}
+
 export function sendResetEmail(to, token) {
   const href = `${APP_URL}/reset?token=${token}`;
   return deliver({

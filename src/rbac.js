@@ -122,6 +122,12 @@ export const CAPABILITIES = Object.freeze([
     label: 'Comment on tickets',
     description: 'Post a comment or internal note on a ticket.',
   },
+  {
+    id: 'incidents.manage',
+    group: 'Tickets',
+    label: 'Manage incidents',
+    description: 'Set severity, declare major incidents, post status updates, create postmortems.',
+  },
 
   // Admin surfaces
   {
@@ -147,6 +153,65 @@ export const CAPABILITIES = Object.freeze([
     group: 'Admin',
     label: 'View admin console',
     description: 'Open the Admin Console (system health, maintenance mode, queue stats).',
+  },
+  {
+    id: 'catalog.manage',
+    group: 'Admin',
+    label: 'Manage service catalog',
+    description: 'Create, edit, or retire service catalog request types.',
+  },
+  {
+    id: 'sla.manage',
+    group: 'Admin',
+    label: 'Manage SLA policies',
+    description: 'Edit per-priority response and resolution targets.',
+  },
+  {
+    id: 'approvals.override',
+    group: 'Admin',
+    label: 'Override approvals',
+    description: 'Decide approval requests addressed to someone else (unblock stuck requests).',
+  },
+  {
+    id: 'reports.view',
+    group: 'Admin',
+    label: 'View reports',
+    description: 'Open the KPI dashboard (trends, SLA compliance, CSAT, change success).',
+  },
+
+  // Problems & Changes
+  {
+    id: 'problems.manage',
+    group: 'Problems & Changes',
+    label: 'Manage problems',
+    description: 'Create problem records, edit root cause/workaround, flag known errors.',
+  },
+  {
+    id: 'changes.manage',
+    group: 'Problems & Changes',
+    label: 'Manage changes',
+    description:
+      'Create change requests, edit plans/windows, submit for approval, record outcomes.',
+  },
+  {
+    id: 'changes.approve',
+    group: 'Problems & Changes',
+    label: 'Approve changes',
+    description: 'Act as a change approver (CAB member).',
+  },
+
+  // Assets
+  {
+    id: 'assets.view',
+    group: 'Assets',
+    label: 'View assets',
+    description: 'Browse the asset registry and see assignment history.',
+  },
+  {
+    id: 'assets.manage',
+    group: 'Assets',
+    label: 'Manage assets',
+    description: 'Create, edit, assign, return, retire, or delete assets.',
   },
 
   // System
@@ -219,10 +284,20 @@ export const SEED_ROLES = Object.freeze([
       'tickets.status_change_own',
       'tickets.delete',
       'tickets.comment',
+      'incidents.manage',
+      'problems.manage',
+      'changes.manage',
+      'changes.approve',
       'audit.view',
       'chatlogs.view',
       'docs.manage',
       'admin.kanban_view',
+      'catalog.manage',
+      'sla.manage',
+      'approvals.override',
+      'reports.view',
+      'assets.view',
+      'assets.manage',
       'system.settings_edit',
       'system.export_data',
     ]),
@@ -242,7 +317,12 @@ export const SEED_ROLES = Object.freeze([
       'tickets.status_change_own',
       'tickets.delete',
       'tickets.comment',
+      'incidents.manage',
+      'problems.manage',
+      'changes.manage',
       'docs.manage',
+      'assets.view',
+      'reports.view',
     ]),
   },
   {

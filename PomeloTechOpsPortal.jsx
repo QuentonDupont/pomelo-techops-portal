@@ -11,6 +11,17 @@ import {
 import DocImportExportPage from './src/components/docs/DocImportExportPage.jsx';
 import DocStudioPage from './src/components/docs/studio/DocStudioPage.jsx';
 import SuggestionsPage from './src/components/suggestions/SuggestionsPage.jsx';
+import ServiceCatalogPage from './src/components/catalog/ServiceCatalogPage.jsx';
+import CatalogAdminPage from './src/components/catalog/CatalogAdminPage.jsx';
+import MyApprovalsPage from './src/components/approvals/MyApprovalsPage.jsx';
+import ApprovalPanel from './src/components/approvals/ApprovalPanel.jsx';
+import AssetsPage from './src/components/assets/AssetsPage.jsx';
+import IncidentsPage from './src/components/incidents/IncidentsPage.jsx';
+import ProblemsPage from './src/components/problems/ProblemsPage.jsx';
+import ChangesPage from './src/components/changes/ChangesPage.jsx';
+import CsatPrompt from './src/components/csat/CsatPrompt.jsx';
+import ReportsPage from './src/components/reports/ReportsPage.jsx';
+import { createProblemFromTicket } from './src/api/problemsApi.js';
 import { createJiraTicket, isJiraConfigured } from './src/api/jiraApi.js';
 import { listFeaturedDocs, listDocSummaries } from './src/api/docsApi.js';
 import { API_ENABLED } from './src/api/client.js';
@@ -63,6 +74,7 @@ import {
   NotificationProvider,
   useNotifications,
   buildSeedNotifications,
+  useServerNotificationSync,
 } from './src/context/NotificationContext.jsx';
 import NotificationBell from './src/components/NotificationBell.jsx';
 import { useTheme } from './src/context/ThemeContext.jsx';
@@ -100,6 +112,12 @@ import {
   Shield,
   Briefcase,
   Trash2,
+  LayoutGrid,
+  Package,
+  Siren,
+  SearchCheck,
+  GitBranch,
+  BarChart3,
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
@@ -4064,6 +4082,35 @@ function TicketDetail({
               ` · ${(ticket.watchers?.length || 0) + (jiraWatchers?.watchCount || 0)}`}
           </button>
         )}
+        {API_ENABLED && ticket.uuid && can('problems.manage') && (
+          <button
+            onClick={async () => {
+              const { data, error } = await createProblemFromTicket(ticket.uuid);
+              onAddNotification?.({
+                type: 'status_change',
+                title: error ? `Problem creation failed` : `Problem ${data.key} opened`,
+                body: error || `Root-cause record created from ${ticket.id}.`,
+                actorName: currentUser?.name || 'You',
+              });
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '7px',
+              border: '1px solid var(--border-default)',
+              cursor: 'pointer',
+              background: 'var(--bg-surface)',
+              color: 'var(--text-secondary)',
+              fontWeight: 700,
+              fontSize: '13px',
+              marginRight: '10px',
+            }}
+          >
+            <SearchCheck size={14} /> Create problem
+          </button>
+        )}
         {canDeleteTicket &&
           (confirmDel ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -4205,6 +4252,16 @@ function TicketDetail({
           <span style={S.badge(STATUS_COLORS[ticket.status])}>{ticket.status}</span>
         </div>
       </div>
+
+      {/* Approval requests on this ticket (catalog approval-gated types) */}
+      {API_ENABLED && ticket.uuid && (
+        <ApprovalPanel
+          subjectType="ticket"
+          subjectId={ticket.uuid}
+          currentUser={currentUser}
+          canOverride={can('approvals.override')}
+        />
+      )}
 
       {/* JSM SLA cycles (Jira-authoritative) */}
       {jiraSla?.available && Array.isArray(jiraSla.cycles) && jiraSla.cycles.length > 0 && (
@@ -5493,14 +5550,71 @@ function TicketDetail({
 }
 
 // ─── SLA chip ─────────────────────────────────────────────────────────────────
+// Prefers the server-persisted SLA engine fields (ticket.sla — deadlines,
+// pause, breach flags stamped by the BFF); falls back to the legacy
+// client-side estimate from constants for mock mode / pre-engine tickets.
 function SlaChip({ ticket }) {
+  const fmt = h => (h >= 24 ? `${Math.floor(h / 24)}d` : `${Math.round(h)}h`);
+  const sla = ticket?.sla;
+  if (sla && (sla.resolutionDueAt || sla.responseDueAt)) {
+    if (sla.resolvedAt || DONE_STATUSES.has(ticket.status)) return null;
+    if (sla.pausedAt) {
+      return (
+        <span
+          title="SLA clock paused — waiting for customer"
+          style={{
+            fontSize: '10px',
+            padding: '2px 7px',
+            borderRadius: '4px',
+            background: 'var(--bg-hover)',
+            color: 'var(--text-secondary)',
+            fontWeight: 700,
+          }}
+        >
+          ⏸ SLA paused
+        </span>
+      );
+    }
+    const now = Date.now();
+    const due = sla.resolutionDueAt ? new Date(sla.resolutionDueAt).getTime() : null;
+    const breached = sla.resolutionBreached || (due && now > due);
+    const responseBreached =
+      !sla.firstResponseAt &&
+      (sla.responseBreached || (sla.responseDueAt && now > new Date(sla.responseDueAt).getTime()));
+    const atRisk =
+      due && !breached && now > due - (due - new Date(ticket.created).getTime()) * 0.25;
+    if (!breached && !responseBreached && !atRisk) return null;
+    const overdueHrs = due ? Math.max(0, (now - due) / 3600000) : 0;
+    const palette = breached
+      ? { bg: '#FEE2E2', fg: '#B91C1C', label: `🔴 SLA breached +${fmt(overdueHrs)}` }
+      : responseBreached
+        ? { bg: '#FEE2E2', fg: '#B91C1C', label: '🔴 Response SLA missed' }
+        : { bg: '#FEF3C7', fg: '#92400E', label: '🟡 SLA at risk' };
+    const title = due
+      ? `Resolution due ${new Date(due).toLocaleString()}`
+      : `Response due ${new Date(sla.responseDueAt).toLocaleString()}`;
+    return (
+      <span
+        title={title}
+        style={{
+          fontSize: '10px',
+          padding: '2px 7px',
+          borderRadius: '4px',
+          background: palette.bg,
+          color: palette.fg,
+          fontWeight: 700,
+        }}
+      >
+        {palette.label}
+      </span>
+    );
+  }
   const state = slaStateFor(ticket);
   if (state === 'ok') return null;
   const target = SLA_TARGETS_HOURS[ticket.priority];
   if (!target) return null;
   const ageHrs = (Date.now() - new Date(ticket.created).getTime()) / 3600000;
   const overdueHrs = Math.max(0, ageHrs - target.resolution);
-  const fmt = h => (h >= 24 ? `${Math.floor(h / 24)}d` : `${Math.round(h)}h`);
   const palette =
     state === 'breached'
       ? { bg: '#FEE2E2', fg: '#B91C1C', label: `🔴 SLA breached +${fmt(overdueHrs)}` }
@@ -12958,6 +13072,42 @@ const RESOURCE_ITEMS = [
   },
 ];
 
+// ─── Operations dropdown items (ITSM modules, staff-facing) ──────────────────
+// Grouped behind one nav button like Resources — the direct tabs stay for the
+// personal destinations (Home / Submit / My Tickets / Approvals / Board).
+// Each entry is capability-gated; the dropdown hides items (and itself) the
+// effective user can't open. Backend mode only — these modules are DB-backed.
+const OPS_ITEMS = [
+  {
+    id: 'incidents',
+    Icon: Siren,
+    label: 'Incidents',
+    hint: 'Severity, comms & postmortems',
+    cap: 'tickets.view_all',
+  },
+  {
+    id: 'problems',
+    Icon: SearchCheck,
+    label: 'Problems',
+    hint: 'Root causes & known errors',
+    cap: 'tickets.view_all',
+  },
+  {
+    id: 'changes',
+    Icon: GitBranch,
+    label: 'Changes',
+    hint: 'Change requests & calendar',
+    cap: 'tickets.view_all',
+  },
+  {
+    id: 'assets',
+    Icon: Package,
+    label: 'Assets',
+    hint: 'Hardware, software & licenses',
+    cap: 'assets.view',
+  },
+];
+
 // ─── Shared style for Radix DropdownMenu surfaces ────────────────────────────
 const radixMenuContentStyle = {
   minWidth: '240px',
@@ -13272,6 +13422,70 @@ function ResourcesDropdown({ section, onPick }) {
   );
 }
 
+function OperationsDropdown({ section, onPick }) {
+  const can = useCan();
+  const items = OPS_ITEMS.filter(o => can(o.cap));
+  const active = items.find(o => o.id === section);
+  if (!items.length) return null;
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          aria-label="Operations"
+          title={active ? `Operations · ${active.label}` : 'Operations'}
+          style={{
+            ...S.navTab(Boolean(active)),
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+          }}
+        >
+          <Siren size={15} strokeWidth={2} />
+          <span className="pomelo-btn-label">{active ? active.label : 'Operations'}</span>
+          <ChevronDown size={13} strokeWidth={2.4} />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content sideOffset={6} align="start" style={radixMenuContentStyle}>
+          {items.map(o => {
+            const isActive = section === o.id;
+            return (
+              <DropdownMenu.Item
+                key={o.id}
+                onSelect={() => onPick(o.id)}
+                style={radixMenuItemStyle(isActive)}
+              >
+                <span
+                  style={{
+                    width: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  }}
+                >
+                  <o.Icon size={16} strokeWidth={2} />
+                </span>
+                <span style={{ flex: 1 }}>
+                  <span style={{ fontWeight: isActive ? 600 : 500, color: 'var(--text-primary)' }}>
+                    {o.label}
+                  </span>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {o.hint}
+                  </div>
+                </span>
+                {isActive && (
+                  <Check size={14} strokeWidth={2.4} style={{ color: 'var(--accent-primary)' }} />
+                )}
+              </DropdownMenu.Item>
+            );
+          })}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
 function AdminToolsDropdown({ section, onPick }) {
   const can = useCan();
   const items = ADMIN_TOOLS.filter(t => can(t.cap));
@@ -13356,6 +13570,12 @@ const WIDE_SECTIONS = new Set([
   'roles',
   'devportal',
   'board',
+  'catalog-admin',
+  'assets',
+  'incidents',
+  'problems',
+  'changes',
+  'reports',
 ]);
 
 // Every navigable section id — used to validate URL hashes so a stale or
@@ -13376,6 +13596,13 @@ const VALID_SECTIONS = new Set([
   'audit',
   'chatlogs',
   'board',
+  'catalog-admin',
+  'approvals',
+  'assets',
+  'incidents',
+  'problems',
+  'changes',
+  'reports',
 ]);
 const sectionFromHash = () => {
   const h = window.location.hash.replace('#', '');
@@ -13396,6 +13623,20 @@ const ADMIN_TOOLS = [
     label: 'Admin Console',
     hint: 'System health & controls',
     cap: 'admin.kanban_view',
+  },
+  {
+    id: 'catalog-admin',
+    Icon: LayoutGrid,
+    label: 'Service Catalog',
+    hint: 'Request types & forms',
+    cap: 'catalog.manage',
+  },
+  {
+    id: 'reports',
+    Icon: BarChart3,
+    label: 'Reports',
+    hint: 'KPIs, SLA, CSAT trends',
+    cap: 'reports.view',
   },
   {
     id: 'roles',
@@ -13733,7 +13974,7 @@ function AppContent() {
       setRole(roleName);
       setIsAuthenticated(true);
       setAuditActor({ name: u.name, email: u.email });
-      seedNotifications(buildSeedNotifications(u.name));
+      if (!API_ENABLED) seedNotifications(buildSeedNotifications(u.name));
     };
     if (API_ENABLED) {
       // The session is an httpOnly cookie — ask the server who we are.
@@ -13774,6 +14015,10 @@ function AppContent() {
     return () => clearInterval(id);
   }, [isAuthenticated]);
 
+  // Server-persisted notifications (SLA, approvals, CSAT) — 30s poll while
+  // authenticated in backend mode; merges into the in-memory bell feed.
+  useServerNotificationSync(isAuthenticated);
+
   const handleLogin = user => {
     const roleId = user.roleId || LEGACY_ROLE_TO_ROLE_ID[user.role] || getDefaultRoleId();
     setCurrentUser({ name: user.name, email: user.email, department: user.department, roleId });
@@ -13784,7 +14029,7 @@ function AppContent() {
     setAuditActor({ name: user.name, email: user.email });
     if (hasPermission({ roleId }, 'audit.view', listRoles()))
       recordAudit('session.login', { name: user.name, email: user.email });
-    seedNotifications(buildSeedNotifications(user.name));
+    if (!API_ENABLED) seedNotifications(buildSeedNotifications(user.name));
   };
 
   const handleLogout = () => {
@@ -13835,12 +14080,17 @@ function AppContent() {
       { id: 'submit', label: 'Submit Ticket', icon: PlusCircle },
       { id: 'mytickets', label: 'My Tickets', icon: Ticket },
     ];
+    if (API_ENABLED) {
+      items.push({ id: 'approvals', label: 'Approvals', icon: Check });
+    }
     if (can('tickets.view_all')) {
       items.push({ id: 'board', label: 'Board', icon: ClipboardList });
     }
     if (can('tickets.view_assigned')) {
       items.push({ id: 'devportal', label: 'Developer Portal', icon: Briefcase });
     }
+    // Assets / Incidents / Problems / Changes live in the Operations dropdown
+    // (OPS_ITEMS) — grouped like Resources to keep the tab row scannable.
     return items;
   }, [can]);
   const RESOURCE_IDS = new Set(['docs', 'suggestions', 'priority', 'sla']);
@@ -13850,6 +14100,12 @@ function AppContent() {
   const sidebarGroups = useMemo(() => {
     const groups = [
       { label: null, items: NAV_ITEMS.map(i => ({ id: i.id, label: i.label, Icon: i.icon })) },
+      {
+        label: 'Operations',
+        items: API_ENABLED
+          ? OPS_ITEMS.filter(o => can(o.cap)).map(({ id, Icon, label }) => ({ id, label, Icon }))
+          : [],
+      },
       {
         label: 'Resources',
         items: RESOURCE_ITEMS.map(({ id, Icon, label }) => ({ id, label, Icon })),
@@ -13879,6 +14135,12 @@ function AppContent() {
       audit: 'audit.view',
       chatlogs: 'chatlogs.view',
       devportal: 'tickets.view_assigned',
+      'catalog-admin': 'catalog.manage',
+      assets: 'assets.view',
+      incidents: 'tickets.view_all',
+      problems: 'tickets.view_all',
+      changes: 'tickets.view_all',
+      reports: 'reports.view',
     }),
     []
   );
@@ -13890,7 +14152,7 @@ function AppContent() {
   // Re-seed notifications when the view flips so the impersonated/downgraded
   // view shows that user's notification history rather than the real session's.
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || API_ENABLED) return;
     const viewName = viewAs && typeof viewAs === 'object' ? viewAs.name : currentUser?.name;
     if (viewName) seedNotifications(buildSeedNotifications(viewName));
   }, [viewAs, isAuthenticated, currentUser?.name, seedNotifications]);
@@ -13904,7 +14166,22 @@ function AppContent() {
         );
         break;
       case 'submit':
-        page = (
+        // Backend mode gets the service catalog as the submit front door with
+        // the generic form as its fallback tile; mock mode keeps the legacy
+        // form only (request types live in Postgres).
+        page = API_ENABLED ? (
+          <ServiceCatalogPage
+            currentUser={effectiveUser}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+            genericForm={
+              <SubmitPage
+                setSection={setSection}
+                showToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+                currentUser={effectiveUser}
+              />
+            }
+          />
+        ) : (
           <SubmitPage
             setSection={setSection}
             showToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
@@ -13944,7 +14221,12 @@ function AppContent() {
         page = <PriorityGuidePage />;
         break;
       case 'sla':
-        page = <SLAPage />;
+        page = (
+          <SLAPage
+            canManage={can('sla.manage')}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        );
         break;
       case 'mytickets':
         page = <MyTicketsPage role={effectiveRole} currentUser={effectiveUser} />;
@@ -13973,6 +14255,73 @@ function AppContent() {
       case 'admin':
         page = can('admin.kanban_view') ? (
           <AdminPage setSection={setSection} />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'catalog-admin':
+        page = can('catalog.manage') ? (
+          <CatalogAdminPage
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'approvals':
+        page = (
+          <MyApprovalsPage
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        );
+        break;
+      case 'assets':
+        page = can('assets.view') ? (
+          <AssetsPage
+            canManage={can('assets.manage')}
+            canExport={can('system.export_data')}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'incidents':
+        page = can('tickets.view_all') ? (
+          <IncidentsPage
+            canManage={can('incidents.manage')}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+            onOpenDoc={() => setSection('docs')}
+          />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'problems':
+        page = can('tickets.view_all') ? (
+          <ProblemsPage
+            canManage={can('problems.manage')}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'changes':
+        page = can('tickets.view_all') ? (
+          <ChangesPage
+            canManage={can('changes.manage')}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        ) : (
+          <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
+        );
+        break;
+      case 'reports':
+        page = can('reports.view') ? (
+          <ReportsPage
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
         ) : (
           <HomePage setSection={setSection} role={effectiveRole} currentUser={effectiveUser} />
         );
@@ -14021,6 +14370,13 @@ function AppContent() {
           onLogin={handleLogin}
           onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
         />
+        {/* Token-authenticated CSAT works pre-login (email deep link). */}
+        {API_ENABLED && (
+          <CsatPrompt
+            isAuthenticated={false}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        )}
         {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
       </>
     );
@@ -14151,6 +14507,7 @@ function AppContent() {
                   </button>
                 );
               })}
+              {API_ENABLED && <OperationsDropdown section={section} onPick={setSection} />}
               <ResourcesDropdown
                 section={RESOURCE_IDS.has(section) ? section : null}
                 onPick={setSection}
@@ -14305,6 +14662,12 @@ function AppContent() {
         </div>
 
         {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
+        {API_ENABLED && (
+          <CsatPrompt
+            isAuthenticated={isAuthenticated}
+            onToast={(msg, type) => setToast({ message: msg, type: type || 'success' })}
+          />
+        )}
         {profileOpen && (
           <ProfileModal
             currentUser={effectiveUser}

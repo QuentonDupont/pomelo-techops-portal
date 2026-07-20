@@ -15,9 +15,20 @@
 //   read: boolean,
 // }
 
-import { createContext, useContext, useReducer, useCallback } from 'react';
+import { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import { API_ENABLED } from '../api/client.js';
+import {
+  listNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from '../api/notificationsApi.js';
 
 const NotificationContext = createContext(null);
+
+// Server rows carry a namespaced id so mark-read knows to call the API and
+// polling can replace them without touching client-local notifications.
+const SERVER_PREFIX = 'srv:';
+const isServerId = id => typeof id === 'string' && id.startsWith(SERVER_PREFIX);
 
 function reducer(state, action) {
   switch (action.type) {
@@ -37,9 +48,17 @@ function reducer(state, action) {
     case 'MARK_ALL_READ':
       return { notifications: state.notifications.map(n => ({ ...n, read: true })) };
     case 'CLEAR_ALL':
-      return { notifications: [] };
+      return { notifications: state.notifications.filter(n => isServerId(n.id)) };
     case 'SEED':
-      return { notifications: action.payload };
+      return {
+        notifications: [...action.payload, ...state.notifications.filter(n => isServerId(n.id))],
+      };
+    case 'MERGE_SERVER': {
+      const local = state.notifications.filter(n => !isServerId(n.id));
+      const merged = [...action.payload, ...local];
+      merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return { notifications: merged };
+    }
     default:
       return state;
   }
@@ -49,10 +68,35 @@ export function NotificationProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, { notifications: [] });
 
   const addNotification = useCallback(payload => dispatch({ type: 'ADD', payload }), []);
-  const markRead = useCallback(id => dispatch({ type: 'MARK_READ', id }), []);
-  const markAllRead = useCallback(() => dispatch({ type: 'MARK_ALL_READ' }), []);
+  const markRead = useCallback(id => {
+    dispatch({ type: 'MARK_READ', id });
+    if (isServerId(id)) markNotificationRead(id.slice(SERVER_PREFIX.length));
+  }, []);
+  const markAllRead = useCallback(() => {
+    dispatch({ type: 'MARK_ALL_READ' });
+    if (API_ENABLED) markAllNotificationsRead();
+  }, []);
   const clearAll = useCallback(() => dispatch({ type: 'CLEAR_ALL' }), []);
   const seedNotifications = useCallback(items => dispatch({ type: 'SEED', payload: items }), []);
+
+  const syncServerNotifications = useCallback(async () => {
+    if (!API_ENABLED) return;
+    const { data } = await listNotifications();
+    if (!data) return;
+    dispatch({
+      type: 'MERGE_SERVER',
+      payload: (data.notifications || []).map(n => ({
+        id: `${SERVER_PREFIX}${n.id}`,
+        type: n.type,
+        title: n.title,
+        body: n.body,
+        ticketId: n.ticketKey || n.ticketId || undefined,
+        read: n.read,
+        createdAt: n.createdAt,
+        actorName: 'System',
+      })),
+    });
+  }, []);
 
   const unreadCount = state.notifications.filter(n => !n.read).length;
 
@@ -66,11 +110,24 @@ export function NotificationProvider({ children }) {
         markAllRead,
         clearAll,
         seedNotifications,
+        syncServerNotifications,
       }}
     >
       {children}
     </NotificationContext.Provider>
   );
+}
+
+// Polls the server feed while `enabled` (i.e. the session is authenticated in
+// backend mode). 30s cadence — SLA warnings don't need sub-minute latency.
+export function useServerNotificationSync(enabled) {
+  const { syncServerNotifications } = useNotifications();
+  useEffect(() => {
+    if (!enabled || !API_ENABLED) return undefined;
+    syncServerNotifications();
+    const t = setInterval(syncServerNotifications, 30_000);
+    return () => clearInterval(t);
+  }, [enabled, syncServerNotifications]);
 }
 
 export function useNotifications() {

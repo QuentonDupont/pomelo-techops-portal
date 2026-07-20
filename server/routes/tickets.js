@@ -18,13 +18,29 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { query, withTransaction } from '../db.js';
-import { requireAuth, writeAudit } from '../auth.js';
+import { requireAuth, writeAudit, makeToken, hashToken } from '../auth.js';
+import { sendCsatEmail } from '../email.js';
+import {
+  computeDueDates,
+  recomputeDueDates,
+  resumeFromPause,
+  SLA_PAUSED_STATUSES,
+  SLA_DONE_STATUSES,
+} from '../lib/sla.js';
+import { createApproval } from './approvals.js';
 
 const router = Router();
 router.use(requireAuth);
 
 const can = (user, cap) =>
   Array.isArray(user.role?.capabilities) && user.role.capabilities.includes(cap);
+
+// Policy lookup for SLA due-date stamping. Missing row → no deadlines (SLA
+// simply not tracked for that priority) rather than an error.
+async function slaPolicyFor(priority) {
+  const { rows } = await query('SELECT * FROM sla_policies WHERE priority=$1', [priority]);
+  return rows[0] || null;
+}
 
 // ─── Serializers (snake_case row → client camelCase shape) ────────────────────
 const serializeTicket = (r, extra = {}) => ({
@@ -53,6 +69,20 @@ const serializeTicket = (r, extra = {}) => ({
   jiraKey: r.jira_key,
   jiraSyncState: r.jira_sync_state,
   jiraSyncedAt: r.jira_synced_at,
+  requestTypeId: r.request_type_id,
+  formValues: r.form_values || {},
+  severity: r.severity || null,
+  majorIncident: Boolean(r.major_incident),
+  postmortemDocId: r.postmortem_doc_id || null,
+  sla: {
+    firstResponseAt: r.first_response_at || null,
+    responseDueAt: r.response_due_at || null,
+    resolutionDueAt: r.resolution_due_at || null,
+    resolvedAt: r.resolved_at || null,
+    pausedAt: r.sla_paused_at || null,
+    responseBreached: Boolean(r.response_breached),
+    resolutionBreached: Boolean(r.resolution_breached),
+  },
   created: r.created_at,
   updated: r.updated_at,
   ...extra,
@@ -66,16 +96,18 @@ const serializeComment = c => ({
 });
 const serializeTimeline = t => ({ id: t.id, action: t.action, actor: t.actor, date: t.created_at });
 
-// Unique-ish human key with a short retry on collision.
-async function generateKey() {
+// Unique-ish human key with a short retry on collision. prefix distinguishes
+// record types sharing the tickets table: TKT (tickets), PRB (problems),
+// CHG (changes).
+export async function generateKey(prefix = 'TKT') {
   const year = new Date().getFullYear();
   for (let i = 0; i < 6; i++) {
     const n = String(Math.floor(1000 + Math.random() * 9000));
-    const key = `TKT-${year}-${n}`;
+    const key = `${prefix}-${year}-${n}`;
     const { rows } = await query('SELECT 1 FROM tickets WHERE key=$1', [key]);
     if (!rows.length) return key;
   }
-  return `TKT-${year}-${Date.now().toString().slice(-6)}`;
+  return `${prefix}-${year}-${Date.now().toString().slice(-6)}`;
 }
 
 // ─── List ─────────────────────────────────────────────────────────────────────
@@ -97,6 +129,10 @@ router.get('/', async (req, res, next) => {
       where.push(`requester_email = $${params.length}`);
     }
 
+    // Plain tickets only — problems (PRB) and changes (CHG) share the table
+    // but have their own routers and views.
+    where.push(`record_type = 'ticket'`);
+
     // Optional filters.
     if (req.query.status) {
       params.push(req.query.status);
@@ -109,6 +145,17 @@ router.get('/', async (req, res, next) => {
     if (req.query.assignee) {
       params.push(String(req.query.assignee).toLowerCase());
       where.push(`assignee_email = $${params.length}`);
+    }
+    if (req.query.issueType) {
+      params.push(req.query.issueType);
+      where.push(`issue_type = $${params.length}`);
+    }
+    if (req.query.severity) {
+      params.push(req.query.severity);
+      where.push(`severity = $${params.length}`);
+    }
+    if (req.query.major === '1') {
+      where.push('major_incident = TRUE');
     }
     if (req.query.search) {
       params.push(`%${req.query.search}%`);
@@ -147,12 +194,13 @@ async function loadVisible(req, id) {
 // ─── Read one (with comments + timeline) ──────────────────────────────────────
 // Typed link relations. One row is stored per link; viewed from the target
 // side the inverse label applies.
-const LINK_RELATIONS = ['blocks', 'clones', 'duplicates', 'relates to'];
+const LINK_RELATIONS = ['blocks', 'clones', 'duplicates', 'relates to', 'caused by'];
 const INVERSE_RELATION = {
   blocks: 'is blocked by',
   clones: 'is cloned by',
   duplicates: 'is duplicated by',
   'relates to': 'relates to',
+  'caused by': 'causes',
 };
 
 const summarizeLinked = r => ({
@@ -299,7 +347,8 @@ router.delete('/:id/watchers/me', async (req, res, next) => {
 
 // ─── Create (any authenticated user) ──────────────────────────────────────────
 const labelsSchema = z.array(z.string().min(1).max(60)).max(20);
-const issueTypeSchema = z.enum(['Task', 'Bug', 'Support Request', 'Sub-task']);
+const issueTypeSchema = z.enum(['Task', 'Bug', 'Support Request', 'Incident', 'Sub-task']);
+const severitySchema = z.enum(['SEV1', 'SEV2', 'SEV3', 'SEV4']);
 // ISO date (YYYY-MM-DD); nullable so PATCH can clear it.
 const dueDateSchema = z
   .string()
@@ -324,8 +373,33 @@ const createSchema = z
     parentId: z.string().uuid().optional(),
     currentResult: z.string().max(4000).optional(),
     expectedResult: z.string().max(4000).optional(),
+    requestTypeId: z.string().uuid().optional(),
+    formValues: z.record(z.union([z.string().max(4000), z.boolean()])).optional(),
   })
   .strict();
+
+// Validate submitted form values against a request type's stored field schema.
+// Returns an error string, or null when valid. Unknown keys are rejected so
+// form_values always mirrors the fields the type declared.
+function validateFormValues(fields, values) {
+  const byId = new Map(fields.map(f => [f.id, f]));
+  for (const key of Object.keys(values)) {
+    if (!byId.has(key)) return `Unknown form field "${key}".`;
+  }
+  for (const f of fields) {
+    const v = values[f.id];
+    const empty = v === undefined || v === '' || v === false;
+    if (f.required && empty) return `"${f.label}" is required.`;
+    if (empty) continue;
+    if (f.type === 'checkbox' && typeof v !== 'boolean') return `"${f.label}" must be a boolean.`;
+    if (f.type !== 'checkbox' && typeof v !== 'string') return `"${f.label}" must be a string.`;
+    if (f.type === 'select' && !f.options.includes(v))
+      return `"${f.label}" must be one of the listed options.`;
+    if (f.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(v))
+      return `"${f.label}" must be a date (YYYY-MM-DD).`;
+  }
+  return null;
+}
 
 router.post('/', async (req, res, next) => {
   try {
@@ -341,6 +415,29 @@ router.post('/', async (req, res, next) => {
       const parent = await query('SELECT 1 FROM tickets WHERE id=$1', [d.parentId]);
       if (!parent.rows.length) return res.status(400).json({ error: 'Parent ticket not found.' });
     }
+
+    // Service catalog submission: apply the type's defaults, validate answers.
+    let requestType = null;
+    if (d.requestTypeId) {
+      const rt = await query('SELECT * FROM request_types WHERE id=$1 AND active=TRUE', [
+        d.requestTypeId,
+      ]);
+      if (!rt.rows.length) return res.status(400).json({ error: 'Request type not found.' });
+      requestType = rt.rows[0];
+      const problem = validateFormValues(requestType.fields || [], d.formValues || {});
+      if (problem) return res.status(400).json({ error: problem });
+      const defs = requestType.defaults || {};
+      if (defs.priority && !req.body.priority) d.priority = defs.priority;
+      if (defs.issueType) d.issueType = defs.issueType;
+      if (defs.category && !d.category) d.category = defs.category;
+      if (defs.labels?.length) d.labels = [...new Set([...d.labels, ...defs.labels])];
+      // Default assignee routing is a type-level decision, not a requester
+      // privilege — bypasses the tickets.assign gate deliberately.
+      if (defs.assigneeEmail && !d.assigneeEmail) d.assigneeEmail = defs.assigneeEmail;
+    } else if (d.formValues && Object.keys(d.formValues).length) {
+      return res.status(400).json({ error: 'formValues requires a requestTypeId.' });
+    }
+
     const key = await generateKey();
     const ticket = await withTransaction(async client => {
       const { rows } = await client.query(
@@ -348,9 +445,10 @@ router.post('/', async (req, res, next) => {
            (key, title, description, category, priority, status,
             requester_name, requester_email, assignee_name, assignee_email,
             department, shop, platforms, labels, due_date, problem_category,
-            issue_type, parent_id, current_result, expected_result, jira_sync_state)
+            issue_type, parent_id, current_result, expected_result, jira_sync_state,
+            request_type_id, form_values)
          VALUES ($1,$2,$3,$4,$5,'To Do',$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,
-                 $14,$15,$16,$17,$18,$19,'local-only')
+                 $14,$15,$16,$17,$18,$19,'local-only',$20,$21::jsonb)
          RETURNING *`,
         [
           key,
@@ -372,15 +470,41 @@ router.post('/', async (req, res, next) => {
           d.parentId || null,
           d.currentResult || null,
           d.expectedResult || null,
+          requestType?.id || null,
+          JSON.stringify(d.formValues || {}),
         ]
       );
-      const t = rows[0];
+      let t = rows[0];
+      // Stamp SLA deadlines from the priority's policy (if one exists).
+      const policy = await slaPolicyFor(t.priority);
+      if (policy) {
+        const due = computeDueDates(t.created_at, policy);
+        const upd = await client.query(
+          'UPDATE tickets SET response_due_at=$1, resolution_due_at=$2 WHERE id=$3 RETURNING *',
+          [due.responseDueAt, due.resolutionDueAt, t.id]
+        );
+        t = upd.rows[0];
+      }
       await client.query(
         'INSERT INTO ticket_timeline (ticket_id, action, actor) VALUES ($1,$2,$3)',
-        [t.id, 'Ticket created', req.user.email]
+        [
+          t.id,
+          requestType ? `Ticket created via ${requestType.name}` : 'Ticket created',
+          req.user.email,
+        ]
       );
       return t;
     });
+    // Approval-gated catalog types: file the approval after the ticket commits
+    // so the approver's notification always references a persisted row.
+    if (requestType?.requires_approval && requestType.approver_email) {
+      await createApproval({
+        subjectType: 'ticket',
+        subjectId: ticket.id,
+        approverEmail: requestType.approver_email,
+        requestedBy: req.user.email,
+      });
+    }
     await writeAudit(req.user.email, 'ticket.create', ticket.key);
     res.status(201).json(serializeTicket(ticket));
   } catch (err) {
@@ -404,6 +528,9 @@ const patchSchema = z
     parentId: z.string().uuid().nullable().optional(),
     currentResult: z.string().max(4000).nullable().optional(),
     expectedResult: z.string().max(4000).nullable().optional(),
+    severity: severitySchema.nullable().optional(),
+    majorIncident: z.boolean().optional(),
+    postmortemDocId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -443,6 +570,11 @@ router.patch('/:id', async (req, res, next) => {
     if (editsContent && !can(req.user, 'tickets.view_all') && !isAssignee) {
       return res.status(403).json({ error: 'Insufficient permissions to edit this ticket.' });
     }
+    // Incident fields have their own gate (severity, major flag, postmortem).
+    const editsIncident =
+      d.severity !== undefined || d.majorIncident !== undefined || d.postmortemDocId !== undefined;
+    if (editsIncident && !can(req.user, 'incidents.manage'))
+      return res.status(403).json({ error: 'Insufficient permissions to manage incidents.' });
     if (d.parentId) {
       if (d.parentId === ticket.id)
         return res.status(400).json({ error: 'A ticket cannot be its own parent.' });
@@ -465,6 +597,9 @@ router.patch('/:id', async (req, res, next) => {
       ['parent_id', d.parentId],
       ['current_result', d.currentResult],
       ['expected_result', d.expectedResult],
+      ['severity', d.severity],
+      ['major_incident', d.majorIncident],
+      ['postmortem_doc_id', d.postmortemDocId],
     ]) {
       if (val !== undefined) {
         params.push(val);
@@ -484,16 +619,267 @@ router.patch('/:id', async (req, res, next) => {
         `UPDATE tickets SET ${sets.join(', ')} WHERE id=$${params.length} RETURNING *`,
         params
       );
+      let t = rows[0];
       if (d.status && d.status !== ticket.status) {
         await client.query(
           'INSERT INTO ticket_timeline (ticket_id, action, actor) VALUES ($1,$2,$3)',
           [ticket.id, `Status → ${d.status}`, req.user.email]
         );
       }
-      return rows[0];
+
+      // ── SLA clock transitions ────────────────────────────────────────────
+      const slaSets = [];
+      const slaParams = [];
+      const push = (frag, val) => {
+        slaParams.push(val);
+        slaSets.push(`${frag} $${slaParams.length}`);
+      };
+      const statusChanged = d.status && d.status !== ticket.status;
+      const wasPaused = SLA_PAUSED_STATUSES.has(ticket.status);
+      const nowPaused = statusChanged && SLA_PAUSED_STATUSES.has(d.status);
+      const wasDone = SLA_DONE_STATUSES.has(ticket.status);
+      const nowDone = statusChanged && SLA_DONE_STATUSES.has(d.status);
+
+      if (statusChanged && wasPaused && !nowPaused && t.sla_paused_at) {
+        // Resuming: bank the pause and shift live deadlines forward.
+        const resumed = resumeFromPause(t);
+        if (resumed) {
+          push('sla_paused_ms =', resumed.slaPausedMs);
+          push('response_due_at =', resumed.responseDueAt);
+          push('resolution_due_at =', resumed.resolutionDueAt);
+          slaSets.push('sla_paused_at = NULL');
+        }
+      } else if (statusChanged && !wasPaused && nowPaused && !t.sla_paused_at) {
+        slaSets.push('sla_paused_at = now()');
+        await client.query(
+          'INSERT INTO ticket_timeline (ticket_id, action, actor) VALUES ($1,$2,$3)',
+          [ticket.id, 'SLA clock paused (waiting for customer)', req.user.email]
+        );
+      }
+      if (statusChanged && nowDone && !wasDone) {
+        slaSets.push('resolved_at = now()');
+      } else if (statusChanged && wasDone && !nowDone && t.resolved_at) {
+        slaSets.push('resolved_at = NULL');
+      }
+      // Priority change on an open ticket re-targets both deadlines.
+      if (d.priority && d.priority !== ticket.priority && !t.resolved_at) {
+        const policy = await slaPolicyFor(d.priority);
+        if (policy) {
+          const due = recomputeDueDates(t, policy);
+          push('response_due_at =', due.responseDueAt);
+          push('resolution_due_at =', due.resolutionDueAt);
+          // Retarget resets warning dedupe/breach flags — the sweeper re-evaluates.
+          slaSets.push("sla_warned = '{}'::jsonb");
+          slaSets.push('response_breached = FALSE');
+          slaSets.push('resolution_breached = FALSE');
+        }
+      }
+      if (slaSets.length) {
+        slaParams.push(t.id);
+        const upd = await client.query(
+          `UPDATE tickets SET ${slaSets.join(', ')} WHERE id = $${slaParams.length} RETURNING *`,
+          slaParams
+        );
+        t = upd.rows[0];
+      }
+      return t;
     });
+    // Resolution CSAT: first transition into a satisfied-done status invites
+    // the requester to rate. "Closed - Won't Do" is excluded — no satisfied
+    // resolution happened. One survey per ticket (UNIQUE ticket_id).
+    const CSAT_STATUSES = new Set(['Live', 'Resolved', 'Done', 'Closed']);
+    if (
+      d.status &&
+      d.status !== ticket.status &&
+      CSAT_STATUSES.has(d.status) &&
+      ticket.record_type === 'ticket' &&
+      updated.requester_email
+    ) {
+      const rawToken = makeToken();
+      const inserted = await query(
+        `INSERT INTO csat_responses (ticket_id, requester_email, token_hash, expires_at)
+         VALUES ($1,$2,$3, now() + interval '14 days')
+         ON CONFLICT (ticket_id) DO NOTHING RETURNING id`,
+        [ticket.id, updated.requester_email, hashToken(rawToken)]
+      );
+      if (inserted.rows.length) {
+        await query(
+          `INSERT INTO notifications (user_email, type, title, body, ticket_id)
+           VALUES ($1,'csat_prompt',$2,$3,$4)`,
+          [
+            updated.requester_email,
+            `How did we do on ${ticket.key}?`,
+            `${updated.title} was resolved — tap to rate the support you received.`,
+            ticket.id,
+          ]
+        );
+        sendCsatEmail(updated.requester_email, ticket.key, updated.title, rawToken).catch(err =>
+          console.error(
+            JSON.stringify({ level: 'error', msg: 'csat email failed', error: err.message })
+          )
+        );
+      }
+    }
+
+    // Declaring a major incident broadcasts to all staff (bell + persisted).
+    if (d.majorIncident === true && !ticket.major_incident) {
+      const staff = await query(
+        `SELECT u.email FROM users u JOIN roles r ON r.id = u.role_id
+         WHERE u.active AND r.capabilities @> '["tickets.view_all"]'::jsonb`
+      );
+      for (const s of staff.rows) {
+        await query(
+          `INSERT INTO notifications (user_email, type, title, body, ticket_id)
+           VALUES ($1,'major_incident',$2,$3,$4)`,
+          [
+            s.email,
+            `MAJOR INCIDENT declared: ${ticket.key}`,
+            `${updated.title}${updated.severity ? ` — ${updated.severity}` : ''}. Declared by ${req.user.name}.`,
+            ticket.id,
+          ]
+        );
+      }
+      await query('INSERT INTO ticket_timeline (ticket_id, action, actor) VALUES ($1,$2,$3)', [
+        ticket.id,
+        'Declared a MAJOR INCIDENT',
+        req.user.email,
+      ]);
+    }
     await writeAudit(req.user.email, 'ticket.update', ticket.key, { status: d.status });
     res.json(serializeTicket(updated));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Incident updates (public comms log, separate from comments) ─────────────
+router.get('/:id/incident-updates', async (req, res, next) => {
+  try {
+    const { ticket, notFound, forbidden } = await loadVisible(req, req.params.id);
+    if (notFound) return res.status(404).json({ error: 'Ticket not found.' });
+    if (forbidden) return res.status(403).json({ error: 'Insufficient permissions.' });
+    const { rows } = await query(
+      'SELECT * FROM incident_updates WHERE ticket_id=$1 ORDER BY created_at DESC',
+      [ticket.id]
+    );
+    res.json({
+      updates: rows.map(u => ({
+        id: u.id,
+        author: u.author,
+        body: u.body,
+        statusAtPost: u.status_at_post,
+        createdAt: u.created_at,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/incident-updates', async (req, res, next) => {
+  try {
+    if (!can(req.user, 'incidents.manage'))
+      return res.status(403).json({ error: 'Insufficient permissions to post incident updates.' });
+    const schema = z.object({ body: z.string().min(1).max(8000) }).strict();
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid input.' });
+    const { ticket, notFound } = await loadVisible(req, req.params.id);
+    if (notFound) return res.status(404).json({ error: 'Ticket not found.' });
+    const { rows } = await query(
+      `INSERT INTO incident_updates (ticket_id, author, body, status_at_post)
+       VALUES ($1,$2,$3,$4) RETURNING *`,
+      [ticket.id, req.user.name, parsed.data.body, ticket.status]
+    );
+    await query('INSERT INTO ticket_timeline (ticket_id, action, actor) VALUES ($1,$2,$3)', [
+      ticket.id,
+      'Incident status update posted',
+      req.user.email,
+    ]);
+    await writeAudit(req.user.email, 'incident.update_posted', ticket.key);
+    const u = rows[0];
+    res.status(201).json({
+      id: u.id,
+      author: u.author,
+      body: u.body,
+      statusAtPost: u.status_at_post,
+      createdAt: u.created_at,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Postmortem (creates a doc from a template and links it) ─────────────────
+router.post('/:id/postmortem', async (req, res, next) => {
+  try {
+    if (!can(req.user, 'incidents.manage'))
+      return res.status(403).json({ error: 'Insufficient permissions to manage incidents.' });
+    const { ticket, notFound } = await loadVisible(req, req.params.id);
+    if (notFound) return res.status(404).json({ error: 'Ticket not found.' });
+    if (ticket.postmortem_doc_id) {
+      return res.status(409).json({ error: 'A postmortem already exists for this incident.' });
+    }
+    const updates = await query(
+      'SELECT * FROM incident_updates WHERE ticket_id=$1 ORDER BY created_at ASC',
+      [ticket.id]
+    );
+    const timelineMd = updates.rows
+      .map(
+        u =>
+          `- **${new Date(u.created_at).toISOString().slice(0, 16).replace('T', ' ')}** (${u.status_at_post || 'n/a'}): ${u.body}`
+      )
+      .join('\n');
+    const content = `# Postmortem — ${ticket.key}: ${ticket.title}
+
+> Status: **Draft** · Severity: **${ticket.severity || 'n/a'}** · Major incident: **${ticket.major_incident ? 'Yes' : 'No'}**
+
+## Summary
+_What happened, in two or three sentences._
+
+## Impact
+_Who/what was affected, for how long._
+
+## Timeline
+${timelineMd || '_Reconstruct the key moments here._'}
+
+## Root cause
+_The underlying cause — go past the trigger (5 whys)._
+
+## What went well
+-
+
+## What went poorly
+-
+
+## Action items
+- [ ] _Preventive fix_
+- [ ] _Detection improvement_
+`;
+    const doc = await withTransaction(async client => {
+      const { rows } = await client.query(
+        `INSERT INTO docs (title, content, category, visibility, tags, icon, description, author)
+         VALUES ($1,$2,'Postmortems','Internal','["postmortem","incident"]'::jsonb,'📋',$3,$4)
+         RETURNING *`,
+        [
+          `Postmortem — ${ticket.key}`,
+          content,
+          `Incident postmortem for ${ticket.key}: ${ticket.title}`,
+          req.user.name,
+        ]
+      );
+      const d = rows[0];
+      await client.query('UPDATE tickets SET postmortem_doc_id=$1, updated_at=now() WHERE id=$2', [
+        d.id,
+        ticket.id,
+      ]);
+      await client.query(
+        'INSERT INTO ticket_timeline (ticket_id, action, actor) VALUES ($1,$2,$3)',
+        [ticket.id, 'Postmortem doc created', req.user.email]
+      );
+      return d;
+    });
+    await writeAudit(req.user.email, 'incident.postmortem_created', ticket.key);
+    res.status(201).json({ ok: true, docId: doc.id, title: doc.title });
   } catch (err) {
     next(err);
   }
@@ -559,6 +945,18 @@ router.post('/:id/comments', async (req, res, next) => {
       [ticket.id, req.user.name, parsed.data.body, internal]
     );
     await query('UPDATE tickets SET updated_at=now() WHERE id=$1', [ticket.id]);
+    // First public staff reply stops the response-SLA clock.
+    if (!internal && !ticket.first_response_at && can(req.user, 'tickets.view_all')) {
+      await query(
+        'UPDATE tickets SET first_response_at = now() WHERE id=$1 AND first_response_at IS NULL',
+        [ticket.id]
+      );
+      await query('INSERT INTO ticket_timeline (ticket_id, action, actor) VALUES ($1,$2,$3)', [
+        ticket.id,
+        'First response recorded (SLA)',
+        req.user.email,
+      ]);
+    }
     await writeAudit(req.user.email, 'ticket.comment', ticket.key, { internal });
     res.status(201).json(serializeComment(rows[0]));
   } catch (err) {

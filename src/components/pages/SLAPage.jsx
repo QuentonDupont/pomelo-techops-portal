@@ -4,8 +4,10 @@
 
 import { S } from '../../lib/styles.js';
 import { SLA_DATA } from '../../lib/constants.js';
+import { API_ENABLED } from '../../api/client.js';
+import SlaPolicyEditor from '../sla/SlaPolicyEditor.jsx';
 
-export default function SLAPage() {
+export default function SLAPage({ canManage = false, onToast }) {
   return (
     <div>
       <div style={S.pageTitle}>SLA & Standards</div>
@@ -13,6 +15,20 @@ export default function SLAPage() {
         Our committed response and resolution times for each priority level.
       </div>
 
+      {API_ENABLED ? (
+        <SlaPolicyEditor canManage={canManage} onToast={onToast} />
+      ) : (
+        <StaticSlaTable />
+      )}
+
+      <SupportInfoCards />
+    </div>
+  );
+}
+
+function StaticSlaTable() {
+  return (
+    <div>
       <div style={{ ...S.card, marginBottom: '24px' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -87,7 +103,13 @@ export default function SLAPage() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
 
+function SupportInfoCards() {
+  return (
+    <div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
         <div style={S.card}>
           <div

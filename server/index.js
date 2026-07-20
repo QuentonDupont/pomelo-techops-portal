@@ -37,6 +37,16 @@ import docsRouter from './routes/docs.js';
 import jiraRouter from './routes/jira.js';
 import webhooksRouter from './routes/webhooks.js';
 import anthropicRouter from './routes/anthropic.js';
+import requestTypesRouter from './routes/requestTypes.js';
+import slaRouter from './routes/sla.js';
+import notificationsRouter from './routes/notifications.js';
+import approvalsRouter from './routes/approvals.js';
+import assetsRouter from './routes/assets.js';
+import problemsRouter from './routes/problems.js';
+import changesRouter from './routes/changes.js';
+import csatRouter from './routes/csat.js';
+import reportsRouter from './routes/reports.js';
+import { startSlaSweeper } from './lib/slaSweeper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenvConfig({ path: resolve(__dirname, '..', '.env.local') });
@@ -106,9 +116,12 @@ app.get('/api/health', async (_req, res) => {
   res.json({ status: 'ok', db: await dbHealth(), ts: new Date().toISOString() });
 });
 
+// Development gets a much higher ceiling: the SPA fans out on boot (roles,
+// users, tickets, notifications) and Playwright E2E runs several logins per
+// minute — 30/min trips constantly. Production keeps the strict limit.
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 30,
+  limit: process.env.NODE_ENV === 'production' ? 30 : 600,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: 'Too many requests.' },
@@ -125,8 +138,18 @@ if (dbEnabled) {
   app.use('/api/roles', rolesRouter);
   app.use('/api/audit', auditRouter);
   app.use('/api/docs', docsRouter);
+  app.use('/api/request-types', requestTypesRouter);
+  app.use('/api/sla', slaRouter);
+  app.use('/api/notifications', notificationsRouter);
+  app.use('/api/approvals', approvalsRouter);
+  app.use('/api/assets', assetsRouter);
+  app.use('/api/problems', problemsRouter);
+  app.use('/api/changes', changesRouter);
+  app.use('/api/csat', csatRouter);
+  app.use('/api/reports', reportsRouter);
+  startSlaSweeper();
   console.log(
-    '[BFF] DB-backed routes mounted: /api/auth, /api/tickets, /api/users, /api/roles, /api/audit, /api/docs'
+    '[BFF] DB-backed routes mounted: /api/auth, /api/tickets, /api/users, /api/roles, /api/audit, /api/docs, /api/request-types, /api/sla, /api/notifications (SLA sweeper on)'
   );
 }
 

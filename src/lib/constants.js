@@ -4,7 +4,7 @@
 // used by the submit form. Extracted from PomeloTechOpsPortal.jsx so future
 // page components can import them without pulling in the whole shell.
 
-import { Bug, CheckSquare, LifeBuoy, Network } from 'lucide-react';
+import { Bug, CheckSquare, LifeBuoy, Network, Siren } from 'lucide-react';
 
 export const PRIORITY_COLORS = {
   Critical: '#DC2626',
@@ -141,12 +141,22 @@ export const labelColorFor = label => {
 // Issue types (card icon + quick-create select). Sub-task is set automatically
 // when a ticket is created from a parent. Icons are lucide components so every
 // surface shares the portal's one icon language.
-export const ISSUE_TYPES = ['Task', 'Bug', 'Support Request', 'Sub-task'];
+export const ISSUE_TYPES = ['Task', 'Bug', 'Support Request', 'Incident', 'Sub-task'];
 export const ISSUE_TYPE_ICONS = {
   Task: CheckSquare,
   Bug: Bug,
   'Support Request': LifeBuoy,
+  Incident: Siren,
   'Sub-task': Network,
+};
+
+// Incident severity scale (incidents only). SEV1 is the house-on-fire tier.
+export const SEVERITIES = ['SEV1', 'SEV2', 'SEV3', 'SEV4'];
+export const SEVERITY_COLORS = {
+  SEV1: '#DC2626',
+  SEV2: '#EA580C',
+  SEV3: '#CA8A04',
+  SEV4: '#16A34A',
 };
 
 // Problem categories (pinned-fields sidebar, mirrors Jira's field).

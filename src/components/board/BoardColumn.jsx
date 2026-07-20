@@ -48,7 +48,11 @@ export default function BoardColumn({
         // workflow color as a top rail.
         borderTop: isDragTarget ? '3px solid var(--accent-primary)' : `3px solid ${column.color}`,
         borderRadius: '10px',
+        // The grid row is bounded (minmax(0,1fr) on the page grid); clamp the
+        // lane to it and let the card list below scroll. minHeight 0 overrides
+        // the grid item's implicit min-height:auto which would resist shrinking.
         maxHeight: '100%',
+        minHeight: 0,
         opacity: tickets.length === 0 && !isDragTarget ? 0.55 : 1,
         transition: 'opacity 0.15s ease',
       }}

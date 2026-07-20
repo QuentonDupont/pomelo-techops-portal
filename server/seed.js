@@ -49,6 +49,115 @@ async function seed() {
   }
   console.log(`✓ seeded ${SEED_ROLES.length} system roles`);
 
+  // Starter service-catalog request types (idempotent by slug). Only inserted
+  // when missing so admin edits in the portal are never overwritten.
+  const STARTER_REQUEST_TYPES = [
+    {
+      slug: 'hardware-request',
+      name: 'Hardware request',
+      description: 'Request a laptop, monitor, keyboard, or other physical equipment.',
+      icon: 'Laptop',
+      category: 'Hardware',
+      sort: 10,
+      fields: [
+        {
+          id: 'item',
+          label: 'What do you need?',
+          type: 'select',
+          options: ['Laptop', 'Monitor', 'Keyboard / Mouse', 'Headset', 'Docking station', 'Other'],
+          required: true,
+        },
+        { id: 'justification', label: 'Business justification', type: 'textarea', required: true },
+        { id: 'needed_by', label: 'Needed by', type: 'date', required: false },
+      ],
+      defaults: { priority: 'Medium', issueType: 'Support Request', category: 'Hardware' },
+    },
+    {
+      slug: 'access-request',
+      name: 'Access request',
+      description: 'Request access to an application, shared drive, or system.',
+      icon: 'KeyRound',
+      category: 'Access',
+      sort: 20,
+      fields: [
+        { id: 'system', label: 'System or application', type: 'text', required: true },
+        {
+          id: 'access_level',
+          label: 'Access level',
+          type: 'select',
+          options: ['Read-only', 'Read/write', 'Admin'],
+          required: true,
+        },
+        { id: 'manager_aware', label: 'My manager is aware of this request', type: 'checkbox' },
+        { id: 'reason', label: 'Why do you need access?', type: 'textarea', required: true },
+      ],
+      defaults: { priority: 'Medium', issueType: 'Support Request', category: 'Access' },
+    },
+    {
+      slug: 'software-install',
+      name: 'Software installation',
+      description: 'Get software installed or licensed on your machine.',
+      icon: 'PackagePlus',
+      category: 'Software',
+      sort: 30,
+      fields: [
+        { id: 'software', label: 'Software name', type: 'text', required: true },
+        { id: 'version', label: 'Version (if known)', type: 'text' },
+        { id: 'reason', label: 'What will you use it for?', type: 'textarea', required: true },
+      ],
+      defaults: { priority: 'Low', issueType: 'Support Request', category: 'Software' },
+    },
+    {
+      slug: 'report-an-issue',
+      name: 'Report an issue',
+      description: 'Something is broken or not behaving as expected.',
+      icon: 'Bug',
+      category: 'Support',
+      sort: 40,
+      fields: [
+        {
+          id: 'where',
+          label: 'Where did it happen? (app, page, device)',
+          type: 'text',
+          required: true,
+        },
+        { id: 'steps', label: 'Steps to reproduce', type: 'textarea' },
+        { id: 'impact', label: 'Is this blocking your work?', type: 'checkbox' },
+      ],
+      defaults: { priority: 'High', issueType: 'Bug', category: 'Support' },
+    },
+    {
+      slug: 'general-question',
+      name: 'General question',
+      description: 'Ask the TechOps team anything not covered by the other items.',
+      icon: 'MessageCircleQuestion',
+      category: 'General',
+      sort: 50,
+      fields: [{ id: 'question', label: 'Your question', type: 'textarea', required: true }],
+      defaults: { priority: 'Low', issueType: 'Support Request', category: 'General' },
+    },
+  ];
+  let insertedTypes = 0;
+  for (const t of STARTER_REQUEST_TYPES) {
+    const { rowCount } = await pool.query(
+      `INSERT INTO request_types (slug, name, description, icon, category, fields, defaults, sort)
+       VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8)
+       ON CONFLICT (slug) DO NOTHING`,
+      [
+        t.slug,
+        t.name,
+        t.description,
+        t.icon,
+        t.category,
+        JSON.stringify(t.fields),
+        JSON.stringify(t.defaults),
+        t.sort,
+      ]
+    );
+    insertedTypes += rowCount;
+  }
+  console.log(`✓ service catalog: ${insertedTypes} starter request type(s) inserted`);
+
   // Optionally create the first superadmin.
   const email = process.env.SEED_SUPERADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.SEED_SUPERADMIN_PASSWORD;
